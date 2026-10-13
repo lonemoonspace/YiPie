@@ -49,6 +49,28 @@ const storageZones = [
   },
 ];
 
+// Runtime contexts (§2.2): the service worker carries no UI. The background
+// entry may not import features, and nothing the worker can reach (contract,
+// domain, platform, the background entry) may load React at runtime.
+const serviceWorkerZones = [
+  {
+    target: './src/entrypoints/background',
+    from: './src/features',
+    message: 'SW 不含界面：background 不能引用 features（§2.2 运行上下文边界）。',
+  },
+];
+
+const reactOnlyInUi =
+  '只有 features 与扩展页面入口能在运行时引用 React；SW 能触及的代码不行（§2.2）。';
+const noReactAtRuntime = {
+  paths: ['react', 'react-dom'].map((name) => ({
+    name,
+    allowTypeImports: true,
+    message: reactOnlyInUi,
+  })),
+  patterns: [{ group: ['react/*', 'react-dom/*'], allowTypeImports: true, message: reactOnlyInUi }],
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -90,8 +112,20 @@ export default tseslint.config(
       'import-x/resolver-next': [createTypeScriptImportResolver({ project: './tsconfig.json' })],
     },
     rules: {
-      'import-x/no-restricted-paths': ['error', { zones: [...layerZones, ...storageZones] }],
+      'import-x/no-restricted-paths': [
+        'error',
+        { zones: [...layerZones, ...storageZones, ...serviceWorkerZones] },
+      ],
     },
+  },
+  {
+    files: [
+      'src/contract/**/*.{ts,tsx}',
+      'src/domain/**/*.{ts,tsx}',
+      'src/platform/**/*.{ts,tsx}',
+      'src/entrypoints/background/**/*.{ts,tsx}',
+    ],
+    rules: { '@typescript-eslint/no-restricted-imports': ['error', noReactAtRuntime] },
   },
   {
     files: ['scripts/**/*.ts', 'tests/**/*.ts', 'e2e/**/*.ts', '*.config.ts'],
