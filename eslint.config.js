@@ -98,6 +98,12 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // Playwright reads a fixture's dependencies from its first parameter, which
+    // must be an object pattern even when the fixture depends on nothing.
+    files: ['e2e/**/*.ts'],
+    rules: { 'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }] },
+  },
+  {
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
