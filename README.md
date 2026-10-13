@@ -1,6 +1,6 @@
 # 一瞥 YiPie
 
-用你自己配置的 OpenAI 兼容模型服务，在浏览器侧边栏里总结当前网页，并能就这一页继续追问。
+用你自己配置的 OpenAI 兼容模型服务，在页面上的浮动面板里总结当前网页，并能就这一页继续追问。
 
 - 只支持 OpenAI Chat Completions 兼容接口：OpenAI、DeepSeek、OpenRouter、Ollama、vLLM 等，填 base URL、Key 和模型名即可
 - 数据只在浏览器和你自己的模型服务之间流动：没有中间服务器，没有遥测
