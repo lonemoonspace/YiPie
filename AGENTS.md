@@ -67,6 +67,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 单测在 node 环境跑，不加载浏览器 API；存储用 `tests/helpers/memory-store.ts`，它每次操作都让出事件循环，能复现并发交错。
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
+- E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
 
 ## 依赖版本约束
 

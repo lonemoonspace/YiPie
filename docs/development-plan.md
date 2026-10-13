@@ -725,6 +725,7 @@ docs/            development-plan.md（本文）
 | 体积预算                      | `npm run check:bundle`   | 通过；基线写在 `.output/bundle-report.json`，按包的归因见 §9                                           |
 | E2E（真实 Chromium 加载扩展） | `npm run test:e2e`       | 3 条通过（CI 上共 2.9 s）。环境搭建见 `AGENTS.md`「开发环境备注」                                      |
 | CI                            | quality 工作流           | 第一次运行就全绿，用时约 1 分钟：[run 38466798577](https://github.com/lonemoonspace/YiPie/actions/runs/38466798577) |
+| E2E 稳定性                    | 单条重复跑 `--repeat-each` | 第 3 次 CI 运行暴露了一个竞态：Playwright 报告 SW 时，浏览器可能还没把扩展 API 装进去（`chrome` 里只有 `csi`、`loadTimes`）。本地重复 40 次复现 3 次；fixture 改为等到 `chrome.storage.local` 可用后，重复 80 次全部通过 |
 | 检查真的会拦                  | 故意违规后再撤回         | 反向分层、绕过写入口、SW 引用 React 或 features、`eslint-disable`、`any` 都被 lint 拦下；多加 `tabs` 与 `host_permissions` 时 check:manifest 失败；塞进 1 MB 文件时 check:bundle 失败（整包 1407.41 kB）；撤回后全部通过 |
 
 **原型环境（参考，代码没有保留）**

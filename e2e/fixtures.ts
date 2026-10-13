@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { chromium, test as base, type BrowserContext, type Worker } from '@playwright/test';
+import { chromium, expect, test as base, type BrowserContext, type Worker } from '@playwright/test';
 
 const extensionPath = path.resolve(import.meta.dirname, '../.output/chrome-mv3');
 
@@ -24,6 +24,19 @@ export const test = base.extend<ExtensionFixtures>({
 
   serviceWorker: async ({ context }, use) => {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+    // The worker can be reported before the browser has installed the extension
+    // APIs in it: `chrome` then holds only `csi` and `loadTimes` (about 1 run in
+    // 20). Wait for them, so a test that touches storage first does not race the
+    // worker's startup. A failed evaluate becomes a value, so polling continues.
+    await expect
+      .poll(() =>
+        worker
+          .evaluate(
+            () => typeof (globalThis as unknown as MaybeChromeGlobal).chrome?.storage?.local,
+          )
+          .catch((error: unknown) => String(error)),
+      )
+      .toBe('object');
     await use(worker);
   },
 
@@ -32,7 +45,12 @@ export const test = base.extend<ExtensionFixtures>({
   },
 });
 
-export { expect } from '@playwright/test';
+export { expect };
+
+/** The worker's global before the extension APIs are installed, as far as the fixture checks it. */
+interface MaybeChromeGlobal {
+  chrome?: { storage?: { local?: unknown } };
+}
 
 /** The slice of the Chrome API the tests touch from inside the service worker. */
 export interface ChromeStorageGlobal {
