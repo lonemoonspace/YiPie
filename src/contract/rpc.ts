@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BackedUpKey, BackupsView } from './backups';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
 import { ModelConfig, ModelConfigDraft, ModelConfigPatch } from './model-config';
 import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
@@ -159,6 +160,18 @@ export const RPC_METHODS = {
   'prompts.setDefault': {
     input: SetDefaultInput,
     output: PromptConfigsView,
+    callers: ['options'],
+  },
+  // Backups hold everything that was stored, keys included: settings page only.
+  'backups.list': {
+    input: z.strictObject({}),
+    output: BackupsView,
+    callers: ['options'],
+  },
+  // Deleting a backup is the user's explicit action (docs/development-plan.md §7).
+  'backups.remove': {
+    input: z.strictObject({ key: BackedUpKey, at: z.string().min(1).max(100) }),
+    output: BackupsView,
     callers: ['options'],
   },
   // The content script's only method: a nonce for the panel frame it is about

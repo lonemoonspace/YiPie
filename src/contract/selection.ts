@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { StorageKey } from './storage';
 
-export const SELECTION_KEY: StorageKey = 'local:selection';
+export const SELECTION_KEY = 'local:selection' satisfies StorageKey;
 export const SELECTION_VERSION = 1;
 
 /**

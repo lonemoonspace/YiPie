@@ -1,4 +1,5 @@
 import { t } from '@/domain/i18n';
+import { BackupsSection } from './backups-section';
 import { GeneralSection } from './general-section';
 import { ModelSection } from './model-section';
 import { PromptSection } from './prompt-section';
@@ -10,6 +11,7 @@ export function SettingsPage() {
       <ModelSection />
       <PromptSection />
       <GeneralSection />
+      <BackupsSection />
     </main>
   );
 }

@@ -262,3 +262,16 @@ button.secondary.danger {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.backup-preview {
+  max-height: 240px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

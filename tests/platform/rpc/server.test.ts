@@ -384,6 +384,39 @@ describe('RPC dispatcher: prompts', () => {
   });
 });
 
+describe('RPC dispatcher: backups', () => {
+  const backups = { backups: [] };
+
+  it.each([
+    ['backups.list', {}],
+    ['backups.remove', { key: 'local:model-configs', at: '2026-10-14T00:00:00.000Z' }],
+  ] as const)('serves %s to the settings page only: backups hold keys', async (method, input) => {
+    const handler = vi.fn(() => Promise.resolve(backups));
+    const { dispatch } = setup({ [method]: handler });
+
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request(method, input), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(await dispatch(request(method, input), OPTIONS)).toEqual({ ok: true, value: backups });
+  });
+
+  it('will not delete the backup of a key that is not a user record', async () => {
+    const { dispatch, handlers } = setup();
+
+    const reply = await dispatch(
+      request('backups.remove', { key: 'session:panel-registry', at: 'unknown' }),
+      OPTIONS,
+    );
+
+    expect(reply).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+    expect(handlers['backups.remove']).not.toHaveBeenCalled();
+  });
+});
+
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce', async () => {
     const { dispatch } = setup({ 'content.hello': () => Promise.resolve({ nonce: 'n' }) });

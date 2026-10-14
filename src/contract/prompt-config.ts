@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { StorageKey } from './storage';
 
-export const PROMPT_CONFIGS_KEY: StorageKey = 'local:prompt-configs';
+export const PROMPT_CONFIGS_KEY = 'local:prompt-configs' satisfies StorageKey;
 export const PROMPT_CONFIGS_VERSION = 1;
 
 /**

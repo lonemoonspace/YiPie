@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import type { Download, Page } from '@playwright/test';
 import {
   expect,
   storeModels,
@@ -268,4 +269,102 @@ test('prompts: a new one starts from the built-in templates, needs a name, and c
     version: 1,
     data: { defaultModelId: null, defaultPromptId: added?.id },
   });
+});
+
+const readDownload = async (download: Download): Promise<unknown> =>
+  JSON.parse(await readFile(await download.path(), 'utf8'));
+
+test('backups: shown without credentials, exported with them only on request, and deleted', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const raw = {
+    version: 1,
+    data: {
+      configs: [
+        {
+          id: 'x',
+          baseURL: 'https://gw.example/v1?key=query-secret',
+          apiKey: 'sk-in-backup',
+          headers: { 'X-API-Key': 'header-secret' },
+          model: 'm',
+        },
+      ],
+    },
+  };
+  const at = '2026-10-14T10:00:00.000Z';
+  await serviceWorker.evaluate(
+    (entry) =>
+      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
+        'quarantine:model-configs': [entry],
+      }),
+    { key: 'local:model-configs', at, raw },
+  );
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const backups = section(page, '备份');
+  const row = backups.getByRole('listitem');
+
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('模型列表');
+  await row.getByText('查看内容（不含凭据）').click();
+  const shown = row.locator('pre');
+  await expect(shown).toContainText('https://gw.example/v1');
+  for (const secret of ['sk-in-backup', 'header-secret', 'query-secret']) {
+    await expect(shown).not.toContainText(secret);
+  }
+
+  const [plain] = await Promise.all([
+    page.waitForEvent('download'),
+    row.getByRole('button', { name: '导出' }).click(),
+  ]);
+  expect(plain.suggestedFilename()).toBe(
+    'yipie-backup-model-configs-2026-10-14T10-00-00-000Z.json',
+  );
+  expect(await readDownload(plain)).toEqual({
+    key: 'local:model-configs',
+    at,
+    raw: {
+      version: 1,
+      data: { configs: [{ id: 'x', baseURL: 'https://gw.example/v1', model: 'm' }] },
+    },
+  });
+
+  await backups.getByLabel('导出时包含 API Key、请求头与 Base URL 的查询参数').check();
+  const [full] = await Promise.all([
+    page.waitForEvent('download'),
+    row.getByRole('button', { name: '导出' }).click(),
+  ]);
+  expect(await readDownload(full)).toEqual({ key: 'local:model-configs', at, raw });
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await row.getByRole('button', { name: '删除' }).click();
+  await expect(backups.getByRole('status')).toHaveText('已删除备份');
+  await expect(backups).toContainText('没有备份。');
+  expect(await stored(serviceWorker, 'quarantine:model-configs')).toBeUndefined();
+});
+
+test('backups: one taken by a save elsewhere on the page shows up without a reload', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
+      'general-settings': { version: 1, data: { theme: 42 } },
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const backups = section(page, '备份');
+  await expect(backups).toContainText('没有备份。');
+
+  await page.getByLabel('主题').selectOption('dark');
+  await expect(section(page, '通用').getByRole('status')).toHaveText(
+    '已保存（无法识别的旧数据已备份）',
+  );
+
+  await expect(backups.getByRole('listitem')).toHaveCount(1);
+  await expect(backups.getByRole('listitem')).toContainText('通用设置');
 });
