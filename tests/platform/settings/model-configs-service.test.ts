@@ -246,6 +246,19 @@ describe('model configurations: the default', () => {
     await models.update('b', { name: '备用' });
     expect((await models.list()).items[1]?.name).toBe('备用');
   });
+
+  it('will not choose a default in a list a newer version wrote, even one it can read', async () => {
+    const stored = { [MODEL_CONFIGS_KEY]: { version: 2, data: [openai, deepseek] } };
+    const { models, store } = setup(stored);
+
+    // Shown, read-only: the rows still parse.
+    expect(await models.list()).toMatchObject({ readOnly: true, items: [openai, deepseek] });
+
+    await expect(models.setDefault('b')).rejects.toBeInstanceOf(ReadOnlyRecordError);
+    // The panel's menu goes the same way.
+    await expect(models.choose('b')).rejects.toBeInstanceOf(ReadOnlyRecordError);
+    expect(store.dump()).toEqual(stored);
+  });
 });
 
 describe('model configurations: what the panel gets', () => {

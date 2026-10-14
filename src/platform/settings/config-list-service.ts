@@ -180,10 +180,15 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
         if (!read.value.items.some((item) => item.id === id)) {
           throw new NotFoundError(options.what, id);
         }
+        // A list a newer version wrote is read-only as a whole, its default
+        // included: that version may read the default differently.
+        if (read.status === 'invalid' && read.readOnly) {
+          throw new ReadOnlyRecordError(options.list.key, storedVersionOf(read.raw));
+        }
         const saved = await selection.updateUnqueued((current) => ({ ...current, [field]: id }));
         return toView(read.value, id, {
           status: read.status,
-          readOnly: read.status === 'invalid' && read.readOnly,
+          readOnly: false,
           quarantined: saved.quarantined,
           defaultFellBack: false,
           defaultUnreadable: false,

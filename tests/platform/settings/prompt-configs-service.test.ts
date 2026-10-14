@@ -5,7 +5,7 @@ import { SELECTION_KEY } from '@/contract/selection';
 import { BUILTIN_PROMPT_ID, builtinPrompt } from '@/domain/prompt/default-prompt';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
-import { createQueue, readQuarantine } from '@/platform/storage';
+import { ReadOnlyRecordError, createQueue, readQuarantine } from '@/platform/storage';
 import { createMemoryStore } from '../../helpers/memory-store';
 
 function setup(stored: Record<string, unknown> = {}) {
@@ -124,6 +124,17 @@ describe('prompts: the list', () => {
       version: 1,
       data: { defaultModelId: 'm', defaultPromptId: 'terse' },
     });
+  });
+});
+
+describe('prompts written by a newer version', () => {
+  it('are shown but cannot get a new default, and storage stays as it was', async () => {
+    const stored = { [PROMPT_CONFIGS_KEY]: { version: 2, data: [builtinPrompt(), terse] } };
+    const { prompts, store } = setup(stored);
+
+    expect(await prompts.list()).toMatchObject({ readOnly: true, items: [builtinPrompt(), terse] });
+    await expect(prompts.setDefault('terse')).rejects.toBeInstanceOf(ReadOnlyRecordError);
+    expect(store.dump()).toEqual(stored);
   });
 });
 
