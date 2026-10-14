@@ -83,6 +83,20 @@ describe('RPC dispatcher', () => {
     expect(handlers['settings.patch']).not.toHaveBeenCalled();
   });
 
+  it('logs where a refused call came from without the rest of the URL', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { dispatch } = setup();
+    const page = { ...CONTENT, url: 'https://example.com/reset?token=page-secret#also-secret' };
+
+    await dispatch(request('settings.get'), page);
+
+    const logged = warn.mock.calls.flat().map(String).join(' ');
+    expect(logged).toContain('https://example.com');
+    expect(logged).not.toContain('page-secret');
+    expect(logged).not.toContain('also-secret');
+    warn.mockRestore();
+  });
+
   it('refuses senders it cannot classify', async () => {
     const { dispatch } = setup();
     const foreign = { id: 'another-extension', url: 'chrome-extension://other/options.html' };

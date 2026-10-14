@@ -4,6 +4,12 @@ import { createLogger } from '@/platform/logger';
 
 const logger = createLogger('permissions');
 
+/** The part of `browser.permissions` used here. */
+export interface PermissionsLike {
+  request(permissions: { origins: string[] }): Promise<boolean>;
+  contains(permissions: { origins: string[] }): Promise<boolean>;
+}
+
 /**
  * Asks for access to the origin of `baseURL` (and nothing wider). Chrome shows
  * the prompt only during a user gesture, so call this synchronously from the
@@ -13,20 +19,25 @@ const logger = createLogger('permissions');
  * the configuration is saved either way, because a service that allows
  * cross-origin requests works without the permission.
  */
-export function requestOriginAccess(baseURL: string): Promise<boolean> {
-  return browser.permissions
-    .request({ origins: [originPattern(baseURL)] })
-    .catch((error: unknown) => {
-      logger.warn('Could not request access to', baseURL, error);
-      return false;
-    });
+export function requestOriginAccess(
+  baseURL: string,
+  permissions: PermissionsLike = browser.permissions,
+): Promise<boolean> {
+  const pattern = originPattern(baseURL);
+  return permissions.request({ origins: [pattern] }).catch((error: unknown) => {
+    // The origin only: the base URL's query may carry a key.
+    logger.warn('Could not request access to', pattern, error);
+    return false;
+  });
 }
 
-export function hasOriginAccess(baseURL: string): Promise<boolean> {
-  return browser.permissions
-    .contains({ origins: [originPattern(baseURL)] })
-    .catch((error: unknown) => {
-      logger.warn('Could not check access to', baseURL, error);
-      return false;
-    });
+export function hasOriginAccess(
+  baseURL: string,
+  permissions: PermissionsLike = browser.permissions,
+): Promise<boolean> {
+  const pattern = originPattern(baseURL);
+  return permissions.contains({ origins: [pattern] }).catch((error: unknown) => {
+    logger.warn('Could not check access to', pattern, error);
+    return false;
+  });
 }

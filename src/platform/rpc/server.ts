@@ -78,7 +78,7 @@ export function createDispatcher(
 
     const caller = classifyCaller(sender, extensionId);
     if (caller === null || !definition.callers.includes(caller)) {
-      logger.warn('Refused', method, 'from', caller ?? 'an unrecognized sender', sender.url);
+      logger.warn('Refused', method, 'from', caller ?? 'an unrecognized sender', originOf(sender));
       return failure('forbidden', `${caller ?? 'This sender'} may not call ${method}.`);
     }
 
@@ -136,6 +136,20 @@ export function registerRpcServer(handlers: RpcHandlers, options: DispatcherOpti
     // Keeps the channel open for the asynchronous reply.
     return true;
   });
+}
+
+/**
+ * Where a message came from, for logs: scheme and host only. A page's URL can
+ * carry tokens in its query or fragment.
+ */
+function originOf(sender: SenderLike): string {
+  if (sender.url === undefined) return '(no URL)';
+  try {
+    const url = new URL(sender.url);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '(unparseable URL)';
+  }
 }
 
 function messageOf(error: unknown): string {
