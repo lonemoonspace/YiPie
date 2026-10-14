@@ -155,6 +155,34 @@ test('the panel comes back, freshly attached, when the page removes it', async (
   expect(await readHost(page)).not.toBeNull();
 });
 
+test('the panel stays, still attached, when the page re-renders its body', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  const tabId = await tabIdOf(serviceWorker, page);
+  await openPanel(page);
+  const frame = await panelFrame(page);
+  await expectAttached(frame);
+  const first = await attachedDocument(serviceWorker, tabId);
+
+  // What single-page apps do. Our host is a child of <html>, outside <body>.
+  await page.evaluate(() => {
+    document.body.innerHTML = '';
+    document.body.replaceWith(document.createElement('body'));
+  });
+
+  expect(await readHost(page)).not.toBeNull();
+  // The same panel document, still answering: nothing was unloaded or remounted.
+  await expectAttached(frame);
+  expect(frame.isDetached()).toBe(false);
+  expect(await attachedDocument(serviceWorker, tabId)).toBe(first);
+});
+
 test('a page cannot embed the panel itself', async ({
   context,
   server,
