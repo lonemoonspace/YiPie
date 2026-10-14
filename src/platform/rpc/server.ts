@@ -27,13 +27,25 @@ export type RpcHandlers = {
 
 type AnyHandler = (input: unknown, context: HandlerContext) => Promise<unknown>;
 
+export interface DispatcherOptions {
+  /**
+   * Resolves once `storage.local` is closed to content scripts. No handler
+   * runs before that, and every call is refused while it rejects.
+   */
+  storageIsolated: () => Promise<void>;
+}
+
 /**
  * Turns one incoming message into a reply. Every check lives here, so no
  * handler can skip one: the method must exist, the caller must be allowed to
- * call it, the input must match the contract, and so must the handler's
- * output.
+ * call it, the input must match the contract, storage must be isolated, and
+ * the handler's output must match the contract too.
  */
-export function createDispatcher(handlers: RpcHandlers, extensionId: string) {
+export function createDispatcher(
+  handlers: RpcHandlers,
+  extensionId: string,
+  { storageIsolated }: DispatcherOptions,
+) {
   return async (message: unknown, sender: SenderLike): Promise<RpcReply> => {
     const request = RpcRequest.safeParse(message);
     if (!request.success) return failure('bad-request', 'Malformed RPC request.');
@@ -53,6 +65,18 @@ export function createDispatcher(handlers: RpcHandlers, extensionId: string) {
     const input = definition.input.safeParse(request.data.input);
     if (!input.success) return failure('bad-request', describe(input.error));
 
+    // Fail closed: a request that arrives during start-up waits here, and none
+    // is served if the browser will not restrict storage.local.
+    try {
+      await storageIsolated();
+    } catch (error) {
+      logger.error('Refused', method, 'because storage.local is not isolated:', error);
+      return failure(
+        'storage-not-isolated',
+        `storage.local could not be closed to content scripts, so requests are refused: ${messageOf(error)}`,
+      );
+    }
+
     try {
       const handler = handlers[method as RpcMethod] as AnyHandler;
       const value = await handler(input.data, { caller });
@@ -60,14 +84,14 @@ export function createDispatcher(handlers: RpcHandlers, extensionId: string) {
     } catch (error) {
       if (error instanceof ReadOnlyRecordError) return failure('read-only', error.message);
       logger.error(method, 'failed', error);
-      return failure('internal', error instanceof Error ? error.message : String(error));
+      return failure('internal', messageOf(error));
     }
   };
 }
 
 /** Must run synchronously at service-worker start, so no message is missed. */
-export function registerRpcServer(handlers: RpcHandlers): void {
-  const dispatch = createDispatcher(handlers, browser.runtime.id);
+export function registerRpcServer(handlers: RpcHandlers, options: DispatcherOptions): void {
+  const dispatch = createDispatcher(handlers, browser.runtime.id, options);
 
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (!isRpcMessage(message)) return false;
@@ -75,6 +99,10 @@ export function registerRpcServer(handlers: RpcHandlers): void {
     // Keeps the channel open for the asynchronous reply.
     return true;
   });
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function describe(error: z.ZodError): string {

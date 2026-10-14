@@ -2,7 +2,11 @@ import { createQueue } from './tx';
 import type { StorageLike } from './types';
 import { createWxtStore } from './wxt-store';
 
-export { restrictLocalStorageToExtensionPages } from './access-level';
+export {
+  createIsolationGate,
+  ensureLocalStorageIsolated,
+  type AccessLevelArea,
+} from './access-level';
 export { QUARANTINE_LIMIT, readQuarantine, type QuarantineEntry } from './quarantine';
 export {
   createRepo,

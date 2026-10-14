@@ -2,28 +2,30 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { registerRpcServer } from '@/platform/rpc/server';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
-import {
-  getExtensionStore,
-  restrictLocalStorageToExtensionPages,
-  writeQueue,
-} from '@/platform/storage';
+import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 
 const logger = createLogger('background');
 
 export default defineBackground(() => {
   const settings = createGeneralSettingsService(getExtensionStore(), writeQueue);
 
-  // Register listeners first: the message being answered may be what woke this worker.
-  registerRpcServer({
-    'settings.get': () => settings.get(),
-    'settings.patch': async (patch) => {
-      const view = await settings.patch(patch);
-      setLogLevel(view.settings.logLevel);
-      return view;
+  // Register listeners first: the message being answered may be what woke this
+  // worker. Handlers still wait until storage.local is closed to content scripts.
+  registerRpcServer(
+    {
+      'settings.get': () => settings.get(),
+      'settings.patch': async (patch) => {
+        const view = await settings.patch(patch);
+        setLogLevel(view.settings.logLevel);
+        return view;
+      },
     },
-  });
+    { storageIsolated: ensureLocalStorageIsolated },
+  );
 
-  restrictLocalStorageToExtensionPages().catch((error: unknown) => {
+  // Close storage.local now rather than on the first request. If the browser
+  // refuses, RPC stays refused; each later request asks again.
+  ensureLocalStorageIsolated().catch((error: unknown) => {
     logger.error('Could not restrict storage.local to extension pages:', error);
   });
 

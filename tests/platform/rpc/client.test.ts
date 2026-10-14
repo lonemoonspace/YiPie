@@ -52,6 +52,7 @@ describe('callRpc', () => {
         },
       },
       EXTENSION_ID,
+      { storageIsolated: () => Promise.resolve() },
     );
     const transport: Transport = (request) => dispatch(request, OPTIONS);
 

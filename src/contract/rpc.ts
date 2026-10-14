@@ -65,6 +65,9 @@ export const RPC_ERROR_CODES = [
   'unknown-method',
   'bad-request',
   'read-only',
+  // The browser has not confirmed that storage.local is closed to content
+  // scripts, so the background serves nothing (it fails closed).
+  'storage-not-isolated',
   'internal',
 ] as const;
 export const RpcErrorCode = z.enum(RPC_ERROR_CODES);

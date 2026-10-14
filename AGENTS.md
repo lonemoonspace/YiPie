@@ -59,6 +59,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 
 - `src/contract/rpc.ts` 的方法表是唯一权威：每个方法声明 input / output schema 和允许的调用方（options / panel / content）。
 - 调用方由浏览器提供的 sender 判定（`src/platform/rpc/caller-policy.ts`），不看消息内容。
+- **凭据隔离 fail closed**：浏览器确认 `storage.local` 只对扩展页面开放之前，dispatcher 不运行任何 handler；确认失败时一律返回 `storage-not-isolated`，下一次请求再重试。闸门是 `ensureLocalStorageIsolated()`（`src/platform/storage/access-level.ts`），只记住成功。之后任何会产生内容脚本的代码（阶段 1 的注入）也必须先 `await` 它，失败就不注入。
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用的轻量客户端在阶段 1 加入，不引入 zod；届时通道名和请求 / 回复的形状移到不依赖 zod 的 `contract/rpc-wire.ts`（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 

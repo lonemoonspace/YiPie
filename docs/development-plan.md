@@ -24,7 +24,7 @@
 ### 1.1 可验证的目标（不是口号）
 
 1. **安装时零站点权限**：manifest 里没有 `host_permissions`，也没有静态 `content_scripts`；`web_accessible_resources` 只有面板页面；`permissions` 与附录 C 的清单逐项一致，由 CI 比对构建产物。模型服务的访问权在用户保存配置时按 origin 运行时申请。
-2. **service worker 保持小**：`background.js` < 150 kB（阶段 0 实测 100.46 kB，其中 zod 占 84.66 kB，见 §9）。SW 里既没有 UI，也没有模型请求代码（D4），这条才能长期成立。
+2. **service worker 保持小**：`background.js` < 150 kB（阶段 0 实测 100.88 kB，其中 zod 占 84.66 kB，见 §9）。SW 里既没有 UI，也没有模型请求代码（D4），这条才能长期成立。
 3. **用户数据不会被静默改写或删除**：每个持久化值都有 schema 与版本信封；坏数据先隔离备份、再让用户看见；删除只来自用户的显式操作。
 4. **端到端可测，且不依赖真实 Key**：阶段 1 起，E2E 在真实 Chromium 里跑通「打开页面 → 触发 → 流式输出 → 停止 / 完成」；阶段 3 起再覆盖「刷新后再次触发 → 恢复上次对话」。模型一侧由本地假服务提供（§6）。Playwright 点不了工具栏图标和右键菜单，这几条触发路径由手工冒烟清单覆盖（附录 H）。
 5. **用量如实**：服务返回 `usage` 时显示真实值；拿不到时显示带「≈」的本地估算，绝不把估算当成真实值。
@@ -122,7 +122,7 @@
 | 运行上下文边界           | 附录 A 中每个 platform 模块都标注了允许的上下文            | ESLint（纯类型导入放行）。**SW**（阶段 0 起）：background 入口不得引用 `features/**`；contract / domain / platform / background 不得在运行时引用 React，所以 SW 能触及的代码里没有 React；之后再加上不得引用 `platform/llm`。**内容脚本**（阶段 1 起）：不得在运行时引用 React、zod、`platform/llm`、`platform/storage`（内容脚本侧的 RPC 客户端不做 zod 校验，校验在服务端） |
 | 单一写队列               | `src/platform/storage/tx.ts`                               | `createRepo(...).update` 在队列内完成读改写；`wxt-store` 只允许 `platform/storage/**` 引用（ESLint）                                                                                                              |
 | RPC 全校验 + 调用方策略  | `platform/rpc/server.ts`；方法表在 `contract/rpc.ts`       | 每个方法声明允许的调用方（设置页 / 面板 / 内容脚本）。服务端统一校验：发送方是本扩展、调用方类型在白名单内、入参通过 zod；未声明即拒绝                                                                             |
-| 凭据隔离                 | SW 启动时调用 `storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })` | E2E 断言：在内容脚本的隔离世界里读 `storage.local` 失败（阶段 1 起：阶段 0 没有 `scripting` 权限，造不出内容脚本的上下文）                                                                   |
+| 凭据隔离                 | SW 启动时调用 `storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })`，经 `ensureLocalStorageIsolated()` 闸门使用，失败即关闭（fail closed） | 单测：浏览器确认隔离之前不运行任何 RPC handler，确认失败时一律返回 `storage-not-isolated`。阶段 1 起：注入内容脚本前也等这道闸门；E2E 断言在内容脚本的隔离世界里读 `storage.local` 失败（阶段 0 没有 `scripting` 权限，造不出内容脚本的上下文） |
 | 模型请求只在扩展页面发起 | `src/platform/llm/**`                                      | 只允许 `features/{panel,settings}` 引用（ESLint）                                                                                                                                                                |
 | 权限最小化               | `wxt.config.ts` 的 `manifest`                              | `scripts/check-manifest.ts` 比对产物 manifest 与附录 C（清单在 `scripts/lib/manifest-policy.ts`），多一项或少一项都失败                                                                                          |
 | 体积预算                 | `scripts/check-bundle-budget.ts`                           | 阶段 0 起进 CI，按入口断言（§9）；判定在 `scripts/lib/bundle-budget.ts`                                                                                                                                          |
@@ -184,7 +184,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 - [x] 单测：token 估算按码点计数（用 100 个 emoji 断言；单个 emoji 区分不了「按码点」和「按 UTF-16 单元」，原型环境里也抓到过）
 - [x] 单测：未在方法表里声明的调用方被拒绝（包括内容脚本调用不属于它的方法）
 - [x] `check-manifest`：产物里只有附录 C 中阶段 0 引入的项
-- [x] 体积检查跑出第一份基线：`background.js` 100.46 kB，整包 407.41 kB
+- [x] 体积检查跑出第一份基线：`background.js` 100.88 kB，整包 407.85 kB
 
 **阶段小结**
 
@@ -192,6 +192,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
   - 分层、唯一写入口、SW 不含界面代码，都由 ESLint 强制，且用故意违规的临时文件验证过会报错；
   - 存储的信封、读取三态、隔离备份、「版本更新的数据只读」，在单测和真实 Chromium 中都成立；
   - RPC 只认浏览器提供的 sender，未登记的调用方被拒绝；
+  - 凭据隔离 fail closed：浏览器确认 `storage.local` 只对扩展页面开放之前，RPC 不运行任何 handler，确认失败时一律拒绝（单测；E2E 能读到设置，说明真实 Chromium 里确认成功了）；
   - 「设置页 → RPC → SW 写队列 → 存储 → 刷新后仍在」这条往返在真实浏览器里跑通，CI 可重复。
 - **怎么复现**：`npm ci && npm run gate && npm run build && npm run check:manifest && npm run check:bundle && npm run test:e2e`
 - **还没做**：
@@ -234,7 +235,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | `src/platform/llm/client.ts` | `fetch` + `eventsource-parser` + `AbortSignal`；空闲看门狗（首字节与流中各一个阈值） |
 | `src/platform/permissions/origin-access.ts` | 按 origin 申请与查询；必须在点击回调里、任何 `await` 之前调用 |
 | `src/platform/triggers/{action,commands}.ts` | SW 侧：图标与快捷键的回调 |
-| `src/platform/inject/inject.ts` | SW 侧：nonce 登记、`executeScript` 注入、受限页面判定与图标提示 |
+| `src/platform/inject/inject.ts` | SW 侧：nonce 登记、`executeScript` 注入、受限页面判定与图标提示。注入前先 `await ensureLocalStorageIsolated()`，失败就不注入并在图标上提示：内容脚本只能出现在 `storage.local` 已经关上之后 |
 | `src/platform/extract/readability.ts` | 基于 `@mozilla/readability` 的正文提取（降级方案在阶段 5） |
 | `src/platform/panel-host/host.ts` | 内容脚本侧：closed Shadow DOM 外壳、iframe 挂载、重复注入守卫、页面重建 body 后重挂 |
 | `src/features/markdown/**` | 安全渲染管线（规则见 §8） |
@@ -261,7 +262,8 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 - [ ] 单测覆盖：
   - 请求体构造：extraBody 合并、保留键不可覆盖、headers 非字符串值被拒；
   - SSE 归一，语料覆盖：普通、分块边界切在多字节字符中间、注释行、`[DONE]`、流中错误、无 usage、末尾 usage；
-  - base URL 规范化、可注入 URL 判定、错误分类 v0。
+  - base URL 规范化、可注入 URL 判定、错误分类 v0；
+  - 注入等待隔离闸门：闸门未确认时不调用 `executeScript`，确认失败时不注入。
 - [ ] Markdown 安全回归（用例清单见 §8）
 - [ ] E2E：fixture 页 → 触发 → 面板出现 → 文本逐步流出 → 停止后内容保留；另有一条正常完成的路径
 - [ ] E2E：在内容脚本的隔离世界里调用 `storage.local.get` 失败
@@ -530,7 +532,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 每个阶段结束时过一遍，与本阶段相关的项必须仍然成立：
 
 - [ ] **RPC 调用方策略**：发送方必须是本扩展（`sender.id`）；调用方类型（由 `sender.url` 的协议与路径、`sender.tab`、`frameId` 判定）必须在该方法的白名单内；入参通过 zod 解析。内容脚本只能调用登记握手和「打开设置页」；配置变更与导出只接受设置页，例外逐条列在 `contract/rpc.ts`（如面板里切换默认模型、面板记录 `stream_options` 降级）
-- [ ] **凭据隔离**：`storage.local` 只对扩展页面开放；凭据不进内容脚本、不进日志（脱敏）、不进快照，导出时默认剔除
+- [ ] **凭据隔离**：`storage.local` 只对扩展页面开放，且 fail closed：浏览器确认之前不处理 RPC、不注入内容脚本，确认失败时拒绝（下一次请求再重试）；凭据不进内容脚本、不进日志（脱敏）、不进快照，导出时默认剔除
 - [ ] **不加 `externally_connectable`**：一旦加上，发送方校验就从「纵深防御」变成「唯一屏障」，需要重新评估
 - [ ] **面板嵌入校验**：`panel.html` 以 `use_dynamic_url` 暴露，是唯一的 web 可访问资源；面板只在后台登记过的标签页里工作
 - [ ] **Markdown 注入面**：
@@ -554,15 +556,15 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 | 指标                                 | 预算                       | 依据 / 当前                                                                                         | 由什么看守          |
 | ------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------- |
-| `background.js`                      | < 150 kB                   | 阶段 0 实测 100.46 kB：zod 84.66 kB、`@wxt-dev/storage` 7.39 kB、自有代码约 6 kB；SW 不含 UI 与模型请求代码 | CI（阶段 0 起）     |
+| `background.js`                      | < 150 kB                   | 阶段 0 实测 100.88 kB：zod 84.66 kB、`@wxt-dev/storage` 7.39 kB、自有代码约 6 kB；SW 不含 UI 与模型请求代码 | CI（阶段 0 起）     |
 | `content-scripts/content.js`         | < 100 kB                   | Readability 34 kB；不含 React 与 zod                                                                | CI                  |
 | 扩展页面的共享 chunk                 | < 450 kB                   | 实测 react-dom 207.00 kB、react 8.17 kB、scheduler 3.54 kB、zod 79.88 kB，另加 UI 组件。阶段 0 只有设置页一个扩展页面，这些都在 options chunk（304.30 kB）里，由整包预算看守；阶段 1 加入面板后才拆出共享 chunk | CI                  |
 | `panel` 入口（不含共享 chunk）       | < 150 kB                   | marked 41 kB、自写客户端约 5 kB、面板代码                                                           | CI                  |
-| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 0 实测 407.41 kB；按上面各项估算，完成后约 700–800 kB                                          | CI                  |
+| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 0 实测 407.85 kB；按上面各项估算，完成后约 700–800 kB                                          | CI                  |
 | SW 冷启动引入的静态资源              | 不得出现 > 100 kB 的新资源 | 无词表                                                                                              | review + 体积报告   |
 | 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 外壳由内容脚本直接画，不等 iframe                                                                   | 阶段 1 基准         |
 | 面板可交互（注入 → 面板就绪）        | 阶段 1 测出基线后再定      | —                                                                                                   | 阶段 1 基准         |
-| 单测总时长                           | < 10 s                     | 阶段 0 实测 1.04 s（12 文件 / 81 用例）                                                             | CI 时长             |
+| 单测总时长                           | < 10 s                     | 阶段 0 实测 1.38 s（13 文件 / 89 用例）                                                             | CI 时长             |
 | E2E 单场景                           | < 60 s                     | 阶段 0 实测每条约 0.7 s（3 条共 2.9 s，CI）                                                         | Playwright timeout  |
 
 预算在阶段 1 结束时用实测值校准一次，之后要上调必须在附录 F 写明理由。
@@ -719,8 +721,8 @@ docs/            development-plan.md（本文）
 
 | 检查                          | 命令                     | 结果                                                                                                   |
 | ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| 类型检查 + 单测 + lint + 格式 | `npm run gate`           | 通过（`Test Files 12 passed` / `Tests 81 passed`，单测 1.04 s）                                        |
-| 构建                          | `npm run build`          | 通过，`Σ Total size: 407.41 kB`；`background.js` 100.46 kB，`chunks/options` 304.30 kB                 |
+| 类型检查 + 单测 + lint + 格式 | `npm run gate`           | 通过（`Test Files 13 passed` / `Tests 89 passed`，单测 1.38 s）                                        |
+| 构建                          | `npm run build`          | 通过，`Σ Total size: 407.85 kB`；`background.js` 100.88 kB，`chunks/options` 304.32 kB                 |
 | 产物权限面                    | `npm run check:manifest` | 通过：`permissions: ["storage"]`，没有 host 权限、内容脚本和 web 可访问资源                             |
 | 体积预算                      | `npm run check:bundle`   | 通过；基线写在 `.output/bundle-report.json`，按包的归因见 §9                                           |
 | E2E（真实 Chromium 加载扩展） | `npm run test:e2e`       | 3 条通过（CI 上共 2.9 s）。环境搭建见 `AGENTS.md`「开发环境备注」                                      |
@@ -747,7 +749,7 @@ docs/            development-plan.md（本文）
 | 2026-10-13 | v2，主要改动：<br>· 只支持 OpenAI 兼容接口（D1）；不用 AI SDK，自写客户端（D2）<br>· 面板改为扩展 iframe，模型请求在面板文档内发起，删掉 v1 的「流式通道」阶段（D4）<br>· 阶段改为纵切片，阶段 1 就交付可用版本；体积预算按入口重定，并提前到阶段 1 进 CI<br>· RPC 增加调用方策略；`storage.local` 限制为只有扩展页面可读<br>· 迁移改为逐 key 读时升级 + 隔离备份，去掉全局 `MIGRATION_VERSION`<br>· E2E 改用本地假服务，生产代码里不再放 mock provider<br>· 按全新项目重写，去掉与旧项目的对比和配置迁移<br>· 新增附录 C（权限清单）、D（兼容差异）、G（开发环境） |
 | 2026-10-13 | v3：把界面改为浏览器侧边栏。这是误记——D4 的选择是 B（页面内扩展 iframe），见下一行 |
 | 2026-10-13 | v4，更正 v3 并落实 §11 的已决事项：<br>· D4 恢复为页面内扩展 iframe 面板；浏览器侧边栏列为被否决方案，并作为「页面无法嵌入 iframe」时的退路<br>· 去掉 popup：点图标直接在页面里打开面板并开始总结；受限页面在图标上提示<br>· 换页后靠图标、右键菜单或快捷键再触发，不做全站权限与按站点授权（D3）<br>· D2 补充原型实测（110 行、5.4 kB）<br>· 阶段 0 改为在本仓库重做，原型环境的数据移到附录 E 作参考；manifest 与体积检查提前到阶段 0<br>· 开放问题全部关闭，改为「已决事项」；只发 GitHub Release，只做 Chrome / Edge，界面中英文可切换<br>· 新增附录 H（触发路径手工冒烟清单） |
-| 2026-10-13 | v4.1，阶段 0 完成：<br>· §3、§4.1 标记完成，补上阶段小结；附录 E 换成本仓库的实测数据，原型数据保留作参考<br>· 交付物按实际调整：隔离备份（`quarantine.ts`）从阶段 2 提前到阶段 0；不设 `contract/index.ts` 汇总导出；检查脚本改用 TypeScript（`scripts/*.ts`）<br>· §2.2：SW 的运行上下文边界在阶段 0 落地（ESLint），内容脚本的规则随阶段 1 加入<br>· §4.2：新增 `contract/rpc-wire.ts`，让内容脚本拿通道名时不带上 zod<br>· §4.3：隔离备份的查看、导出、删除归入阶段 2 的验收<br>· §7：隔离键改为每个 key 一个列表 `<区域>:quarantine:<key>`；写明「加字段不升版本」和 patch 的写法<br>· §9：换成构建产物按 source map 归因的实测值。zod 与 React 都比估计大，预算不变；记下 `zod/mini` 作为 SW 逼近预算时第一个评估的办法<br>· 附录 B 增加提交类型 `ci`；附录 G 已迁入 `AGENTS.md` |
+| 2026-10-13 | v4.1，阶段 0 完成：<br>· §3、§4.1 标记完成，补上阶段小结；附录 E 换成本仓库的实测数据，原型数据保留作参考<br>· 交付物按实际调整：隔离备份（`quarantine.ts`）从阶段 2 提前到阶段 0；不设 `contract/index.ts` 汇总导出；检查脚本改用 TypeScript（`scripts/*.ts`）<br>· §2.2：SW 的运行上下文边界在阶段 0 落地（ESLint），内容脚本的规则随阶段 1 加入<br>· §4.2：新增 `contract/rpc-wire.ts`，让内容脚本拿通道名时不带上 zod<br>· §4.3：隔离备份的查看、导出、删除归入阶段 2 的验收<br>· §7：隔离键改为每个 key 一个列表 `<区域>:quarantine:<key>`；写明「加字段不升版本」和 patch 的写法<br>· §9：换成构建产物按 source map 归因的实测值。zod 与 React 都比估计大，预算不变；记下 `zod/mini` 作为 SW 逼近预算时第一个评估的办法<br>· 附录 B 增加提交类型 `ci`；附录 G 已迁入 `AGENTS.md`<br>· 凭据隔离改为 fail closed（PR 审阅意见）：§2.2、§4.1 小结、§8 写明浏览器确认之前不运行 RPC handler、确认失败就拒绝；§4.2 的注入与验收加上「先等隔离闸门」 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
