@@ -1,4 +1,4 @@
-import type { ModelConfig } from '@/contract/model-config';
+import { isForbiddenHeaderName, type ModelConfig } from '@/contract/model-config';
 import { t } from '@/domain/i18n';
 import { normalizeBaseURL } from '@/domain/url';
 
@@ -72,7 +72,11 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
     errors.headers = t('model.error.json', { field: t('model.headers') });
   } else {
     const bad = Object.entries(headers).find(([, value]) => typeof value !== 'string');
+    const forbidden = Object.keys(headers).find(isForbiddenHeaderName);
     if (bad) errors.headers = t('model.error.headers', { name: bad[0] });
+    else if (forbidden !== undefined) {
+      errors.headers = t('model.error.headerForbidden', { name: forbidden });
+    }
   }
 
   const extraBody = parseObject(fields.extraBody);

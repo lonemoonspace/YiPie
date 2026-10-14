@@ -75,6 +75,13 @@ describe('parseModelForm', () => {
     });
   });
 
+  it('rejects a header the browser would not send, naming it', () => {
+    expect(parseModelForm({ ...filled, headers: '{"X-API-Key": "k", "Cookie": "a=1"}' })).toEqual({
+      ok: false,
+      errors: { headers: '浏览器不允许扩展设置这个请求头，它不会被发送：Cookie' },
+    });
+  });
+
   it('rejects headers that are not JSON', () => {
     expect(parseModelForm({ ...filled, headers: '{oops' })).toMatchObject({
       ok: false,

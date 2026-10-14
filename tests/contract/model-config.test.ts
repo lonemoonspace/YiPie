@@ -4,6 +4,7 @@ import {
   ModelConfigDraft,
   ModelConfigPatch,
   displayName,
+  isForbiddenHeaderName,
 } from '@/contract/model-config';
 
 describe('ModelConfig', () => {
@@ -51,6 +52,48 @@ describe('ModelConfigDraft', () => {
 describe('ModelConfigPatch', () => {
   it('carries no defaults: an empty patch names no fields', () => {
     expect(ModelConfigPatch.parse({})).toEqual({});
+  });
+});
+
+describe('headers the browser will not send', () => {
+  it.each(['Cookie', 'cookie', 'Host', 'Origin', 'Proxy-Authorization', 'Sec-Fetch-Site', 'DNT'])(
+    'recognizes %s',
+    (name) => {
+      expect(isForbiddenHeaderName(name)).toBe(true);
+    },
+  );
+
+  it.each(['Authorization', 'X-API-Key', 'api-key', 'HTTP-Referer', 'X-Proxy-Token'])(
+    'allows %s',
+    (name) => {
+      expect(isForbiddenHeaderName(name)).toBe(false);
+    },
+  );
+
+  it('are refused in a draft and in a patch, naming the header', () => {
+    const draft = ModelConfigDraft.safeParse({
+      baseURL: 'http://x.test',
+      model: 'm',
+      headers: { 'X-API-Key': 'k', Cookie: 'session=1' },
+    });
+    expect(draft.success).toBe(false);
+    expect(draft.error?.issues).toMatchObject([{ path: ['headers', 'Cookie'] }]);
+
+    expect(ModelConfigPatch.safeParse({ headers: { 'proxy-authorization': 'x' } }).success).toBe(
+      false,
+    );
+    expect(ModelConfigPatch.safeParse({ headers: { 'X-API-Key': 'k' } }).success).toBe(true);
+  });
+
+  it('are still read from storage: they do no harm there, the browser drops them', () => {
+    expect(
+      ModelConfig.safeParse({
+        id: 'a',
+        baseURL: 'http://x.test',
+        model: 'm',
+        headers: { Host: 'h' },
+      }).success,
+    ).toBe(true);
   });
 });
 

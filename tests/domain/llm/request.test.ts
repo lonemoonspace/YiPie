@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatRequest, type ChatMessage } from '@/domain/llm/request';
+import { buildChatRequest, requestSecrets, type ChatMessage } from '@/domain/llm/request';
 
 const messages: ChatMessage[] = [
   { role: 'system', content: 'Summarize.' },
@@ -85,5 +85,36 @@ describe('buildChatRequest', () => {
       buildChatRequest({ ...config, headers: { Authorization: 'Token abc' } }, messages).headers
         .Authorization,
     ).toBe('Token abc');
+  });
+});
+
+describe('requestSecrets', () => {
+  it('lists the key', () => {
+    expect(requestSecrets(config)).toEqual(['sk-test']);
+    expect(requestSecrets({ ...config, apiKey: '' })).toEqual([]);
+  });
+
+  it('lists every header value, and the token of a scheme-and-token value', () => {
+    expect(
+      requestSecrets({
+        ...config,
+        apiKey: '',
+        headers: {
+          Authorization: 'Bearer sk-from-header',
+          'X-API-Key': 'k-123',
+          'X-Title': 'YiPie',
+        },
+      }),
+    ).toEqual(['Bearer sk-from-header', 'sk-from-header', 'k-123', 'YiPie']);
+  });
+
+  it('lists the base URL query values, as written and decoded', () => {
+    expect(
+      requestSecrets({
+        ...config,
+        apiKey: '',
+        baseURL: 'https://gw.example/v1?key=s%2Fecret+1&api-version=2024-02-01&flag',
+      }),
+    ).toEqual(['s%2Fecret+1', 's/ecret 1', '2024-02-01']);
   });
 });

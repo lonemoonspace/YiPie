@@ -24,7 +24,10 @@ export interface LlmError {
   kind: LlmErrorKind;
   /** The HTTP status, when the service answered. */
   status?: number;
-  /** Detail from the service or the browser, for display. Never contains the API key. */
+  /**
+   * Detail from the service or the browser, for display. The client redacts
+   * every credential of the configuration from it (`requestSecrets`).
+   */
   detail: string;
 }
 
@@ -93,11 +96,33 @@ export function describeErrorBody(body: string): string {
   return clip(text);
 }
 
-/** Replaces each secret that occurs in `text`, so no message shows a key. */
+/**
+ * Secrets at least this long are replaced wherever they occur. A shorter one,
+ * such as a placeholder key like `x` or a header value like `1`, is replaced
+ * wherever it stands alone, with no ASCII letter or digit on either side: that
+ * is how an echoed credential appears, and replacing it inside other words
+ * would garble the message without hiding anything more.
+ */
+const SUBSTRING_SECRET_LENGTH = 8;
+
+/**
+ * Replaces each secret that occurs in `text`, so no message shows a
+ * credential. Every non-empty secret counts, however short.
+ */
 export function redact(text: string, secrets: readonly string[]): string {
-  return secrets
-    .filter((secret) => secret.length >= 4)
-    .reduce((result, secret) => result.split(secret).join('***'), text);
+  // Longest first, so a secret that contains another is replaced whole.
+  const distinct = [...new Set(secrets.filter((secret) => secret !== ''))].sort(
+    (a, b) => b.length - a.length,
+  );
+  return distinct.reduce((result, secret) => {
+    if (secret.length >= SUBSTRING_SECRET_LENGTH) return result.split(secret).join('***');
+    const alone = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(secret)}(?![A-Za-z0-9])`, 'g');
+    return result.replace(alone, '***');
+  }, text);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function findMessage(value: unknown): string | null {

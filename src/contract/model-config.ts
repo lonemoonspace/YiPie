@@ -14,6 +14,59 @@ export const BaseURL = z.url({ protocol: /^https?$/ });
 export const HeaderMap = z.record(z.string(), z.string());
 
 /**
+ * Request headers browsers do not let a page or an extension set: the Fetch
+ * standard's forbidden request-header names (`Cookie`, `Host`, `Origin`…) and
+ * every `Proxy-` or `Sec-` name. `fetch` drops them without a word.
+ */
+const FORBIDDEN_HEADER_NAMES = new Set([
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+]);
+
+export function isForbiddenHeaderName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')
+  );
+}
+
+/**
+ * Headers as the settings page submits them. A forbidden name is refused
+ * rather than saved as if it would be sent. Stored data is read with the
+ * plain `HeaderMap`: such a header there is harmless, the browser drops it.
+ */
+const HeaderMapInput = HeaderMap.superRefine((headers, context) => {
+  for (const name of Object.keys(headers)) {
+    if (isForbiddenHeaderName(name)) {
+      context.addIssue({
+        code: 'custom',
+        path: [name],
+        message: `Browsers do not let extensions set the ${name} header.`,
+      });
+    }
+  }
+});
+
+/**
  * JSON merged into the request body, for parameters some services need
  * (`temperature`, `max_tokens`…). It cannot override `model`, `messages` or
  * `stream` (see domain/llm/request).
@@ -55,7 +108,7 @@ export const ModelConfigDraft = z.strictObject({
   baseURL: BaseURL,
   apiKey: z.string().default(''),
   model: z.string().trim().min(1),
-  headers: HeaderMap.default({}),
+  headers: HeaderMapInput.default({}),
   extraBody: ExtraBody.default({}),
   contextWindow: z.number().int().positive().nullable().default(null),
   streamUsage: z.boolean().default(true),
@@ -71,7 +124,7 @@ export const ModelConfigPatch = z.strictObject({
   baseURL: BaseURL.optional(),
   apiKey: z.string().optional(),
   model: z.string().trim().min(1).optional(),
-  headers: HeaderMap.optional(),
+  headers: HeaderMapInput.optional(),
   extraBody: ExtraBody.optional(),
   contextWindow: z.number().int().positive().nullable().optional(),
   streamUsage: z.boolean().optional(),

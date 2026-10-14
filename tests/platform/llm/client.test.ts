@@ -153,6 +153,33 @@ describe('streamChat', () => {
     });
   });
 
+  it('keeps every credential of the configuration out of what it shows', async () => {
+    const echoing = ModelConfig.parse({
+      id: 'm',
+      baseURL: 'https://gw.example/v1?key=query-secret-1',
+      apiKey: 'abc',
+      model: 'test-model',
+      headers: { 'X-API-Key': 'header-secret-2', Authorization: 'Bearer override-secret-3' },
+    });
+    const echo = 'got key abc, X-API-Key header-secret-2, override-secret-3, ?key=query-secret-1';
+
+    const http = await run({
+      config: echoing,
+      fetch: fakeFetch(() => new Response(JSON.stringify({ error: echo }), { status: 401 })),
+    });
+    const stream = await run({
+      config: echoing,
+      fetch: fakeFetch(() => streamResponse([`data: ${JSON.stringify({ error: echo })}\n\n`])),
+    });
+
+    for (const { outcome } of [http, stream]) {
+      expect(outcome).toMatchObject({
+        kind: 'error',
+        error: { detail: 'got key ***, X-API-Key ***, ***, ?key=***' },
+      });
+    }
+  });
+
   it('blames a missing host permission when the browser blocks the request', async () => {
     const fetch = fakeFetch(() => Promise.reject(new TypeError('Failed to fetch')));
 

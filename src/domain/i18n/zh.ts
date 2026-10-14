@@ -59,6 +59,7 @@ export const zh = {
   'model.error.model': '请填写模型名',
   'model.error.json': '{field}不是有效的 JSON 对象',
   'model.error.headers': '请求头的值必须是字符串：{name}',
+  'model.error.headerForbidden': '浏览器不允许扩展设置这个请求头，它不会被发送：{name}',
   'model.error.contextWindow': '上下文窗口必须是正整数',
 
   'panel.close': '关闭',

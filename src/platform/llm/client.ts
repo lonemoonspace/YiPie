@@ -7,7 +7,7 @@ import {
   redact,
   type LlmError,
 } from '@/domain/llm/errors';
-import { buildChatRequest, type ChatMessage } from '@/domain/llm/request';
+import { buildChatRequest, requestSecrets, type ChatMessage } from '@/domain/llm/request';
 import { interpretEventData, type Usage } from '@/domain/llm/stream';
 import { hasOriginAccess } from '@/platform/permissions/origin-access';
 
@@ -48,6 +48,7 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
   if (signal.aborted) return { kind: 'stopped' };
 
   const request = buildChatRequest(config, options.messages);
+  const secrets = requestSecrets(config);
   const controller = new AbortController();
   const stop = () => controller.abort();
   signal.addEventListener('abort', stop, { once: true });
@@ -63,7 +64,7 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
   };
   const clean = (error: LlmError): ChatOutcome => ({
     kind: 'error',
-    error: { ...error, detail: redact(error.detail, [config.apiKey]) },
+    error: { ...error, detail: redact(error.detail, secrets) },
   });
   const failed = async (error: unknown): Promise<ChatOutcome> => {
     if (signal.aborted) return { kind: 'stopped' };

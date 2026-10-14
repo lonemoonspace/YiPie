@@ -84,7 +84,40 @@ describe('redact', () => {
     );
   });
 
-  it('leaves text alone for empty or very short secrets', () => {
-    expect(redact('a b c', ['', 'a'])).toBe('a b c');
+  it('replaces a short secret too, wherever it stands alone', () => {
+    expect(redact('Incorrect API key provided: abc', ['abc'])).toBe(
+      'Incorrect API key provided: ***',
+    );
+    expect(redact("key 'abc' (abc) key=abc; Bearer abc", ['abc'])).toBe(
+      "key '***' (***) key=***; Bearer ***",
+    );
+    // Services that write Chinese put no space around it.
+    expect(redact('密钥abc无效', ['abc'])).toBe('密钥***无效');
+    expect(redact('x', ['x'])).toBe('***');
+  });
+
+  it('leaves other words alone around a short secret', () => {
+    expect(redact('max_tokens exceeded for text x', ['x'])).toBe(
+      'max_tokens exceeded for text ***',
+    );
+    expect(redact('model gpt-4o-2024-11-20 not found', ['1'])).toBe(
+      'model gpt-4o-2024-11-20 not found',
+    );
+    expect(redact('abcdef xabc', ['abc'])).toBe('abcdef xabc');
+  });
+
+  it('replaces a long secret even inside other text', () => {
+    expect(redact('token=sk-abcdefgh&x / Xsk-abcdefghY', ['sk-abcdefgh'])).toBe(
+      'token=***&x / X***Y',
+    );
+  });
+
+  it('treats a secret as literal text, not a pattern', () => {
+    expect(redact('a.c abc a+c', ['a.c', 'a+c'])).toBe('*** abc ***');
+  });
+
+  it('replaces the longest secret first, and ignores empty ones', () => {
+    expect(redact('Bearer sk-abcdefgh-2', ['', 'sk-abcdefgh', 'Bearer sk-abcdefgh-2'])).toBe('***');
+    expect(redact('a b c', [''])).toBe('a b c');
   });
 });
