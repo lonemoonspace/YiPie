@@ -1,0 +1,8 @@
+.output/
+.wxt/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+package-lock.json
+*.md

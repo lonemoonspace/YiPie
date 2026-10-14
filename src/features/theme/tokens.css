@@ -1,0 +1,45 @@
+/*
+ * The one set of colour and font tokens, shared by every extension page
+ * (docs/development-plan.md §4.6). Pages set `data-theme` on <html>:
+ * `light`, `dark`, or `system` to follow the OS.
+ */
+:root {
+  color-scheme: light;
+  --color-bg: #ffffff;
+  --color-surface: #f5f6f8;
+  --color-text: #1d2129;
+  --color-muted: #5c6370;
+  --color-border: #d6dae0;
+  --color-accent: #2f6fdb;
+  --color-notice-bg: #fff4e5;
+  --color-notice-text: #7a4300;
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    sans-serif;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #15171c;
+  --color-surface: #1f2228;
+  --color-text: #e6e8eb;
+  --color-muted: #a2a8b3;
+  --color-border: #343a44;
+  --color-accent: #6b9dff;
+  --color-notice-bg: #3a2a12;
+  --color-notice-text: #ffd8a8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    color-scheme: dark;
+    --color-bg: #15171c;
+    --color-surface: #1f2228;
+    --color-text: #e6e8eb;
+    --color-muted: #a2a8b3;
+    --color-border: #343a44;
+    --color-accent: #6b9dff;
+    --color-notice-bg: #3a2a12;
+    --color-notice-text: #ffd8a8;
+  }
+}

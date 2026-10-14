@@ -9,7 +9,19 @@
 
 ## 当前状态
 
-规划阶段，还没有可用版本。路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+阶段 0（骨架）已完成：扩展能加载，设置页目前只有主题和日志级别两项，**还不能总结网页**。第一个可用版本在阶段 1 结束时出现。路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+
+## 开发
+
+需要 Node 22.18 或更高版本。
+
+```sh
+npm ci
+npm run gate    # 类型检查、单测、lint、格式检查
+npm run build   # 产物在 .output/chrome-mv3
+```
+
+在 Chrome 打开 `chrome://extensions`，开启「开发者模式」，点「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。开发约定见 [AGENTS.md](AGENTS.md)。
 
 ## 许可证
 

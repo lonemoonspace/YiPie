@@ -1,0 +1,55 @@
+# The full gate, run on every push and pull request (docs/development-plan.md §2.2, §5).
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Gate (compile + test + lint + format)
+        run: npm run gate
+
+      - name: Build
+        run: npm run build
+
+      - name: Manifest matches appendix C
+        run: npm run check:manifest
+
+      - name: Bundle within budget
+        run: npm run check:bundle
+
+      # Installs the Chromium build that the pinned @playwright/test expects.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
