@@ -101,11 +101,13 @@ test('a model configuration is saved through the background and shown after a re
     ],
   });
 
+  // After a reload the list is rebuilt from storage; its editor shows what was stored.
   await page.reload();
-  await expect(section(page, '模型').getByLabel('Base URL')).toHaveValue(
-    'http://127.0.0.1:11434/v1',
-  );
-  await expect(section(page, '模型').getByLabel('模型名')).toHaveValue('qwen2.5:7b');
+  const row = section(page, '模型').getByRole('listitem', { name: 'qwen2.5:7b' });
+  await expect(row.getByText('默认', { exact: true })).toBeVisible();
+  await row.getByRole('button', { name: '编辑' }).click();
+  await expect(row.getByLabel('Base URL')).toHaveValue('http://127.0.0.1:11434/v1');
+  await expect(row.getByLabel('模型名')).toHaveValue('qwen2.5:7b');
 });
 
 test('the model form reports problems next to their fields and saves nothing', async ({

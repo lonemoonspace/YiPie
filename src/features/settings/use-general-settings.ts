@@ -21,7 +21,7 @@ export interface GeneralSettingsState {
  * field at a time. Writes never happen here directly: they are RPCs, so the
  * background's single queue orders them.
  */
-export function useGeneralSettings(): GeneralSettingsState {
+export function useGeneralSettings(onBackedUp?: () => void): GeneralSettingsState {
   const [view, setView] = useState<GeneralSettingsView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
@@ -37,16 +37,20 @@ export function useGeneralSettings(): GeneralSettingsState {
     };
   }, []);
 
-  const update = useCallback(async (patch: GeneralSettingsPatch) => {
-    setSave({ kind: 'saving' });
-    try {
-      const saved = await callRpc('settings.patch', patch);
-      setView(saved);
-      setSave({ kind: 'saved', quarantined: saved.quarantined });
-    } catch (error) {
-      setSave({ kind: 'failed', message: messageOf(error) });
-    }
-  }, []);
+  const update = useCallback(
+    async (patch: GeneralSettingsPatch) => {
+      setSave({ kind: 'saving' });
+      try {
+        const saved = await callRpc('settings.patch', patch);
+        setView(saved);
+        setSave({ kind: 'saved', quarantined: saved.quarantined });
+        if (saved.quarantined) onBackedUp?.();
+      } catch (error) {
+        setSave({ kind: 'failed', message: messageOf(error) });
+      }
+    },
+    [onBackedUp],
+  );
 
   return { view, loadError, save, update };
 }

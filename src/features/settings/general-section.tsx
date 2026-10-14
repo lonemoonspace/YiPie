@@ -4,8 +4,8 @@ import { t } from '@/domain/i18n';
 import { applyTheme } from '@/features/theme/apply-theme';
 import { useGeneralSettings, type SaveState } from './use-general-settings';
 
-export function GeneralSection() {
-  const { view, loadError, save, update } = useGeneralSettings();
+export function GeneralSection({ onBackedUp }: { onBackedUp?: () => void }) {
+  const { view, loadError, save, update } = useGeneralSettings(onBackedUp);
   const theme = view?.settings.theme;
 
   useEffect(() => {

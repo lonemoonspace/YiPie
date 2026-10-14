@@ -154,3 +154,97 @@ button:disabled {
 .actions .save-status {
   margin: 0;
 }
+
+h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+button.quiet {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+button.danger {
+  padding: 4px 10px;
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.rows {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row:first-child {
+  padding-top: 0;
+}
+
+.row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row-text {
+  min-width: 0;
+}
+
+.row-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.row-detail {
+  color: var(--color-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge,
+.tag {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.badge {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.tag {
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.editor {
+  margin: 12px 0 16px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+}
+
+.warning {
+  margin: 0 0 12px;
+  color: var(--color-notice-text);
+  font-size: 12px;
+}
