@@ -205,3 +205,18 @@ describe('updates that span several keys', () => {
     ]);
   });
 });
+
+describe('a change that fails', () => {
+  it('writes nothing, not even a backup of an unreadable value', async () => {
+    const { repo, store } = setup('just a string');
+
+    await expect(
+      repo.update(() => {
+        throw new Error('no such item');
+      }),
+    ).rejects.toThrow('no such item');
+    await expect(repo.update(() => ({ count: 'many' }) as never)).rejects.toThrow();
+
+    expect(store.dump()).toEqual({ [KEY]: 'just a string' });
+  });
+});

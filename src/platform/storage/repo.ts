@@ -93,12 +93,8 @@ export function createRepo<T>(
       throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
     }
 
-    let quarantined = false;
-    if (current.status === 'invalid') {
-      await quarantine(store, definition.key, raw);
-      quarantined = true;
-    }
-
+    // Change and validate first: a change that throws, or a value that does
+    // not validate, writes nothing at all, not even a backup.
     const next = change(current.value);
     let data: unknown;
     let value: T;
@@ -109,6 +105,13 @@ export function createRepo<T>(
       value = definition.schema.parse(next);
       data = value;
     }
+
+    let quarantined = false;
+    if (current.status === 'invalid') {
+      await quarantine(store, definition.key, raw);
+      quarantined = true;
+    }
+
     const envelope: StorageEnvelope = { version: definition.version, data };
     await store.set(definition.key, envelope);
     return { value, quarantined };

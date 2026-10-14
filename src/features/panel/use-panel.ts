@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { displayName, type ModelConfig } from '@/contract/model-config';
+import { displayName } from '@/contract/model-config';
 import type { PageContext } from '@/contract/page-context';
-import { BUILT_IN_PROMPT } from '@/domain/prompt/default-prompt';
+import type { PanelSetup } from '@/contract/rpc';
 import { buildPromptMessages } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
@@ -29,16 +29,19 @@ export function usePanel(): PanelControls {
     const current = () => run.current === controller;
     dispatch({ type: 'start' });
 
-    let config: ModelConfig | undefined;
+    // The default model (with its key; the others' keys never come here) and
+    // the prompt in effect.
+    let setup: PanelSetup;
     try {
-      config = (await callRpc('models.list', {})).configs[0];
+      setup = await callRpc('panel.setup', {});
     } catch (error) {
       if (current())
         dispatch({ type: 'failed', problem: { kind: 'models', detail: messageOf(error) } });
       return;
     }
     if (!current()) return;
-    if (config === undefined) {
+    const config = setup.model;
+    if (config === null) {
       dispatch({ type: 'failed', problem: { kind: 'no-model' } });
       return;
     }
@@ -74,7 +77,7 @@ export function usePanel(): PanelControls {
     };
     const outcome = await streamChat({
       config,
-      messages: buildPromptMessages(BUILT_IN_PROMPT, page),
+      messages: buildPromptMessages(setup.prompt, page),
       signal: controller.signal,
       onText: (text) => {
         pending += text;

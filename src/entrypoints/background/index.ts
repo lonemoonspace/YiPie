@@ -4,10 +4,15 @@ import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
+import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { registerRpcServer } from '@/platform/rpc/server';
+import { onInstalledOrUpdated } from '@/platform/runtime/installed';
+import { createBackupsService } from '@/platform/settings/backups-service';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
+import { panelSetup } from '@/platform/settings/panel-setup';
+import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
@@ -17,7 +22,9 @@ const logger = createLogger('background');
 export default defineBackground(() => {
   const store = getExtensionStore();
   const settings = createGeneralSettingsService(store, writeQueue);
-  const models = createModelConfigsService(store, writeQueue);
+  const models = createModelConfigsService(store, writeQueue, { release: releaseOriginAccess });
+  const prompts = createPromptConfigsService(store, writeQueue);
+  const backups = createBackupsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
 
   // Register listeners first: the message or click being handled may be what
@@ -34,6 +41,17 @@ export default defineBackground(() => {
       'models.list': () => models.list(),
       'models.add': (draft) => models.add(draft),
       'models.update': ({ id, patch }) => models.update(id, patch),
+      'models.remove': ({ id }) => models.remove(id),
+      'models.move': ({ id, to }) => models.move(id, to),
+      'models.setDefault': async ({ id }) => ({ defaultId: await models.setDefault(id) }),
+      'prompts.list': () => prompts.list(),
+      'prompts.add': (draft) => prompts.add(draft),
+      'prompts.update': ({ id, patch }) => prompts.update(id, patch),
+      'prompts.remove': ({ id }) => prompts.remove(id),
+      'prompts.move': ({ id, to }) => prompts.move(id, to),
+      'prompts.setDefault': async ({ id }) => ({ defaultId: await prompts.setDefault(id) }),
+      'backups.list': () => backups.list(),
+      'backups.remove': (ref) => backups.remove(ref),
       'content.hello': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         return { nonce: await panels.issue(tabId) };
@@ -48,6 +66,7 @@ export default defineBackground(() => {
         }
         return { tabId };
       },
+      'panel.setup': () => panelSetup(models, prompts),
       // The dispatcher has checked that the caller is the panel attached in this tab.
       'page.getContext': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to read.');
@@ -67,6 +86,14 @@ export default defineBackground(() => {
   };
   onToolbarClick(open);
   onShortcut(open);
+
+  // The built-in prompt goes into a list that was never written, so it can be
+  // seen and edited; a list the user emptied stays empty.
+  onInstalledOrUpdated(() => {
+    prompts.seedIfMissing().catch((error: unknown) => {
+      logger.error('Could not seed the built-in prompt:', error);
+    });
+  });
 
   // Close storage.local now rather than on the first request. If the browser
   // refuses, RPC stays refused and nothing is injected; each later attempt

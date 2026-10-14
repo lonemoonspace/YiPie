@@ -140,6 +140,23 @@ export async function useModel(serviceWorker: Worker, server: FakeServer, model:
   );
 }
 
+/**
+ * Waits until the background has seeded the built-in prompt, which it does on
+ * install. A test that writes prompts or the default selection waits first, so
+ * the two writes do not race.
+ */
+export async function waitForSeededPrompt(serviceWorker: Worker): Promise<void> {
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(async () => {
+        const { chrome } = globalThis as unknown as ChromeStorageGlobal;
+        const stored = await chrome.storage.local.get(['prompt-configs', 'selection']);
+        return Object.keys(stored).sort().join(',');
+      }),
+    )
+    .toBe('prompt-configs,selection');
+}
+
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */
 interface MaybeChromeGlobal {
   chrome?: { storage?: { local?: unknown } };
@@ -158,7 +175,7 @@ export interface ChromeStorageGlobal {
   chrome: {
     storage: {
       local: {
-        get(key: string): Promise<Record<string, unknown>>;
+        get(key: string | string[]): Promise<Record<string, unknown>>;
         set(items: Record<string, unknown>): Promise<void>;
       };
       session: {

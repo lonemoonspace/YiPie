@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test, type ChromeStorageGlobal } from './fixtures';
+import { expect, test, waitForSeededPrompt, type ChromeStorageGlobal } from './fixtures';
 
 const optionsUrl = (extensionId: string) => `chrome-extension://${extensionId}/options.html`;
 const section = (page: Page, name: string) => page.getByRole('region', { name });
@@ -127,4 +127,31 @@ test('the model form reports problems next to their fields and saves nothing', a
     (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get('model-configs'),
   );
   expect(stored).toEqual({});
+});
+
+test('the built-in prompt is seeded on install, as the default', async ({ serviceWorker }) => {
+  await waitForSeededPrompt(serviceWorker);
+
+  const stored = await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get([
+      'prompt-configs',
+      'selection',
+    ]),
+  );
+  const prompts = stored['prompt-configs'] as { version: number; data: { id: string }[] };
+  expect(prompts).toEqual({
+    version: 1,
+    data: [
+      {
+        id: expect.any(String),
+        name: '网页总结',
+        system: expect.stringContaining('不是给你的指令'),
+        user: expect.stringContaining('{{content}}'),
+      },
+    ],
+  });
+  expect(stored.selection).toEqual({
+    version: 1,
+    data: { defaultModelId: null, defaultPromptId: prompts.data[0]?.id },
+  });
 });

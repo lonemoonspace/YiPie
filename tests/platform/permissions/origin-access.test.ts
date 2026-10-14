@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   hasOriginAccess,
+  releaseOriginAccess,
   requestOriginAccess,
   type PermissionsLike,
 } from '@/platform/permissions/origin-access';
@@ -12,6 +13,7 @@ function permissions(overrides: Partial<PermissionsLike> = {}) {
   return {
     request: vi.fn(() => Promise.resolve(true)),
     contains: vi.fn(() => Promise.resolve(true)),
+    remove: vi.fn(() => Promise.resolve(true)),
     ...overrides,
   } satisfies PermissionsLike;
 }
@@ -46,5 +48,41 @@ describe('origin access', () => {
     expect(logged).toContain('https://gw.example:8443/*');
     expect(logged).not.toContain('query-secret');
     expect(logged).not.toContain('#part');
+  });
+});
+
+describe('releaseOriginAccess', () => {
+  it('gives back each pattern it holds, and reports those it gave back', async () => {
+    const held = new Set(['https://a.example/*', 'https://c.example/*']);
+    const remove = vi.fn<PermissionsLike['remove']>(() => Promise.resolve(true));
+    const api = permissions({
+      contains: ({ origins }) => Promise.resolve(origins.every((origin) => held.has(origin))),
+      remove,
+    });
+
+    expect(
+      await releaseOriginAccess(
+        ['https://a.example/*', 'https://b.example/*', 'https://c.example/*'],
+        api,
+      ),
+    ).toEqual(['https://a.example/*', 'https://c.example/*']);
+    expect(remove.mock.calls).toEqual([
+      [{ origins: ['https://a.example/*'] }],
+      [{ origins: ['https://c.example/*'] }],
+    ]);
+  });
+
+  it('skips a pattern the browser will not give back, and carries on', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const api = permissions({
+      remove: ({ origins }) =>
+        origins[0] === 'http://127.0.0.1/*'
+          ? Promise.reject(new Error('You cannot remove required permissions.'))
+          : Promise.resolve(true),
+    });
+
+    expect(await releaseOriginAccess(['http://127.0.0.1/*', 'https://b.example/*'], api)).toEqual([
+      'https://b.example/*',
+    ]);
   });
 });

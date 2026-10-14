@@ -14,7 +14,7 @@ export type OriginAccess = 'unknown' | 'granted' | 'missing';
 export interface ModelConfigState {
   view: ModelConfigsView | null;
   loadError: string | null;
-  /** The configuration being edited: phase 1 edits the first one, or creates it. */
+  /** The configuration being edited: the default one, or a new one for an empty list. */
   current: ModelConfig | null;
   save: ModelSaveState;
   /** Counts successful saves, so the form can start over from what was stored. */
@@ -34,7 +34,7 @@ export function useModelConfig(): ModelConfigState {
   const [revision, setRevision] = useState(0);
   const [access, setAccess] = useState<OriginAccess>('unknown');
 
-  const current = view?.configs[0] ?? null;
+  const current = view?.items.find((config) => config.id === view.defaultId) ?? null;
   const baseURL = current?.baseURL;
 
   useEffect(() => {

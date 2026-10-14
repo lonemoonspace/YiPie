@@ -1,7 +1,14 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import type { RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { E2E_KEY as KEY, expect, test, useModel } from './fixtures';
+import {
+  E2E_KEY as KEY,
+  expect,
+  test,
+  useModel,
+  waitForSeededPrompt,
+  type ChromeStorageGlobal,
+} from './fixtures';
 
 interface Opened {
   page: Page;
@@ -61,6 +68,45 @@ test('the page is summarized and the answer streams into the panel', async ({
   expect(messages.map((message) => message.role)).toEqual(['system', 'user']);
   expect(messages[1]?.content).toContain('一瞥是一个浏览器扩展');
   expect(messages[1]?.content).toContain(`地址：${server.origin}/article.html`);
+});
+
+test('the default prompt from the settings is filled in and sent', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  await waitForSeededPrompt(serviceWorker);
+  await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
+      'prompt-configs': {
+        version: 1,
+        data: [
+          {
+            id: 'mine',
+            name: '我的',
+            system: '',
+            user: '请总结《{{title}}》（{{language}}）：\n{{content}}\n{{author}}',
+          },
+        ],
+      },
+      selection: { version: 1, data: { defaultModelId: null, defaultPromptId: 'mine' } },
+    }),
+  );
+
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  // A blank system template sends no system message; an unknown placeholder stays literal.
+  const messages = (lastRequest(server)?.body as { messages: { role: string; content: string }[] })
+    .messages;
+  expect(messages).toHaveLength(1);
+  expect(messages[0]?.role).toBe('user');
+  expect(messages[0]?.content).toMatch(/^请总结《一篇普通的文章》（zh-CN）：\n/);
+  expect(messages[0]?.content).toContain('一瞥是一个浏览器扩展');
+  expect(messages[0]?.content).toMatch(/\n\{\{author\}\}$/);
 });
 
 test('the answer appears as it streams, and stopping keeps what arrived', async ({

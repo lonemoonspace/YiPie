@@ -219,7 +219,7 @@ test('a panel document that has not attached gets nothing from the background', 
   const replies = await page.evaluate(
     (channel) =>
       Promise.all(
-        ['models.list', 'page.getContext'].map((method) =>
+        ['panel.setup', 'page.getContext'].map((method) =>
           (globalThis as unknown as RuntimeGlobal).chrome.runtime.sendMessage({
             channel,
             method,

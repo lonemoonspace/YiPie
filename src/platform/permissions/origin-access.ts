@@ -8,6 +8,7 @@ const logger = createLogger('permissions');
 export interface PermissionsLike {
   request(permissions: { origins: string[] }): Promise<boolean>;
   contains(permissions: { origins: string[] }): Promise<boolean>;
+  remove(permissions: { origins: string[] }): Promise<boolean>;
 }
 
 /**
@@ -40,4 +41,28 @@ export function hasOriginAccess(
     logger.warn('Could not check access to', pattern, error);
     return false;
   });
+}
+
+/**
+ * Gives back host permissions (patterns) that no configuration uses any more
+ * (docs/development-plan.md §4.3, decision 5). Resolves to the patterns
+ * actually given back; one that was not held is skipped, and a failure is
+ * logged and skipped. Needs no user gesture.
+ */
+export async function releaseOriginAccess(
+  patterns: readonly string[],
+  permissions: PermissionsLike = browser.permissions,
+): Promise<string[]> {
+  const released: string[] = [];
+  for (const pattern of patterns) {
+    try {
+      const origins = [pattern];
+      if ((await permissions.contains({ origins })) && (await permissions.remove({ origins }))) {
+        released.push(pattern);
+      }
+    } catch (error) {
+      logger.warn('Could not give back access to', pattern, error);
+    }
+  }
+  return released;
 }

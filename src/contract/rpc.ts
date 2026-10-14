@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { BackupRef, BackupsView } from './backups';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
-import { ModelConfigDraft, ModelConfigList, ModelConfigPatch } from './model-config';
+import { ModelConfig, ModelConfigDraft, ModelConfigPatch } from './model-config';
+import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
+import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
@@ -34,17 +37,60 @@ export const GeneralSettingsView = z.object({
 });
 export type GeneralSettingsView = z.infer<typeof GeneralSettingsView>;
 
-/** Model configurations as read, with the same read-state flags as general settings. */
-export const ModelConfigsView = z.object({
-  configs: ModelConfigList,
-  status: z.enum(['ok', 'missing', 'invalid']),
-  readOnly: z.boolean(),
-  quarantined: z.boolean(),
-});
+/**
+ * A list as read: its readable items (unreadable rows are kept in storage but
+ * never sent), the default in effect, and the same read-state flags as
+ * general settings.
+ */
+function listView<Item extends z.ZodType>(item: Item) {
+  return z.object({
+    items: z.array(item),
+    /** The default in effect: the stored one, or the first item; `null` for an empty list. */
+    defaultId: z.string().nullable(),
+    status: z.enum(['ok', 'missing', 'invalid']),
+    readOnly: z.boolean(),
+    quarantined: z.boolean(),
+  });
+}
+
+const ItemRef = z.object({ id: z.string(), name: z.string() });
+
+/** The change removed the default, which fell back to `to` (or to nothing). */
+export const FallbackView = z.object({ from: ItemRef, to: ItemRef.nullable() });
+export type FallbackView = z.infer<typeof FallbackView>;
+
+export const ModelConfigsView = listView(ModelConfig);
 export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
+
+/** A list after a change: the new view, the fallback if any, and host permissions given back. */
+export const ModelConfigsChange = ModelConfigsView.extend({
+  fallback: FallbackView.nullable(),
+  /** Origins (as permission patterns) that no configuration uses any more and were given back. */
+  released: z.array(z.string()),
+});
+export type ModelConfigsChange = z.infer<typeof ModelConfigsChange>;
+
+export const PromptConfigsView = listView(PromptConfig);
+export type PromptConfigsView = z.infer<typeof PromptConfigsView>;
+
+export const PromptConfigsChange = PromptConfigsView.extend({ fallback: FallbackView.nullable() });
+export type PromptConfigsChange = z.infer<typeof PromptConfigsChange>;
 
 /** A draft after the server parsed it: defaults filled in. */
 export type ParsedModelConfigDraft = z.output<typeof ModelConfigDraft>;
+export type ParsedPromptConfigDraft = z.output<typeof PromptConfigDraft>;
+
+/**
+ * What the panel gets for one run: names to choose from, the full
+ * configuration of the default model only, and the prompt in effect. The
+ * panel never receives the other models' keys.
+ */
+export const PanelSetup = z.object({
+  models: z.array(ItemRef),
+  model: ModelConfig.nullable(),
+  prompt: z.object({ name: z.string(), system: z.string(), user: z.string() }),
+});
+export type PanelSetup = z.infer<typeof PanelSetup>;
 
 /**
  * Every background method. A method that is not listed here does not exist,
@@ -61,22 +107,80 @@ export const RPC_METHODS = {
     output: GeneralSettingsView,
     callers: ['options'],
   },
-  // The panel needs the key to call the model; it is an extension page, so the
-  // key never reaches a content script or the page (docs/development-plan.md §8).
-  // Like every panel call but `panel.attach`, it is served to attached panels only.
+  // Every model with its key: the settings page only. The panel gets
+  // `panel.setup`, which carries the key of the default model alone.
   'models.list': {
     input: z.strictObject({}),
     output: ModelConfigsView,
-    callers: ['options', 'panel'],
+    callers: ['options'],
   },
   'models.add': {
     input: ModelConfigDraft,
-    output: ModelConfigsView,
+    output: ModelConfigsChange,
     callers: ['options'],
   },
   'models.update': {
-    input: z.strictObject({ id: z.string().min(1), patch: ModelConfigPatch }),
-    output: ModelConfigsView,
+    input: updateInput(ModelConfigPatch),
+    output: ModelConfigsChange,
+    callers: ['options'],
+  },
+  'models.remove': {
+    input: RemoveInput,
+    output: ModelConfigsChange,
+    callers: ['options'],
+  },
+  'models.move': {
+    input: MoveInput,
+    output: ModelConfigsChange,
+    callers: ['options'],
+  },
+  // The one change the panel may make: its model dropdown sets the global
+  // default (docs/development-plan.md §4.3, decision 7). The reply carries no
+  // list, so no key reaches the panel this way.
+  'models.setDefault': {
+    input: SetDefaultInput,
+    output: z.object({ defaultId: z.string() }),
+    callers: ['options', 'panel'],
+  },
+  'prompts.list': {
+    input: z.strictObject({}),
+    output: PromptConfigsView,
+    callers: ['options'],
+  },
+  'prompts.add': {
+    input: PromptConfigDraft,
+    output: PromptConfigsChange,
+    callers: ['options'],
+  },
+  'prompts.update': {
+    input: updateInput(PromptConfigPatch),
+    output: PromptConfigsChange,
+    callers: ['options'],
+  },
+  'prompts.remove': {
+    input: RemoveInput,
+    output: PromptConfigsChange,
+    callers: ['options'],
+  },
+  'prompts.move': {
+    input: MoveInput,
+    output: PromptConfigsChange,
+    callers: ['options'],
+  },
+  'prompts.setDefault': {
+    input: SetDefaultInput,
+    output: z.object({ defaultId: z.string() }),
+    callers: ['options'],
+  },
+  // Backups of unreadable values: they may contain API keys, so the settings page only.
+  'backups.list': {
+    input: z.strictObject({}),
+    output: BackupsView,
+    callers: ['options'],
+  },
+  'backups.remove': {
+    input: BackupRef,
+    output: BackupsView,
     callers: ['options'],
   },
   // The content script's only method: a nonce for the panel frame it is about
@@ -92,6 +196,12 @@ export const RPC_METHODS = {
     output: z.object({ tabId: z.number().int() }),
     callers: ['panel'],
     beforeAttach: true,
+  },
+  // Everything a run needs but the page: model choices, the default model and the prompt.
+  'panel.setup': {
+    input: z.strictObject({}),
+    output: PanelSetup,
+    callers: ['panel'],
   },
   // Only the panel attached in a tab may read that tab's page.
   'page.getContext': {
