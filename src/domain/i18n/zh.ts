@@ -62,6 +62,13 @@ export const zh = {
   'model.error.headerForbidden': '浏览器不允许扩展设置这个请求头，它不会被发送：{name}',
   'model.error.contextWindow': '上下文窗口必须是正整数',
 
+  'prompt.builtinName': '网页总结',
+  'prompt.answerLanguage': '简体中文',
+  'prompt.error.name': '请填写名称',
+  'prompt.error.user': '用户模板不能为空',
+  'prompt.warning.unknown': '未知变量 {placeholders} 会原样发送给模型。',
+  'prompt.warning.noContent': '两个模板里都没有 {placeholder}：页面正文不会发送给模型。',
+
   'panel.close': '关闭',
   'panel.stop': '停止',
   'panel.retry': '重新总结',
