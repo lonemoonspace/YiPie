@@ -1,0 +1,44 @@
+/**
+ * What travels over runtime messaging, as plain constants and types.
+ *
+ * Nothing here may import zod: the content script imports this file, and a
+ * single runtime import of `rpc.ts` would pull zod and every schema into it
+ * (docs/development-plan.md §2.2, §9). The schemas that validate these shapes
+ * live in `rpc.ts` and run in the background.
+ */
+
+/** Marks requests to the background, so its listener can ignore everything else. */
+export const RPC_CHANNEL = 'yipie.rpc/1';
+
+export const RPC_ERROR_CODES = [
+  'forbidden',
+  'unknown-method',
+  'bad-request',
+  'read-only',
+  // The browser has not confirmed that storage.local is closed to content
+  // scripts, so the background serves nothing (it fails closed).
+  'storage-not-isolated',
+  'internal',
+] as const;
+export type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
+
+export interface RpcRequestWire {
+  channel: typeof RPC_CHANNEL;
+  method: string;
+  input: unknown;
+}
+
+export type RpcReplyWire =
+  { ok: true; value: unknown } | { ok: false; error: { code: RpcErrorCode; message: string } };
+
+/**
+ * Marks requests from the background to our content script in a tab (sent
+ * with `tabs.sendMessage` to frame 0). The background validates every reply:
+ * the content script runs in the page's renderer and is the least trusted
+ * party in the conversation.
+ */
+export const PAGE_CHANNEL = 'yipie.page/1';
+
+export type PageRequestWire = { channel: typeof PAGE_CHANNEL; type: 'extract' };
+
+export type PageReplyWire = { ok: true; value: unknown } | { ok: false; message: string };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
+import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
  * The contexts that call the background, told apart by the browser-supplied
@@ -50,8 +51,7 @@ export type RpcInput<M extends RpcMethod> = z.input<RpcMethods[M]['input']>;
 export type RpcParsedInput<M extends RpcMethod> = z.output<RpcMethods[M]['input']>;
 export type RpcOutput<M extends RpcMethod> = z.output<RpcMethods[M]['output']>;
 
-/** Marks our messages, so the listener can ignore everything else. */
-export const RPC_CHANNEL = 'yipie.rpc/1';
+export { RPC_CHANNEL };
 
 export const RpcRequest = z.object({
   channel: z.literal(RPC_CHANNEL),
@@ -60,16 +60,6 @@ export const RpcRequest = z.object({
 });
 export type RpcRequest = z.infer<typeof RpcRequest>;
 
-export const RPC_ERROR_CODES = [
-  'forbidden',
-  'unknown-method',
-  'bad-request',
-  'read-only',
-  // The browser has not confirmed that storage.local is closed to content
-  // scripts, so the background serves nothing (it fails closed).
-  'storage-not-isolated',
-  'internal',
-] as const;
 export const RpcErrorCode = z.enum(RPC_ERROR_CODES);
 export type RpcErrorCode = z.infer<typeof RpcErrorCode>;
 
