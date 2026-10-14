@@ -32,7 +32,8 @@ export function usePanel(): PanelControls {
 
     let config: ModelConfig | undefined;
     try {
-      config = (await callRpc('models.list', {})).configs[0];
+      const models = await callRpc('models.list', {});
+      config = models.items.find((item) => item.id === models.defaultId);
     } catch (error) {
       if (current())
         dispatch({ type: 'failed', problem: { kind: 'models', detail: messageOf(error) } });

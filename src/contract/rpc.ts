@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
-import { ModelConfigDraft, ModelConfigList, ModelConfigPatch } from './model-config';
+import { ModelConfig, ModelConfigDraft, ModelConfigPatch } from './model-config';
+import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
@@ -23,10 +24,14 @@ export interface MethodDefinition {
   beforeAttach?: true;
 }
 
+/** How a stored value read (docs/development-plan.md §7). */
+export const ReadStatus = z.enum(['ok', 'missing', 'invalid']);
+export type ReadStatus = z.infer<typeof ReadStatus>;
+
 export const GeneralSettingsView = z.object({
   settings: GeneralSettings,
   /** How the stored value read; with `invalid`, `settings` holds defaults. */
-  status: z.enum(['ok', 'missing', 'invalid']),
+  status: ReadStatus,
   /** Written by a newer version of the extension: shown, but edits are refused. */
   readOnly: z.boolean(),
   /** This write replaced an unreadable value, which was backed up first. */
@@ -34,13 +39,36 @@ export const GeneralSettingsView = z.object({
 });
 export type GeneralSettingsView = z.infer<typeof GeneralSettingsView>;
 
-/** Model configurations as read, with the same read-state flags as general settings. */
-export const ModelConfigsView = z.object({
-  configs: ModelConfigList,
-  status: z.enum(['ok', 'missing', 'invalid']),
-  readOnly: z.boolean(),
-  quarantined: z.boolean(),
-});
+/**
+ * A list of configurations as the background read it, or as a change left
+ * it, with everything the settings page shows about it. Every judgement is
+ * made here, so the page only renders (docs/development-plan.md §4.3).
+ */
+function listView<Item extends z.ZodType>(item: Item) {
+  return z.object({
+    /** The rows this version can read, in order. */
+    items: z.array(item),
+    /** The item in use: the chosen default, or the first item; null only when there is none. */
+    defaultId: z.string().nullable(),
+    /** Rows this version cannot read. Kept and written back unchanged, never shown. */
+    unrecognized: z.number().int().nonnegative(),
+    /** How the list read; with `invalid`, `items` holds the defaults. */
+    status: ReadStatus,
+    /** Written by a newer version of the extension: shown, but changes are refused. */
+    readOnly: z.boolean(),
+    /** This change replaced an unreadable value, which was backed up first. */
+    quarantined: z.boolean(),
+    /** This change removed the default, so the first item (or none) took over. */
+    defaultFellBack: z.boolean(),
+    /** The stored choice of default could not be read; the first item stands in. */
+    defaultUnreadable: z.boolean(),
+  });
+}
+
+/** `listView` for items of type `T`. */
+export type ListView<T> = Omit<z.infer<ReturnType<typeof listView>>, 'items'> & { items: T[] };
+
+export const ModelConfigsView = listView(ModelConfig);
 export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
 
 /** A draft after the server parsed it: defaults filled in. */
@@ -75,9 +103,26 @@ export const RPC_METHODS = {
     callers: ['options'],
   },
   'models.update': {
-    input: z.strictObject({ id: z.string().min(1), patch: ModelConfigPatch }),
+    input: updateInput(ModelConfigPatch),
     output: ModelConfigsView,
     callers: ['options'],
+  },
+  'models.remove': {
+    input: RemoveInput,
+    output: ModelConfigsView,
+    callers: ['options'],
+  },
+  'models.move': {
+    input: MoveInput,
+    output: ModelConfigsView,
+    callers: ['options'],
+  },
+  // The one change a panel may make: its model menu sets the global default
+  // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
+  'models.setDefault': {
+    input: SetDefaultInput,
+    output: ModelConfigsView,
+    callers: ['options', 'panel'],
   },
   // The content script's only method: a nonce for the panel frame it is about
   // to mount in its tab (docs/development-plan.md §2.1, §8).

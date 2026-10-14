@@ -23,6 +23,7 @@ export {
 export {
   createRepo,
   ReadOnlyRecordError,
+  storedVersionOf,
   type InvalidReason,
   type ReadResult,
   type RecordDefinition,

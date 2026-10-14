@@ -116,28 +116,56 @@ export const E2E_KEY = 'sk-e2e-not-a-real-key';
 
 /** Stores one model configuration pointing at the fake service, as the settings page would. */
 export async function useModel(serviceWorker: Worker, server: FakeServer, model: string) {
+  await storeModels(serviceWorker, server, [{ id: 'e2e', name: '', model }]);
+}
+
+export interface StoredModel {
+  id: string;
+  name: string;
+  /** A fake-service scenario (`scenario:<name>`), sent as the model name. */
+  model: string;
+}
+
+/**
+ * Stores model configurations pointing at the fake service, in this order,
+ * with `defaultId` as the chosen default (none chosen when omitted). `extra`
+ * rows are stored after them as they are, such as rows no version can read.
+ */
+export async function storeModels(
+  serviceWorker: Worker,
+  server: FakeServer,
+  models: StoredModel[],
+  { defaultId, extra = [] }: { defaultId?: string; extra?: unknown[] } = {},
+) {
+  const data = [
+    ...models.map((model) => ({
+      ...model,
+      baseURL: `${server.origin}/v1`,
+      apiKey: E2E_KEY,
+      headers: {},
+      extraBody: {},
+      contextWindow: null,
+      streamUsage: true,
+    })),
+    ...extra,
+  ];
+  const items: Record<string, unknown> = { 'model-configs': { version: 1, data } };
+  if (defaultId !== undefined) {
+    items.selection = { version: 1, data: { defaultModelId: defaultId, defaultPromptId: null } };
+  }
   await serviceWorker.evaluate(
-    ({ baseURL, model, key }) =>
-      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
-        'model-configs': {
-          version: 1,
-          data: [
-            {
-              id: 'e2e',
-              name: '',
-              baseURL,
-              apiKey: key,
-              model,
-              headers: {},
-              extraBody: {},
-              contextWindow: null,
-              streamUsage: true,
-            },
-          ],
-        },
-      }),
-    { baseURL: `${server.origin}/v1`, model, key: E2E_KEY },
+    (values) => (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set(values),
+    items,
   );
+}
+
+/** What `storage.local` holds under `key`, read in the service worker. */
+export async function stored(serviceWorker: Worker, key: string): Promise<unknown> {
+  const all = await serviceWorker.evaluate(
+    (name) => (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get(name),
+    key,
+  );
+  return all[key];
 }
 
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */

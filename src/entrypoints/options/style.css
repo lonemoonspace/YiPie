@@ -154,3 +154,105 @@ button:disabled {
 .actions .save-status {
   margin: 0;
 }
+
+button.secondary {
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 13px;
+}
+
+button.secondary.danger {
+  color: var(--color-danger);
+}
+
+.add {
+  margin-top: 4px;
+}
+
+.items {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+}
+
+.item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.item-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.item-details {
+  display: grid;
+  gap: 2px;
+  color: var(--color-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.badge.warn {
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.list-note {
+  margin: 0 0 12px;
+}
+
+.editor {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.items + .editor {
+  border-top: 0;
+}
+
+.editor h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.warning {
+  margin: 0;
+  color: var(--color-notice-text);
+  font-size: 12px;
+}
+
+.warning p {
+  margin: 0;
+}

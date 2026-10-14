@@ -4,6 +4,7 @@ import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
+import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { registerRpcServer } from '@/platform/rpc/server';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
@@ -17,7 +18,9 @@ const logger = createLogger('background');
 export default defineBackground(() => {
   const store = getExtensionStore();
   const settings = createGeneralSettingsService(store, writeQueue);
-  const models = createModelConfigsService(store, writeQueue);
+  const models = createModelConfigsService(store, writeQueue, {
+    releaseOrigins: (patterns) => releaseOriginAccess(patterns),
+  });
   const panels = createPanelRegistry(store, writeQueue);
 
   // Register listeners first: the message or click being handled may be what
@@ -34,6 +37,9 @@ export default defineBackground(() => {
       'models.list': () => models.list(),
       'models.add': (draft) => models.add(draft),
       'models.update': ({ id, patch }) => models.update(id, patch),
+      'models.remove': ({ id }) => models.remove(id),
+      'models.move': ({ id, direction }) => models.move(id, direction),
+      'models.setDefault': ({ id }) => models.setDefault(id),
       'content.hello': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         return { nonce: await panels.issue(tabId) };

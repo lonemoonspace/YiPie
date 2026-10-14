@@ -161,7 +161,8 @@ function describe(error: z.ZodError): string[] {
   });
 }
 
-function storedVersionOf(raw: unknown): number {
+/** The version an envelope says it was written with; `NaN` for anything else. */
+export function storedVersionOf(raw: unknown): number {
   const envelope = StorageEnvelope.safeParse(raw);
   return envelope.success ? envelope.data.version : Number.NaN;
 }

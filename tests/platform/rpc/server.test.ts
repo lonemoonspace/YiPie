@@ -36,7 +36,16 @@ const view: GeneralSettingsView = {
   quarantined: false,
 };
 
-const models: ModelConfigsView = { configs: [], status: 'ok', readOnly: false, quarantined: false };
+const models: ModelConfigsView = {
+  items: [],
+  defaultId: null,
+  unrecognized: 0,
+  status: 'ok',
+  readOnly: false,
+  quarantined: false,
+  defaultFellBack: false,
+  defaultUnreadable: false,
+};
 
 function setup(
   overrides: Partial<RpcHandlers> = {},
@@ -48,6 +57,10 @@ function setup(
     'settings.patch': vi.fn(() => Promise.resolve(view)),
     'models.list': vi.fn(() => Promise.resolve(models)),
     'models.add': vi.fn(() => Promise.resolve(models)),
+    'models.update': vi.fn(() => Promise.resolve(models)),
+    'models.remove': vi.fn(() => Promise.resolve(models)),
+    'models.move': vi.fn(() => Promise.resolve(models)),
+    'models.setDefault': vi.fn(() => Promise.resolve(models)),
     ...overrides,
   });
   return {
@@ -254,6 +267,53 @@ describe('RPC dispatcher: model configurations', () => {
     expect(await dispatch(add, OPTIONS)).toEqual({ ok: true, value: models });
   });
 
+  it.each([
+    ['models.update', { id: 'a', patch: { name: 'n' } }],
+    ['models.remove', { id: 'a' }],
+    ['models.move', { id: 'a', direction: 'up' }],
+  ] as const)('accepts %s only from the settings page', async (method, input) => {
+    const { dispatch, handlers } = setup();
+
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request(method, input), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handlers[method]).not.toHaveBeenCalled();
+    expect(await dispatch(request(method, input), OPTIONS)).toEqual({ ok: true, value: models });
+  });
+
+  it('lets the attached panel set the default model, as its one change', async () => {
+    const { dispatch, handlers } = setup();
+    const choose = request('models.setDefault', { id: 'a' });
+
+    expect(await dispatch(choose, PANEL)).toEqual({ ok: true, value: models });
+    expect(await dispatch(choose, OPTIONS)).toEqual({ ok: true, value: models });
+    for (const sender of [STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(choose, sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handlers['models.setDefault']).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['models.move', { id: 'a', direction: 'top' }],
+    ['models.remove', { id: '' }],
+    ['models.update', { id: 'a', patch: { id: 'b' } }],
+    ['models.setDefault', { id: 'a', items: [] }],
+  ] as const)('rejects malformed %s input without running the handler', async (method, input) => {
+    const { dispatch, handlers } = setup();
+
+    expect(await dispatch(request(method, input), OPTIONS)).toMatchObject({
+      ok: false,
+      error: { code: 'bad-request' },
+    });
+    expect(handlers[method]).not.toHaveBeenCalled();
+  });
+
   it('rejects a configuration whose base URL is not http(s)', async () => {
     const { dispatch, handlers } = setup();
 
@@ -326,6 +386,7 @@ describe('RPC dispatcher: panel handshake', () => {
 describe('RPC dispatcher: a panel is served only once attached', () => {
   const PANEL_METHODS = [
     ['models.list', {}],
+    ['models.setDefault', { id: 'a' }],
     ['page.getContext', {}],
   ] as const;
 
