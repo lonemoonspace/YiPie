@@ -44,9 +44,41 @@ export async function readQuarantine(
   return toEntries(key, await store.get(quarantineKeyFor(key)));
 }
 
+/**
+ * Deletes the first backup of `key` taken at `at`; the user's explicit
+ * action, the only way a backup goes (docs/development-plan.md §7). Resolves
+ * to whether there was one. Must run inside the write queue.
+ */
+export async function removeQuarantined(
+  store: StorageLike,
+  key: StorageKey,
+  at: string,
+): Promise<boolean> {
+  const backupKey = quarantineKeyFor(key);
+  const entries = toEntries(key, await store.get(backupKey));
+  const index = entries.findIndex((entry) => entry.at === at);
+  if (index === -1) return false;
+  const rest = entries.filter((_, i) => i !== index);
+  if (rest.length === 0) await store.remove(backupKey);
+  else await store.set(backupKey, rest);
+  return true;
+}
+
 function toEntries(key: StorageKey, stored: unknown): QuarantineEntry[] {
   if (stored === undefined) return [];
-  if (Array.isArray(stored)) return stored as QuarantineEntry[];
-  // Even a damaged backup list is kept rather than replaced.
-  return [{ key, at: 'unknown', raw: stored }];
+  // Even a damaged backup list is kept rather than replaced: whatever is not
+  // a backup becomes one, with an unknown time.
+  if (!Array.isArray(stored)) return [{ key, at: 'unknown', raw: stored }];
+  return stored.map((entry: unknown) =>
+    isEntry(entry) ? { key, at: entry.at, raw: entry.raw } : { key, at: 'unknown', raw: entry },
+  );
+}
+
+function isEntry(value: unknown): value is { at: string; raw: unknown } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { at?: unknown }).at === 'string' &&
+    Object.hasOwn(value, 'raw')
+  );
 }

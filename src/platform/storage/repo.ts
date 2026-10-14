@@ -64,6 +64,12 @@ export interface Repo<T> {
    * replacing it.
    */
   update(change: (current: T) => T): Promise<UpdateResult<T>>;
+  /**
+   * The same read-modify-write for a task that already runs in the queue,
+   * because several records change together (removing the default model also
+   * moves the default). Anywhere else, writes could interleave and lose updates.
+   */
+  updateUnqueued(change: (current: T) => T): Promise<UpdateResult<T>>;
 }
 
 export function createRepo<T>(
@@ -71,32 +77,32 @@ export function createRepo<T>(
   queue: Queue,
   definition: RecordDefinition<T>,
 ): Repo<T> {
+  const updateUnqueued = async (change: (current: T) => T): Promise<UpdateResult<T>> => {
+    const raw = await store.get(definition.key);
+    const current = interpret(definition, raw);
+
+    if (current.status === 'invalid' && current.readOnly) {
+      throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
+    }
+
+    let quarantined = false;
+    if (current.status === 'invalid') {
+      await quarantine(store, definition.key, raw);
+      quarantined = true;
+    }
+
+    const value = definition.schema.parse(change(current.value));
+    const envelope: StorageEnvelope = { version: definition.version, data: value };
+    await store.set(definition.key, envelope);
+    return { value, quarantined };
+  };
+
   return {
     async read() {
       return interpret(definition, await store.get(definition.key));
     },
-
-    update(change) {
-      return queue(async () => {
-        const raw = await store.get(definition.key);
-        const current = interpret(definition, raw);
-
-        if (current.status === 'invalid' && current.readOnly) {
-          throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
-        }
-
-        let quarantined = false;
-        if (current.status === 'invalid') {
-          await quarantine(store, definition.key, raw);
-          quarantined = true;
-        }
-
-        const value = definition.schema.parse(change(current.value));
-        const envelope: StorageEnvelope = { version: definition.version, data: value };
-        await store.set(definition.key, envelope);
-        return { value, quarantined };
-      });
-    },
+    update: (change) => queue(() => updateUnqueued(change)),
+    updateUnqueued,
   };
 }
 

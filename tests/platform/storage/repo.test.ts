@@ -146,4 +146,28 @@ describe('repo writes', () => {
     await expect(repo.update(() => ({ count: 1.5, label: 'ok' }))).rejects.toThrow();
     expect(store.dump()[KEY]).toEqual(stored);
   });
+
+  it('changes two records in one queued task, before any write queued meanwhile', async () => {
+    const store = createMemoryStore();
+    const writes: string[] = [];
+    const logging = {
+      ...store,
+      set: async (key: StorageKey, value: unknown) => {
+        await store.set(key, value);
+        writes.push(`${key}=${(value as { data: Sample }).data.label}`);
+      },
+    };
+    const queue = createQueue();
+    const first = createRepo(logging, queue, definition);
+    const second = createRepo(logging, queue, { ...definition, key: 'local:other' });
+
+    const together = queue(async () => {
+      await first.updateUnqueued((current) => ({ ...current, label: 'one' }));
+      await second.updateUnqueued((current) => ({ ...current, label: 'two' }));
+    });
+    const meanwhile = first.update((current) => ({ ...current, label: 'three' }));
+    await Promise.all([together, meanwhile]);
+
+    expect(writes).toEqual(['local:sample=one', 'local:other=two', 'local:sample=three']);
+  });
 });
