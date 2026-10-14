@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { PanelModelConfig } from '@/contract/rpc';
@@ -6,6 +6,7 @@ import { t } from '@/domain/i18n';
 import { buildPromptMessages, promptValues } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
+import { createModelSwitcher } from './model-switcher';
 import { INITIAL_PANEL_STATE, reducePanel, type PanelState } from './state';
 
 export interface PanelControls {
@@ -128,21 +129,33 @@ export function usePanel(): PanelControls {
   const stop = useCallback(() => run.current?.abort(), []);
   const retry = useCallback(() => void summarize(), [summarize]);
 
+  // The old run's request ends now, and nothing it reports is shown.
+  const dropRun = useCallback(() => {
+    run.current?.abort();
+    run.current = null;
+  }, []);
+
   // The menu sets the global default (docs/development-plan.md §4.3,
   // decision 7), and the summary starts over with that model right away.
+  // Quick picks go out one at a time and only the newest counts.
+  const [pickModel] = useState(() =>
+    createModelSwitcher({
+      choose: (id) => callRpc('models.choose', { id }),
+      chosen: () => void summarize(),
+      failed: (error) => {
+        dropRun();
+        dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } });
+      },
+    }),
+  );
+
   const switchModel = useCallback(
     (id: string) => {
-      // The old run's request ends now, and nothing it reports is shown.
-      run.current?.abort();
-      run.current = null;
+      dropRun();
       dispatch({ type: 'select', modelId: id });
-      callRpc('models.choose', { id }).then(
-        () => void summarize(),
-        (error: unknown) =>
-          dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } }),
-      );
+      pickModel(id);
     },
-    [summarize],
+    [dropRun, pickModel],
   );
 
   return { state, stop, retry, switchModel };
