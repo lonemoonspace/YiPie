@@ -14,6 +14,7 @@ export const RPC_ERROR_CODES = [
   'forbidden',
   'unknown-method',
   'bad-request',
+  'not-found',
   'read-only',
   // The browser has not confirmed that storage.local is closed to content
   // scripts, so the background serves nothing (it fails closed).

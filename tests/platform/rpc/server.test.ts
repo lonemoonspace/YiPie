@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RPC_CHANNEL, type GeneralSettingsView } from '@/contract/rpc';
+import { RPC_CHANNEL, type GeneralSettingsView, type ModelConfigsView } from '@/contract/rpc';
 import { createDispatcher, type RpcHandlers } from '@/platform/rpc/server';
+import { NotFoundError } from '@/platform/settings/errors';
 import { ReadOnlyRecordError } from '@/platform/storage';
+import { stubHandlers } from '../../helpers/rpc-handlers';
 
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const OPTIONS = { id: EXTENSION_ID, url: `chrome-extension://${EXTENSION_ID}/options.html` };
+const PANEL = {
+  id: EXTENSION_ID,
+  url: `chrome-extension://${EXTENSION_ID}/panel.html#n=1`,
+  tab: { id: 1 },
+  frameId: 3,
+};
 const CONTENT = { id: EXTENSION_ID, url: 'https://example.com/', tab: { id: 1 }, frameId: 0 };
 
 const view: GeneralSettingsView = {
@@ -14,15 +22,19 @@ const view: GeneralSettingsView = {
   quarantined: false,
 };
 
+const models: ModelConfigsView = { configs: [], status: 'ok', readOnly: false, quarantined: false };
+
 function setup(
   overrides: Partial<RpcHandlers> = {},
   storageIsolated: () => Promise<void> = () => Promise.resolve(),
 ) {
-  const handlers: RpcHandlers = {
+  const handlers = stubHandlers({
     'settings.get': vi.fn(() => Promise.resolve(view)),
     'settings.patch': vi.fn(() => Promise.resolve(view)),
+    'models.list': vi.fn(() => Promise.resolve(models)),
+    'models.add': vi.fn(() => Promise.resolve(models)),
     ...overrides,
-  };
+  });
   return { handlers, dispatch: createDispatcher(handlers, EXTENSION_ID, { storageIsolated }) };
 }
 
@@ -182,5 +194,51 @@ describe('RPC dispatcher before storage.local is isolated', () => {
       ok: false,
       error: { code: 'bad-request' },
     });
+  });
+});
+
+describe('RPC dispatcher: model configurations', () => {
+  it('lets the settings page and the panel list models, and nothing else', async () => {
+    const { dispatch } = setup();
+
+    expect(await dispatch(request('models.list'), OPTIONS)).toEqual({ ok: true, value: models });
+    expect(await dispatch(request('models.list'), PANEL)).toEqual({ ok: true, value: models });
+    expect(await dispatch(request('models.list'), CONTENT)).toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' },
+    });
+  });
+
+  it('accepts changes only from the settings page', async () => {
+    const { dispatch, handlers } = setup();
+    const add = request('models.add', { baseURL: 'http://localhost:11434/v1', model: 'm' });
+
+    expect(await dispatch(add, PANEL)).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    expect(await dispatch(add, CONTENT)).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    expect(handlers['models.add']).not.toHaveBeenCalled();
+
+    expect(await dispatch(add, OPTIONS)).toEqual({ ok: true, value: models });
+  });
+
+  it('rejects a configuration whose base URL is not http(s)', async () => {
+    const { dispatch, handlers } = setup();
+
+    const reply = await dispatch(
+      request('models.add', { baseURL: 'javascript:alert(1)', model: 'm' }),
+      OPTIONS,
+    );
+
+    expect(reply).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+    expect(handlers['models.add']).not.toHaveBeenCalled();
+  });
+
+  it('maps an unknown id to not-found', async () => {
+    const { dispatch } = setup({
+      'models.update': () => Promise.reject(new NotFoundError('model configuration', 'x')),
+    });
+
+    expect(
+      await dispatch(request('models.update', { id: 'x', patch: { model: 'y' } }), OPTIONS),
+    ).toMatchObject({ ok: false, error: { code: 'not-found' } });
   });
 });

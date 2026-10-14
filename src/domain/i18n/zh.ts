@@ -49,11 +49,10 @@ export const zh = {
   'model.save': '保存',
   'model.saving': '保存中…',
   'model.saved': '已保存',
-  'model.savedWithoutPermission':
-    '已保存，但没有获得访问 {origin} 的授权。服务本身允许跨域时仍可使用，否则请重新保存并允许。',
   'model.saveFailed': '保存失败：{detail}',
   'model.permission.granted': '已授权访问 {origin}',
-  'model.permission.missing': '尚未授权访问 {origin}',
+  'model.permission.missing':
+    '尚未授权访问 {origin}。服务本身允许跨域时仍可使用；否则请再次保存，并在浏览器的提示中允许。',
   'model.error.baseURL.empty': '请填写 Base URL',
   'model.error.baseURL.invalid': 'Base URL 不是有效的网址',
   'model.error.baseURL.protocol': 'Base URL 必须以 http:// 或 https:// 开头',

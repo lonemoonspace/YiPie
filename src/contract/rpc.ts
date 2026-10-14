@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
+import { ModelConfigDraft, ModelConfigList, ModelConfigPatch } from './model-config';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
@@ -26,6 +27,18 @@ export const GeneralSettingsView = z.object({
 });
 export type GeneralSettingsView = z.infer<typeof GeneralSettingsView>;
 
+/** Model configurations as read, with the same read-state flags as general settings. */
+export const ModelConfigsView = z.object({
+  configs: ModelConfigList,
+  status: z.enum(['ok', 'missing', 'invalid']),
+  readOnly: z.boolean(),
+  quarantined: z.boolean(),
+});
+export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
+
+/** A draft after the server parsed it: defaults filled in. */
+export type ParsedModelConfigDraft = z.output<typeof ModelConfigDraft>;
+
 /**
  * Every background method. A method that is not listed here does not exist,
  * and a caller kind that is not listed for a method may not call it.
@@ -39,6 +52,23 @@ export const RPC_METHODS = {
   'settings.patch': {
     input: GeneralSettingsPatch,
     output: GeneralSettingsView,
+    callers: ['options'],
+  },
+  // The panel needs the key to call the model; it is an extension page, so the
+  // key never reaches a content script or the page (docs/development-plan.md §8).
+  'models.list': {
+    input: z.strictObject({}),
+    output: ModelConfigsView,
+    callers: ['options', 'panel'],
+  },
+  'models.add': {
+    input: ModelConfigDraft,
+    output: ModelConfigsView,
+    callers: ['options'],
+  },
+  'models.update': {
+    input: z.strictObject({ id: z.string().min(1), patch: ModelConfigPatch }),
+    output: ModelConfigsView,
     callers: ['options'],
   },
 } as const satisfies Record<string, MethodDefinition>;

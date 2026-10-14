@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RPC_CHANNEL, type GeneralSettingsView } from '@/contract/rpc';
 import { callRpc, RpcError, type Transport } from '@/platform/rpc/client';
 import { createDispatcher } from '@/platform/rpc/server';
+import { stubHandlers } from '../../helpers/rpc-handlers';
 
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const OPTIONS = { id: EXTENSION_ID, url: `chrome-extension://${EXTENSION_ID}/options.html` };
@@ -44,13 +45,13 @@ describe('callRpc', () => {
   it('round-trips through the dispatcher', async () => {
     let stored = view;
     const dispatch = createDispatcher(
-      {
+      stubHandlers({
         'settings.get': () => Promise.resolve(stored),
         'settings.patch': (patch) => {
           stored = { ...stored, settings: { ...stored.settings, ...patch } };
           return Promise.resolve(stored);
         },
-      },
+      }),
       EXTENSION_ID,
       { storageIsolated: () => Promise.resolve() },
     );

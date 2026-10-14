@@ -6,15 +6,18 @@
 export interface ManifestPolicy {
   /** `permissions`, exactly: nothing missing, nothing extra. */
   permissions: string[];
+  /** `optional_host_permissions`, exactly. */
+  optionalHostPermissions: string[];
   /** Top-level keys that must not appear yet. */
   absent: string[];
 }
 
 export const MANIFEST_POLICY: ManifestPolicy = {
   permissions: ['storage'],
+  // Requested per origin at runtime, only for the model services the user configures.
+  optionalHostPermissions: ['https://*/*', 'http://*/*'],
   absent: [
     'host_permissions',
-    'optional_host_permissions',
     'optional_permissions',
     'content_scripts',
     'web_accessible_resources',
@@ -37,19 +40,26 @@ export function checkManifest(
     problems.push(`manifest_version 应为 3，实际为 ${String(manifest.manifest_version)}`);
   }
 
-  const permissions = Array.isArray(manifest.permissions) ? manifest.permissions.map(String) : [];
-  const extra = permissions.filter((permission) => !policy.permissions.includes(permission));
-  const missing = policy.permissions.filter((permission) => !permissions.includes(permission));
-  if (extra.length > 0) {
-    problems.push(`多出的 permissions：${extra.join(', ')}（先在附录 C 写明理由）`);
-  }
-  if (missing.length > 0) {
-    problems.push(`缺少的 permissions：${missing.join(', ')}`);
-  }
+  compareList(problems, 'permissions', manifest.permissions, policy.permissions);
+  compareList(
+    problems,
+    'optional_host_permissions',
+    manifest.optional_host_permissions,
+    policy.optionalHostPermissions,
+  );
 
   for (const key of policy.absent) {
     if (key in manifest) problems.push(`manifest 里不应出现 "${key}"（见附录 C）`);
   }
 
   return problems;
+}
+
+/** The list must hold exactly `expected`, in any order. */
+function compareList(problems: string[], key: string, actual: unknown, expected: string[]): void {
+  const present = Array.isArray(actual) ? actual.map(String) : [];
+  const extra = present.filter((item) => !expected.includes(item));
+  const missing = expected.filter((item) => !present.includes(item));
+  if (extra.length > 0) problems.push(`多出的 ${key}：${extra.join(', ')}（先在附录 C 写明理由）`);
+  if (missing.length > 0) problems.push(`缺少的 ${key}：${missing.join(', ')}`);
 }

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GeneralSettingsPage } from '@/features/settings/general-settings-page';
+import { SettingsPage } from '@/features/settings/settings-page';
 import '@/features/theme/tokens.css';
 import './style.css';
 
@@ -9,6 +9,6 @@ if (!container) throw new Error('Missing #root in options.html');
 
 createRoot(container).render(
   <StrictMode>
-    <GeneralSettingsPage />
+    <SettingsPage />
   </StrictMode>,
 );

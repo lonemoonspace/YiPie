@@ -12,5 +12,7 @@ export default defineConfig({
     name: '一瞥 YiPie',
     description: '用你自己配置的 OpenAI 兼容模型服务，总结当前网页',
     permissions: ['storage'],
+    // Granted per origin at runtime, when the user saves a model configuration.
+    optional_host_permissions: ['https://*/*', 'http://*/*'],
   },
 });

@@ -2,12 +2,15 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { registerRpcServer } from '@/platform/rpc/server';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
+import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 
 const logger = createLogger('background');
 
 export default defineBackground(() => {
-  const settings = createGeneralSettingsService(getExtensionStore(), writeQueue);
+  const store = getExtensionStore();
+  const settings = createGeneralSettingsService(store, writeQueue);
+  const models = createModelConfigsService(store, writeQueue);
 
   // Register listeners first: the message being answered may be what woke this
   // worker. Handlers still wait until storage.local is closed to content scripts.
@@ -19,6 +22,9 @@ export default defineBackground(() => {
         setLogLevel(view.settings.logLevel);
         return view;
       },
+      'models.list': () => models.list(),
+      'models.add': (draft) => models.add(draft),
+      'models.update': ({ id, patch }) => models.update(id, patch),
     },
     { storageIsolated: ensureLocalStorageIsolated },
   );

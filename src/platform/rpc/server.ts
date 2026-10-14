@@ -11,6 +11,7 @@ import {
   type RpcReply,
 } from '@/contract/rpc';
 import { createLogger } from '@/platform/logger';
+import { NotFoundError } from '@/platform/settings/errors';
 import { ReadOnlyRecordError } from '@/platform/storage';
 import { classifyCaller, type SenderLike } from './caller-policy';
 import { failure, isRpcMessage } from './messaging';
@@ -83,6 +84,7 @@ export function createDispatcher(
       return { ok: true, value: definition.output.parse(value) };
     } catch (error) {
       if (error instanceof ReadOnlyRecordError) return failure('read-only', error.message);
+      if (error instanceof NotFoundError) return failure('not-found', error.message);
       logger.error(method, 'failed', error);
       return failure('internal', messageOf(error));
     }
