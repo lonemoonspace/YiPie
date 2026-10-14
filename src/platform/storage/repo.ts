@@ -12,6 +12,13 @@ export interface RecordDefinition<T> {
   /** Value shown when the key is missing or unreadable; must return a fresh object. */
   defaults: () => T;
   /**
+   * Turns a value into what is stored, for records whose stored form differs
+   * from the value in memory (lists keep their unreadable rows apart, see
+   * list.ts). Must validate as it goes; `schema` reads the result back. Without
+   * it, the value is validated with `schema` and stored as it is.
+   */
+  encode?: (value: T) => unknown;
+  /**
    * Turns data written by an older version into the current shape. Pure, so
    * running it again on its own output changes nothing. Absent while a key has
    * only ever had one version.
@@ -64,6 +71,13 @@ export interface Repo<T> {
    * replacing it.
    */
   update(change: (current: T) => T): Promise<UpdateResult<T>>;
+  /**
+   * `update` for a caller that already runs inside the queue: one queued task
+   * that changes several keys together, such as removing a model and moving
+   * the default. Calling it outside the queue gives up the one guarantee the
+   * queue exists for.
+   */
+  updateLocked(change: (current: T) => T): Promise<UpdateResult<T>>;
 }
 
 export function createRepo<T>(
@@ -71,32 +85,41 @@ export function createRepo<T>(
   queue: Queue,
   definition: RecordDefinition<T>,
 ): Repo<T> {
+  async function write(change: (current: T) => T): Promise<UpdateResult<T>> {
+    const raw = await store.get(definition.key);
+    const current = interpret(definition, raw);
+
+    if (current.status === 'invalid' && current.readOnly) {
+      throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
+    }
+
+    let quarantined = false;
+    if (current.status === 'invalid') {
+      await quarantine(store, definition.key, raw);
+      quarantined = true;
+    }
+
+    const next = change(current.value);
+    let data: unknown;
+    let value: T;
+    if (definition.encode) {
+      data = definition.encode(next);
+      value = definition.schema.parse(data);
+    } else {
+      value = definition.schema.parse(next);
+      data = value;
+    }
+    const envelope: StorageEnvelope = { version: definition.version, data };
+    await store.set(definition.key, envelope);
+    return { value, quarantined };
+  }
+
   return {
     async read() {
       return interpret(definition, await store.get(definition.key));
     },
-
-    update(change) {
-      return queue(async () => {
-        const raw = await store.get(definition.key);
-        const current = interpret(definition, raw);
-
-        if (current.status === 'invalid' && current.readOnly) {
-          throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
-        }
-
-        let quarantined = false;
-        if (current.status === 'invalid') {
-          await quarantine(store, definition.key, raw);
-          quarantined = true;
-        }
-
-        const value = definition.schema.parse(change(current.value));
-        const envelope: StorageEnvelope = { version: definition.version, data: value };
-        await store.set(definition.key, envelope);
-        return { value, quarantined };
-      });
-    },
+    update: (change) => queue(() => write(change)),
+    updateLocked: write,
   };
 }
 

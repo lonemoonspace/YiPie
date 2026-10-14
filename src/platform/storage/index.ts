@@ -7,7 +7,13 @@ export {
   ensureLocalStorageIsolated,
   type AccessLevelArea,
 } from './access-level';
-export { QUARANTINE_LIMIT, readQuarantine, type QuarantineEntry } from './quarantine';
+export { listRecord, type ListValue } from './list';
+export {
+  QUARANTINE_LIMIT,
+  readQuarantine,
+  removeQuarantined,
+  type QuarantineEntry,
+} from './quarantine';
 export {
   createRepo,
   ReadOnlyRecordError,

@@ -37,6 +37,7 @@ export async function quarantine(
   await store.set(backupKey, next);
 }
 
+/** The backups of `key`, oldest first. */
 export async function readQuarantine(
   store: StorageLike,
   key: StorageKey,
@@ -44,9 +45,42 @@ export async function readQuarantine(
   return toEntries(key, await store.get(quarantineKeyFor(key)));
 }
 
+/**
+ * Deletes one backup of `key`: deleting is always the user's explicit choice
+ * (docs/development-plan.md §7). `at` must still match the backup at `index`,
+ * so a list that changed since it was shown cannot lose the wrong entry.
+ * Resolves to whether a backup was deleted. Runs inside the write queue.
+ */
+export async function removeQuarantined(
+  store: StorageLike,
+  key: StorageKey,
+  index: number,
+  at: string,
+): Promise<boolean> {
+  const backupKey = quarantineKeyFor(key);
+  const entries = toEntries(key, await store.get(backupKey));
+  if (entries[index]?.at !== at) return false;
+  const rest = entries.filter((_, i) => i !== index);
+  if (rest.length === 0) await store.remove(backupKey);
+  else await store.set(backupKey, rest);
+  return true;
+}
+
 function toEntries(key: StorageKey, stored: unknown): QuarantineEntry[] {
   if (stored === undefined) return [];
-  if (Array.isArray(stored)) return stored as QuarantineEntry[];
-  // Even a damaged backup list is kept rather than replaced.
-  return [{ key, at: 'unknown', raw: stored }];
+  // Even a damaged backup list, or a damaged entry in it, is kept rather than replaced.
+  if (!Array.isArray(stored)) return [{ key, at: 'unknown', raw: stored }];
+  return stored.map((entry: unknown) =>
+    isEntry(entry) ? { key, at: entry.at, raw: entry.raw } : { key, at: 'unknown', raw: entry },
+  );
+}
+
+function isEntry(value: unknown): value is { at: string; raw: unknown } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'raw' in value &&
+    'at' in value &&
+    typeof value.at === 'string'
+  );
 }

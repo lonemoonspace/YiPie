@@ -147,3 +147,61 @@ describe('repo writes', () => {
     expect(store.dump()[KEY]).toEqual(stored);
   });
 });
+
+describe('updates that span several keys', () => {
+  const Counter = z.looseObject({ count: z.number().int().default(0) });
+  const counter = (key: StorageKey): RecordDefinition<z.infer<typeof Counter>> => ({
+    key,
+    version: 1,
+    schema: Counter,
+    defaults: () => ({ count: 0 }),
+  });
+
+  it('run in one queued task, so no other write lands between them', async () => {
+    const store = createMemoryStore();
+    const queue = createQueue();
+    const first = createRepo(store, queue, counter('local:first'));
+    const second = createRepo(store, queue, counter('local:second'));
+    const order: string[] = [];
+
+    const together = queue(async () => {
+      await first.updateLocked(() => ({ count: 1 }));
+      order.push('first');
+      await second.updateLocked(() => ({ count: 1 }));
+      order.push('second');
+    });
+    const other = first.update(({ count }) => {
+      order.push('other');
+      return { count: count + 10 };
+    });
+    await Promise.all([together, other]);
+
+    expect(order).toEqual(['first', 'second', 'other']);
+    expect(store.dump()).toEqual({
+      'local:first': { version: 1, data: { count: 11 } },
+      'local:second': { version: 1, data: { count: 1 } },
+    });
+  });
+
+  it('keep the same guards: a newer version is refused, an unreadable value backed up', async () => {
+    const store = createMemoryStore({
+      'local:first': { version: 9, data: { count: 1 } },
+      'local:second': 'broken',
+    });
+    const queue = createQueue();
+
+    await expect(
+      queue(() =>
+        createRepo(store, queue, counter('local:first')).updateLocked(() => ({ count: 2 })),
+      ),
+    ).rejects.toBeInstanceOf(ReadOnlyRecordError);
+    expect(
+      await queue(() =>
+        createRepo(store, queue, counter('local:second')).updateLocked(() => ({ count: 2 })),
+      ),
+    ).toEqual({ value: { count: 2 }, quarantined: true });
+    expect((await readQuarantine(store, 'local:second')).map((entry) => entry.raw)).toEqual([
+      'broken',
+    ]);
+  });
+});
