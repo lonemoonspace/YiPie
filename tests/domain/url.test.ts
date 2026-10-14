@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { chatCompletionsURL, isInjectableURL, normalizeBaseURL, originPattern } from '@/domain/url';
+import {
+  chatCompletionsURL,
+  isInjectableURL,
+  normalizeBaseURL,
+  originPattern,
+  releasedOrigins,
+} from '@/domain/url';
 
 describe('normalizeBaseURL', () => {
   it.each([
@@ -59,6 +65,41 @@ describe('originPattern', () => {
     expect(originPattern('https://api.example.com:8443/v1?x=1')).toBe(
       'https://api.example.com:8443/*',
     );
+  });
+});
+
+describe('releasedOrigins', () => {
+  it('gives back an origin no configuration uses any more', () => {
+    expect(
+      releasedOrigins(
+        ['https://api.openai.com/v1', 'http://localhost:11434/v1'],
+        ['http://localhost:11434/v1'],
+      ),
+    ).toEqual(['https://api.openai.com/*']);
+  });
+
+  it('keeps an origin another configuration still uses, whatever its path', () => {
+    expect(
+      releasedOrigins(
+        ['https://gw.example/a/v1', 'https://gw.example/b/v1'],
+        ['https://gw.example/b/v1'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('tells ports apart, and lists each origin once', () => {
+    expect(
+      releasedOrigins(
+        ['http://localhost:11434/v1', 'http://localhost:11434/x', 'http://localhost:8000/v1'],
+        ['http://localhost:8000/v1'],
+      ),
+    ).toEqual(['http://localhost:11434/*']);
+  });
+
+  it('gives back the old origin when a base URL moves to a new one', () => {
+    expect(releasedOrigins(['https://old.example/v1'], ['https://new.example/v1'])).toEqual([
+      'https://old.example/*',
+    ]);
   });
 });
 

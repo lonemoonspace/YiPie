@@ -49,6 +49,17 @@ export function originPattern(baseURL: string): string {
   return `${url.protocol}//${url.host}/*`;
 }
 
+/**
+ * The host permissions to give back after the configurations changed from
+ * `before` to `after` (base URLs): the patterns no configuration uses any more.
+ * An origin still used by another configuration is kept
+ * (docs/development-plan.md §4.3, decision 5).
+ */
+export function releasedOrigins(before: readonly string[], after: readonly string[]): string[] {
+  const kept = new Set(after.map(originPattern));
+  return [...new Set(before.map(originPattern))].filter((pattern) => !kept.has(pattern));
+}
+
 /** Hosts whose pages Chrome and Edge never let an extension script. */
 const STORE_HOSTS = new Set(['chromewebstore.google.com', 'microsoftedge.microsoft.com']);
 

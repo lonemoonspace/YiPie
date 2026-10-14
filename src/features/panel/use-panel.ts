@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { displayName, type ModelConfig } from '@/contract/model-config';
 import type { PageContext } from '@/contract/page-context';
-import { buildSummaryMessages } from '@/domain/prompt/default-prompt';
+import { BUILT_IN_PROMPT } from '@/domain/prompt/default-prompt';
+import { buildPromptMessages } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
 import { INITIAL_PANEL_STATE, reducePanel, type PanelState } from './state';
@@ -73,7 +74,7 @@ export function usePanel(): PanelControls {
     };
     const outcome = await streamChat({
       config,
-      messages: buildSummaryMessages(page),
+      messages: buildPromptMessages(BUILT_IN_PROMPT, page),
       signal: controller.signal,
       onText: (text) => {
         pending += text;
