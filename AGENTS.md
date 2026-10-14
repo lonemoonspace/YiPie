@@ -57,6 +57,8 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 存储里的版本比代码新：只读，repo 拒绝写入。
 - **加字段**：给默认值，不升版本（schema 用 `z.looseObject`，未知字段原样保留）。**改名、删字段、改语义**：升版本，在 `RecordDefinition.upgrade` 里写纯函数升级，并补幂等测试。
 - patch schema 逐字段 `.optional()`，不要从存储 schema `.partial()` 派生：那样会带上默认值，保存一个字段就会静默重置其它字段。
+- **列表**用 `listRecord(row)`（`src/platform/storage/list.ts`）：逐行读取，认不出的行进 `unrecognized`，不参与业务、不发给界面，写回时原样放在末尾。不要用 `z.array(row)` 整体校验列表：一行坏就会让整个列表变成 invalid。
+- 一次改动涉及多个 key（例如删除默认模型时要同时改默认项）：放进一个 `queue(...)` 任务，里面用 `repo.updateLocked`；不要连着调用两次 `update`，中间会插进别的写入。变更函数抛错或校验不过时什么都不写，连隔离备份也不写。
 
 ## RPC 约定
 
@@ -65,12 +67,15 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **凭据隔离 fail closed**：浏览器确认 `storage.local` 只对扩展页面开放之前，dispatcher 不运行任何 handler；确认失败时一律返回 `storage-not-isolated`，下一次请求再重试。闸门是 `ensureLocalStorageIsolated()`（`src/platform/storage/access-level.ts`），只记住成功。注入内容脚本（`src/platform/inject/inject.ts`）也先 `await` 它，失败就不注入，只在图标上提示。
 - **面板必须先接上**：调用方是面板时，除方法表里标了 `beforeAttach` 的 `panel.attach`，dispatcher 还要求发送方就是本 tab 登记表里已接上的文档（`sender.tab.id` + `sender.documentId`），否则返回 `forbidden`。`panel.html` 是 web 可访问资源，任何得知其 URL 的页面都能加载它，所以「是面板页」本身证明不了什么。新增的面板方法自动受这条约束，不要给它加 `beforeAttach`。
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
+- 列表只暴露变更面：add / update（显式 patch）/ remove / move / setDefault，没有「把整个数组传回去」的方法。
+- 面板只能拿到 `panel.setup`：模型名称、默认模型的完整配置、生效中的 Prompt。不要给面板开放 `models.list` 这类带着全部 Key 的方法；面板唯一能做的设置变更是 `models.setDefault`，回复里不带列表。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志
 
 - 展示给用户的错误详情一律经 `redact(detail, requestSecrets(config))`（`src/domain/llm/`）：Key、每个请求头的值、base URL 的查询参数都算凭据，不论长短。
 - 日志里不写凭据，也不写完整 URL：base URL 的查询参数可能带 key，页面 URL 可能带 token。只记 origin（或权限模式）。
+- Prompt 模板只能用 `PROMPT_VARIABLES` 里的变量（`src/domain/prompt/render.ts`）。渲染器只拿到页面上的值；不要把配置或凭据加进 `PromptValues`。
 
 ## 测试约定
 

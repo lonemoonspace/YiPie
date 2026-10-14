@@ -1,7 +1,7 @@
 # 一瞥 YiPie · 开发计划
 
-> **版本**：v4.2（2026-10-14），历次改动见附录 F
-> **状态**：阶段 0 已完成。阶段 1 已实现，自动化验收全部通过（§4.2）；还差三项手工验证：在 Edge 与当前 Chrome 稳定版上复核技术验证、用真实 Key 总结一次、附录 H 的触发路径冒烟。之后进入阶段 2
+> **版本**：v4.3（2026-10-14），历次改动见附录 F
+> **状态**：阶段 0 已完成。阶段 1 已实现，自动化验收全部通过（§4.2），还差三项手工验证：在 Edge 与当前 Chrome 稳定版上复核技术验证、用真实 Key 总结一次、附录 H 的触发路径冒烟。阶段 2 已完成（§4.3），不需要手工验证。下一步是阶段 3
 > **权威性**：本文档是路线图的唯一权威来源。`README.md` 的路线图表格、`CHANGELOG.md` 的条目都是摘要，与本文冲突时以本文为准。
 > **维护规则**：调整阶段划分、交付物、验收标准、§1.3 的技术决定或 §11 的已决事项，必须在本文内改，并在附录 F 记一行；不要只改 README。
 
@@ -106,7 +106,7 @@
 3. 内容脚本立即画出宿主外壳，经 `content.hello` 取得一个新 nonce（每挂载一次面板 iframe 换一个，登记在 `storage.session`），在外壳里嵌入 `panel.html#<nonce>`。iframe 带 `credentialless`，带 COEP 的页面也能加载（附录 F）。
 4. 面板的第一个 RPC 是 `panel.attach(nonce)`。SW 核对「nonce + 发送方标签页」一致，把 nonce 绑定到这个面板文档（`documentId`）。之后后台只为它服务：除 `panel.attach` 外，面板的每个调用都要求发送方就是这个文档，没接上的面板文档（例如页面自己加载的）什么也拿不到。
 5. 面板经 RPC 请求正文：SW 用 `tabs.sendMessage` 问内容脚本（frameId 0），用 schema 校验回复，再转交给面板。
-6. 面板经 RPC 读取模型配置（`models.list`），渲染 Prompt，`fetch` 用户的服务，流式渲染。阶段 1 起改为经后台读，不直接读 `storage.local`：解读存储的只有一处，读也走隔离闸门（附录 F）。
+6. 面板经 RPC 取得这次运行的设置（`panel.setup`：模型名称、默认模型的完整配置、生效中的 Prompt；其它模型的 Key 不会到面板），用 Prompt 模板生成消息，`fetch` 用户的服务，流式渲染。阶段 1 起改为经后台读，不直接读 `storage.local`：解读存储的只有一处，读也走隔离闸门（附录 F）。
 7. 写入（快照、配置变更）一律经 RPC，交给 SW 的写队列。
 
 面板、SW、内容脚本之间不用 `window.postMessage`，因为页面可以伪造它。
@@ -137,7 +137,7 @@
 | ---- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------------------- | ------ |
 | 0    | 走骨架（在本仓库重做） | 分层架构、契约层、存储层（信封、写队列、读取三态、隔离备份）、带调用方策略的 RPC 控制面、凭据隔离、工具链与 CI（含 manifest 与体积检查）、E2E 冒烟 | S    | 否                                     | 已完成 |
 | 1    | 最小可用纵切片         | 技术验证；单个模型配置 + 权限申请；点图标在页面里打开面板并流式总结；自写客户端；安全 Markdown；本地假服务 E2E                           | L    | 是（真实 Key 总结一次 + 触发路径冒烟） | 已实现，待手工验证 |
-| 2    | 配置管理               | 多模型 / 多 Prompt 的增删改、排序与默认项；列表的数据语义（`unrecognized` 行、隔离备份的查看与删除）；权限生命周期；面板里的模型切换     | M    | 否                                     | 未开始 |
+| 2    | 配置管理               | 多模型 / 多 Prompt 的增删改、排序与默认项；列表的数据语义（`unrecognized` 行、隔离备份的查看与删除）；权限生命周期；面板里的模型切换     | M    | 否                                     | 已完成 |
 | 3    | 对话与恢复             | 追问；快照与恢复；右键菜单；预算与裁剪；用量显示                                                                                       | M    | 是（触发路径冒烟）                     | 未开始 |
 | 4    | 兼容与健壮性           | 完整错误分类与重试策略；兼容差异矩阵（附录 D）与语料；推理内容；受限页面；扩展更新后的接管                                              | M    | 是（几个真实服务各一次）               | 未开始 |
 | 5    | 阅读体验与设置完整化   | 引用定位原文；选区总结；提取降级；主题与字号；测试连接；导入导出；通用设置                                                             | L    | 部分                                   | 未开始 |
@@ -326,6 +326,16 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | `src/features/settings/**` | 模型列表、Prompt 列表的基本 CRUD 界面 |
 | `src/features/panel/**`（扩展） | 模型下拉 |
 
+与上表的出入（附录 F 有记录）：
+
+- 没有单独的 `selection-service.ts`：删掉默认模型时，默认项要和列表在同一个排队任务里一起改，所以由通用的 `platform/settings/list-service.ts` 一并处理。存储层为此新增 `Repo.updateLocked`（已在写队列里的任务改多个 key）和 `RecordDefinition.encode`（存储形状与内存不同的记录）；
+- 列表的逐行读取在 `platform/storage/list.ts`（`listRecord`）；备份的查看与删除是 `platform/settings/backups-service.ts`，会备份的 key 列在 `contract/backups.ts`；
+- 面板不再调用 `models.list`（它带着所有模型的 Key），改为 `panel.setup`（`platform/settings/panel-setup.ts`）：模型只给名称，Key 只给默认模型。面板唯一能做的设置变更是 `models.setDefault`，回复里只有新默认项的 id；
+- 播种的条件是「Prompt 列表从未写过」，安装和更新时都检查，不只看是否首次安装（`platform/runtime/installed.ts`）。用户清空的列表保持为空，面板此时直接用内置 Prompt，不写入存储；
+- `{{language}}` 定为页面声明的语言（`<html lang>`），可能为空；`{{selection}}` 在阶段 5 之前为空；正文被截断时，说明附在 `{{content}}` 之后。按 Prompt 生成消息在 `domain/prompt/messages.ts`，表单解析与提示在 `domain/prompt-form.ts`；
+- 权限回收在变更之后、写队列之外进行：只交还确实持有的 origin，并告诉用户交还了哪些；交还失败（例如 E2E 构建里必需的主机权限）只记日志；
+- 设置页拆成 `features/settings/{models,prompts,backups}-section.tsx`，共用 `use-list.ts`、`list-rows.tsx`、`fields.tsx`。
+
 **关键设计决定**
 
 1. **只暴露变更面，不暴露整表覆盖。** 后台在写队列内「读全量 → 改 → 写全量」，任何上下文都没有「把整个数组传回去」的能力，并发期间新增的行不可能被覆盖掉。
@@ -343,15 +353,28 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 **验收标准**
 
-- [ ] 列表里塞一条 `{"foo":1}` 的脏行后：读取不炸、UI 不显示它、写回后它仍在
-- [ ] 整个值损坏时：读取降级、设置页有可见提示；下一次保存覆盖前，原值已备份到隔离键（通用设置在阶段 0 已覆盖，本阶段扩展到模型与 Prompt 列表）
-- [ ] 设置页能看到隔离备份，可以导出、可以删除
-- [ ] 保存单个字段不影响其它字段（阶段 0 的同类回归测试扩展到列表语义）
-- [ ] 删除默认项后回退正确，且有提示
-- [ ] 删除一个配置时，仍被其它配置使用的 origin 不被回收
-- [ ] 渲染器：未知变量保留；值里含 `{{…}}` 不被二次替换；特殊字符不被转义
-- [ ] 并发：设置页和面板同时发起变更，没有更新丢失（队列测试）
-- [ ] `wxt-store` 只在 `platform/storage/**` 被引用（ESLint 断言，阶段 0 已落地，本阶段保持）
+- [x] 列表里塞一条 `{"foo":1}` 的脏行后：读取不炸、UI 不显示它、写回后它仍在（单测：存储层与服务；E2E：设置页不显示，编辑保存后仍在存储末尾）
+- [x] 整个值损坏时：读取降级、设置页有可见提示；下一次保存覆盖前，原值已备份到隔离键（单测；E2E 覆盖模型列表，通用设置沿用阶段 0 的 E2E）
+- [x] 设置页能看到隔离备份，可以导出、可以删除（E2E：导出的文件内容就是原值；删除后存储里没有了备份 key）
+- [x] 保存单个字段不影响其它字段：只改 patch 里的字段、只改那一条，其它行与认不出的行都不动（单测）
+- [x] 删除默认项后回退正确，且有提示（单测：模型与 Prompt 的各种回退；E2E：提示文字）
+- [x] 删除一个配置时，仍被其它配置使用的 origin 不被回收（单测：`releasedOrigins` 与服务）
+- [x] 渲染器：未知变量保留；值里含 `{{…}}` 不被二次替换；`$&` 之类不被解释；特殊字符不被转义；`constructor` 之类的名字只算未知变量（单测）
+- [x] 并发：设置页的新增、改名、调顺序与面板的切换默认项同时发起，全部生效（队列测试）
+- [x] `wxt-store` 只在 `platform/storage/**` 被引用（ESLint 规则保留；本阶段用临时违规文件复测，仍然报错）
+
+**阶段小结**
+
+- **证明了什么**：
+  - 列表的数据语义成立：脏行不参与、不显示、写回时保留；整值损坏先备份，备份能在设置页查看、导出、删除；
+  - 只暴露变更面：每个改动都是写队列里的一个任务，默认项随列表在同一个任务里结算，并发的变更不丢；
+  - 面板只拿到默认模型的 Key；在面板里换模型会写全局默认项，再用新模型重新总结；
+  - Prompt 模板由自写的渲染器填入，只能读到页面上的值。
+- **怎么复现**：同阶段 1（§4.2）。
+- **还没做**：
+  - 阶段 1 的三项手工验证；
+  - 整套配置的导入导出、测试连接（阶段 5）；
+  - 列表的拖拽排序：现在用上移 / 下移按钮，键盘可用，暂不做拖拽。
 
 ### 4.4 阶段 3 —— 对话与恢复
 
@@ -593,18 +616,18 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 | 指标                                 | 预算                       | 依据 / 当前                                                                                         | 由什么看守          |
 | ------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------- |
-| `background.js`                      | < 150 kB                   | 阶段 1 实测 116.72 kB（阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码          | CI（阶段 0 起）     |
-| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 1 实测 45.48 kB：Readability、外壳、提取；不含 React 与 zod                                    | CI                  |
-| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 1 实测 318.91 kB：react-dom、react、scheduler、zod 与共用代码（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
-| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 1 实测 61.28 kB：marked、eventsource-parser、客户端、Markdown 管线与面板                      | CI                  |
-| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 1 实测 558.04 kB（阶段 0 为 407.85 kB）；按各项估算，完成后约 700–800 kB                       | CI                  |
+| `background.js`                      | < 150 kB                   | 阶段 2 实测 126.69 kB（阶段 1 为 116.72 kB；阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码 | CI（阶段 0 起）     |
+| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 2 实测 48.10 kB：Readability、外壳、提取，以及整张界面文案表（阶段 6 加英文时按上下文拆分）；不含 React 与 zod | CI                  |
+| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 2 实测 323.61 kB：react-dom、react、scheduler、zod 与共用代码（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
+| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 2 实测 61.30 kB：marked、eventsource-parser、客户端、Markdown 管线与面板                      | CI                  |
+| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 2 实测 588.35 kB（阶段 0 为 407.85 kB）；按各项估算，完成后约 700–800 kB                       | CI                  |
 | SW 冷启动引入的静态资源              | 不得出现 > 100 kB 的新资源 | 无词表                                                                                              | review + 体积报告   |
-| 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 阶段 1：脚本里约 4 ms；E2E 里约 18–22 ms（含 Playwright 往返）                                      | 阶段 1 基准；E2E 只设宽松上限 |
-| 面板可交互（注入 → 面板就绪）        | < 300 ms                   | 阶段 1：E2E 里约 150–175 ms（接上并读完模型配置，含 Playwright 往返）                               | 阶段 1 基准，记录不卡 CI |
-| 单测总时长                           | < 10 s                     | 阶段 1 实测约 3.8 s（29 文件 / 290 用例）                                                           | CI 时长             |
-| E2E 单场景                           | < 60 s                     | 阶段 1 实测每条约 0.7–2.1 s（26 条共约 26–29 s）                                                    | Playwright timeout  |
+| 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 阶段 1：脚本里约 4 ms；阶段 2：E2E 里约 19–23 ms（含 Playwright 往返）                              | 阶段 1 基准；E2E 只设宽松上限 |
+| 面板可交互（注入 → 面板就绪）        | < 300 ms                   | 阶段 2：E2E 里约 160–175 ms（接上并读完面板设置，含 Playwright 往返）                               | 阶段 1 基准，记录不卡 CI |
+| 单测总时长                           | < 10 s                     | 阶段 2 实测约 5.4 s（38 文件 / 366 用例）                                                           | CI 时长             |
+| E2E 单场景                           | < 60 s                     | 阶段 2 实测每条约 0.6–2.2 s（33 条共约 40 s）                                                       | Playwright timeout  |
 
-阶段 1 结束时用实测值校准过一次：各入口都远低于预算，预算不变；「面板可交互」定为 300 ms。之后要上调必须在附录 F 写明理由。
+阶段 1 结束时用实测值校准过一次：各入口都远低于预算，预算不变；「面板可交互」定为 300 ms。阶段 2 结束时复测，仍远低于预算。之后要上调必须在附录 F 写明理由。
 
 阶段 0 的观察：zod 占 `background.js` 的 84%，SW 里其余部分只有约 16 kB。阶段 1–3 还会往 SW 里加注入、触发、快照，如果 `background.js` 逼近预算，第一个要评估的是 contract 改用 `zod/mini`（可摇树，按用到的校验器计体积），然后才是别的办法。
 
@@ -667,21 +690,22 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 src/
   contract/      唯一事实来源：schema + 类型 + 信封版本 + RPC 方法表（含允许的调用方）；按文件引用，不设汇总导出
     storage.ts · general-settings.ts · model-config.ts · prompt-config.ts · selection.ts
-    mutations.ts · page-context.ts · panel-registry.ts · snapshot.ts · commands.ts
+    mutations.ts · backups.ts · page-context.ts · panel-registry.ts · snapshot.ts · commands.ts
     rpc.ts · rpc-wire.ts（不依赖 zod，内容脚本能用）
   domain/        纯函数，零环境依赖，必须能在 node 里 100% 单测
     token-estimate.ts · patch.ts · budget.ts · page-key.ts · url.ts · list-mutations.ts
-    model-form.ts · prompt/{default-prompt,render}.ts · llm/{request,stream,errors,usage}.ts
+    model-form.ts · prompt-form.ts · prompt/{default-prompt,render,messages}.ts
+    llm/{request,stream,errors,usage}.ts
     i18n/**
   platform/      唯一允许调用浏览器 API 的层；括号内是允许运行的上下文
-    storage/{types,tx,repo,quarantine,wxt-store,access-level,index}.ts
+    storage/{types,tx,repo,list,quarantine,wxt-store,access-level,index}.ts
                                                              （写：SW；读：SW 与扩展页面）
     rpc/{messaging,server,errors,caller-policy}.ts           （SW）
     rpc/client.ts                                            （扩展页面）
     rpc/lite-client.ts                                       （内容脚本，不带 zod）
-    settings/{general-settings,model-configs,prompt-configs,selection}-service.ts
-                                                             （变更：SW；读取：SW 与扩展页面）
-    permissions/origin-access.ts                             （设置页）
+    settings/{general-settings,model-configs,prompt-configs,list,backups}-service.ts
+    settings/panel-setup.ts                                  （变更：SW；读取：SW 与扩展页面）
+    permissions/origin-access.ts                             （申请：设置页；交还：SW）
     triggers/{action,context-menu,commands}.ts               （SW）
     inject/{inject,registry,page-context}.ts                 （SW）
     snapshot/store.ts                                        （SW）
@@ -690,6 +714,7 @@ src/
     panel-host/{host,orphan}.ts                              （内容脚本）
     locate/scroll-to-text.ts                                 （内容脚本）
     runtime/settings-page.ts                                 （扩展页面）
+    runtime/installed.ts                                     （SW）
     logger/index.ts                                          （各上下文）
   features/      与界面绑定的逻辑（React 组件、状态、渲染管线），只在扩展页面里运行
     panel/** · markdown/** · settings/** · theme/**
@@ -795,6 +820,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-10-13 | v4，更正 v3 并落实 §11 的已决事项：<br>· D4 恢复为页面内扩展 iframe 面板；浏览器侧边栏列为被否决方案，并作为「页面无法嵌入 iframe」时的退路<br>· 去掉 popup：点图标直接在页面里打开面板并开始总结；受限页面在图标上提示<br>· 换页后靠图标、右键菜单或快捷键再触发，不做全站权限与按站点授权（D3）<br>· D2 补充原型实测（110 行、5.4 kB）<br>· 阶段 0 改为在本仓库重做，原型环境的数据移到附录 E 作参考；manifest 与体积检查提前到阶段 0<br>· 开放问题全部关闭，改为「已决事项」；只发 GitHub Release，只做 Chrome / Edge，界面中英文可切换<br>· 新增附录 H（触发路径手工冒烟清单） |
 | 2026-10-13 | v4.1，阶段 0 完成：<br>· §3、§4.1 标记完成，补上阶段小结；附录 E 换成本仓库的实测数据，原型数据保留作参考<br>· 交付物按实际调整：隔离备份（`quarantine.ts`）从阶段 2 提前到阶段 0；不设 `contract/index.ts` 汇总导出；检查脚本改用 TypeScript（`scripts/*.ts`）<br>· §2.2：SW 的运行上下文边界在阶段 0 落地（ESLint），内容脚本的规则随阶段 1 加入<br>· §4.2：新增 `contract/rpc-wire.ts`，让内容脚本拿通道名时不带上 zod<br>· §4.3：隔离备份的查看、导出、删除归入阶段 2 的验收<br>· §7：隔离键改为每个 key 一个列表 `<区域>:quarantine:<key>`；写明「加字段不升版本」和 patch 的写法<br>· §9：换成构建产物按 source map 归因的实测值。zod 与 React 都比估计大，预算不变；记下 `zod/mini` 作为 SW 逼近预算时第一个评估的办法<br>· 附录 B 增加提交类型 `ci`；附录 G 已迁入 `AGENTS.md`<br>· 凭据隔离改为 fail closed（PR 审阅意见）：§2.2、§4.1 小结、§8 写明浏览器确认之前不运行 RPC handler、确认失败就拒绝；§4.2 的注入与验收加上「先等隔离闸门」 |
 | 2026-10-14 | v4.2，阶段 1 实现完成（待手工验证）：<br>· **技术验证**（Playwright 自带的 Chromium 141，用一次性的手写扩展做实验）：<br>　1）严格 CSP（含 `frame-src 'none'`）的页面能嵌入 `use_dynamic_url` 的 `panel.html`；带 `Cross-Origin-Embedder-Policy: require-corp` 或 `credentialless` 的页面不能，在 manifest 声明 `cross_origin_embedder_policy` 也不行，给 iframe 加 `credentialless` 后可以，且 `chrome.storage`、消息、主机权限的跨域豁免都照常（连 COOP + COEP 完全跨源隔离的页面也行）；面板消息的 `sender.url` 是扩展的固定 id，`documentId` 可用；页面用固定 URL 嵌入面板只得到错误页<br>　2）把 https 测试页设为公网地址（`--ip-address-space-overrides`）：面板对 `http://localhost` 的流式请求成功，带不带 CORS 头都行；同一页面自己的脚本请求 localhost 被「本地网络访问」拦下，关掉该功能后才通过，说明限制开着、只是不管有主机权限的扩展面板<br>　3）按 tab 设置的角标与标题在跨文档导航、刷新时由 Chrome 清除，因此不监听 `tabs.onUpdated`（否则每次页面加载都会唤醒 SW）<br>　4）含端口的匹配模式（`http://localhost:11434/*`）能被 `permissions.contains` 接受，也能匹配更宽的授权<br>　5）就绪与体积见 §9<br>· **与交付物表的出入**：内容脚本入口叫 `injected.ts`（WXT 会把 `content.ts` 写进 manifest）；面板经 `models.list` 读模型配置，不直接读 `storage.local`；nonce 在 `content.hello` 时签发，页面删掉宿主后能换新的；错误分类 v0 加了超时与流中错误；正文长度上限放在 `platform/extract`<br>· §2.1、§2.2、§6、§9（预算不变，「面板可交互」定为 300 ms）、§10 风险 3、附录 A、C、H 同步更新<br>· **PR #2 审阅意见**（3 项安全问题，已修复）：1）后台只为已接上的面板文档服务，此前 `models.list` 对任何 `panel.html` 文档都开放，只靠面板代码不在接上前调用；2）错误详情按配置里的全部凭据脱敏（Key、每个请求头的值、base URL 的查询参数），短 key 不再跳过；浏览器不会发送的请求头（`Cookie`、`Host`、`Proxy-*`、`Sec-*` 等）在保存时拒绝；3）日志里的 URL 只记 origin。§2.1、§2.2、§4.2、§8、§9 同步 |
+| 2026-10-14 | v4.3，阶段 2 完成：<br>· §3、§4.3 标记完成，验收逐项写明证据，补上阶段小结<br>· **与交付物表的出入**：不设 `selection-service.ts`，默认项由通用列表服务与列表在同一个排队任务里结算（repo 新增 `updateLocked` 与 `encode`）；面板改用 `panel.setup`，模型只给名称、Key 只给默认模型，面板唯一的设置变更是 `models.setDefault`；播种条件为「Prompt 列表从未写过」，用户清空的列表不再播种，面板改用内置 Prompt；`{{language}}` 定为页面声明的语言；权限回收在写队列之外进行、只交还确实持有的 origin<br>· §2.1 第 6 步、§9（阶段 2 实测，预算不变）、附录 A 同步更新 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
