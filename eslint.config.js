@@ -58,6 +58,20 @@ const serviceWorkerZones = [
     from: './src/features',
     message: 'SW 不含界面：background 不能引用 features（§2.2 运行上下文边界）。',
   },
+  {
+    // Model requests run in extension pages only (D4): never in the service
+    // worker, never in the content script.
+    target: [
+      './src/contract/**',
+      './src/domain/**',
+      './src/platform/!(llm)/**',
+      './src/entrypoints/**',
+      './src/features/!(panel|settings)/**',
+    ],
+    from: './src/platform/llm',
+    message:
+      '模型请求只在扩展页面发起：只有 features/panel、features/settings 能引用 platform/llm（§2.2，D4）。',
+  },
 ];
 
 const reactOnlyInUi =
@@ -83,7 +97,7 @@ const contentScriptFiles = [
 const contentOnly =
   '内容脚本跑在网页的渲染进程里，只带外壳、提取与定位：运行时不能引用 React、zod、存储、模型请求或界面代码（§2.2）。';
 const contentScriptImports = {
-  paths: ['react', 'react-dom', 'zod', '@/contract/rpc'].map((name) => ({
+  paths: ['react', 'react-dom', 'zod'].map((name) => ({
     name,
     allowTypeImports: true,
     message: contentOnly,
@@ -94,6 +108,11 @@ const contentScriptImports = {
         'react/*',
         'react-dom/*',
         'zod/*',
+        // Contract files define zod schemas; only types may come from them,
+        // except the two that are plain constants.
+        '@/contract/*',
+        '!@/contract/rpc-wire',
+        '!@/contract/commands',
         '@/platform/storage',
         '@/platform/storage/*',
         '@/platform/llm',

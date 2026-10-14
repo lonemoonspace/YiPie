@@ -1,5 +1,14 @@
-import type { Page, Worker } from '@playwright/test';
+import type { Frame, Page, Worker } from '@playwright/test';
 import { expect, tabIdOf, test, type ChromeStorageGlobal } from './fixtures';
+
+/**
+ * These tests configure no model, so a panel that attached goes on to read
+ * the model list and stops at "no model"; one that failed to attach stops
+ * at "attach".
+ */
+async function expectAttached(frame: Frame): Promise<void> {
+  await expect(frame.locator('main')).toHaveAttribute('data-problem', 'no-model');
+}
 
 interface HostInfo {
   tag: string;
@@ -53,7 +62,7 @@ test('the trigger opens the panel in the page, and the panel attaches', async ({
   await openPanel(page);
   const frame = await panelFrame(page);
 
-  await expect(frame.locator('main')).toHaveAttribute('data-attach', 'attached');
+  await expectAttached(frame);
   expect(await attachedDocument(serviceWorker, await tabIdOf(serviceWorker, page))).not.toBeNull();
   const host = await readHost(page);
   expect(host).toMatchObject({ shadowRootVisibleToPage: false, right: 16, top: 16 });
@@ -76,10 +85,7 @@ for (const [situation, path] of [
 
     await openPanel(page);
 
-    await expect((await panelFrame(page)).locator('main')).toHaveAttribute(
-      'data-attach',
-      'attached',
-    );
+    await expectAttached(await panelFrame(page));
     // Styled through the CSSOM, so the page's style-src does not flatten the shell.
     expect((await readHost(page))?.width).toBeGreaterThan(280);
   });
@@ -96,7 +102,7 @@ test('elements the page planted do not stand in for ours', async ({
 
   await openPanel(page);
 
-  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-attach', 'attached');
+  await expectAttached(await panelFrame(page));
   expect(await page.locator('#planted').count()).toBe(1);
   expect((await readHost(page))?.tag).toMatch(/^yipie-panel-[0-9a-f]{8}$/);
 });
@@ -130,7 +136,7 @@ test('the panel comes back, freshly attached, when the page removes it', async (
   await page.goto(`${server.origin}/article.html`);
   const tabId = await tabIdOf(serviceWorker, page);
   await openPanel(page);
-  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-attach', 'attached');
+  await expectAttached(await panelFrame(page));
   const first = await attachedDocument(serviceWorker, tabId);
 
   await page.evaluate(() => {
@@ -247,7 +253,7 @@ test('closing the panel removes it, and the next trigger brings a new one', asyn
   await page.goto(`${server.origin}/article.html`);
   const tabId = await tabIdOf(serviceWorker, page);
   await openPanel(page);
-  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-attach', 'attached');
+  await expectAttached(await panelFrame(page));
   const first = await attachedDocument(serviceWorker, tabId);
 
   // The close button sits at the right end of the title bar, inside the closed shadow root.
@@ -260,7 +266,7 @@ test('closing the panel removes it, and the next trigger brings a new one', asyn
   expect(page.frames().some((frame) => frame.url().includes('/panel.html'))).toBe(false);
 
   await openPanel(page);
-  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-attach', 'attached');
+  await expectAttached(await panelFrame(page));
   expect(await attachedDocument(serviceWorker, tabId)).not.toBe(first);
 });
 
@@ -286,7 +292,7 @@ test('readiness baseline: shell visible and panel attached after a trigger', asy
     const start = await page.evaluate(() => performance.now());
     await openPanel(page);
     const frame = await panelFrame(page);
-    await expect(frame.locator('main')).toHaveAttribute('data-attach', 'attached');
+    await expectAttached(frame);
     const end = await page.evaluate(() => performance.now());
     shell.push(
       (await page.evaluate(() => (window as unknown as { shownAt: number }).shownAt)) - start,

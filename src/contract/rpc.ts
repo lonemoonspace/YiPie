@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
 import { ModelConfigDraft, ModelConfigList, ModelConfigPatch } from './model-config';
+import { PageContext } from './page-context';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
@@ -82,6 +83,12 @@ export const RPC_METHODS = {
   'panel.attach': {
     input: z.strictObject({ nonce: z.string().min(1).max(100) }),
     output: z.object({ tabId: z.number().int() }),
+    callers: ['panel'],
+  },
+  // Only the panel attached in a tab may read that tab's page.
+  'page.getContext': {
+    input: z.strictObject({}),
+    output: PageContext,
     callers: ['panel'],
   },
 } as const satisfies Record<string, MethodDefinition>;

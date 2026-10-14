@@ -71,9 +71,11 @@ export const zh = {
   'panel.status.streaming': '{model} 正在输出…',
   'panel.status.done': '完成',
   'panel.status.stopped': '已停止',
+  'panel.status.error': '没有完成',
   'panel.truncated': '正文过长，只发送了开头部分。',
   'panel.noModel': '还没有配置模型。请先在设置页填写一个 OpenAI 兼容服务。',
   'panel.attachFailed': '面板无法连接到这个标签页，请重新点击工具栏图标。',
+  'panel.modelsFailed': '读取模型配置失败：{detail}',
   'panel.extractFailed': '读取正文失败：{detail}',
   'panel.emptyPage': '这个页面没有可总结的正文。',
 

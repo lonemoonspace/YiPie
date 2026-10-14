@@ -43,7 +43,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **分层**：`import-x/no-restricted-paths`。
 - **单一写入口**：只有 `src/platform/storage/**` 能引用 `wxt-store.ts`。其它代码通过 repo（`createRepo(...).update`）写入，写入都在 SW 的唯一写队列里执行。扩展页面要改数据就发 RPC，不要自己写存储。
 - **SW 不含界面**：background 入口不能引用 `features/**`；contract / domain / platform / background 不能在运行时引用 `react`、`react-dom`（`import type` 可以）。React 只出现在 features 和扩展页面入口里。
-- **内容脚本只带外壳、提取与定位**：`src/entrypoints/injected.ts`、`platform/panel-host/**`、`platform/extract/**`、`platform/rpc/lite-client.ts` 不能在运行时引用 React、zod、`@/contract/rpc`、`platform/storage`、`platform/llm`、`platform/settings`、`features`（纯类型导入可以）。通道名等常量从 `@/contract/rpc-wire` 取。
+- **内容脚本只带外壳、提取与定位**：`src/entrypoints/injected.ts`、`platform/panel-host/**`、`platform/extract/**`、`platform/rpc/lite-client.ts` 不能在运行时引用 React、zod、`platform/storage`、`platform/llm`、`platform/settings`、`features`，也不能在运行时引用 contract 下定义 schema 的文件（一个常量就会把 zod 带进来）；只有 `@/contract/rpc-wire`、`@/contract/commands` 这两个纯常量文件例外，其余只能 `import type`。
 - **内容脚本按需注入，不进 manifest**：入口文件叫 `injected.ts` 而不是 `content.ts`（WXT 会把 `content.ts` 当成 manifest 声明的内容脚本），由 `platform/inject/inject.ts` 在用户触发、隔离闸门通过之后 `executeScript`。
 - **不用 `eslint-disable`、不用 `any`**：`noInlineConfig` 让 `eslint-disable` 注释无效并报告，`--max-warnings 0` 让它失败。
 - **manifest 与计划附录 C 一致**：新增权限或 manifest 键，先改附录 C，再在同一提交里改 `scripts/lib/manifest-policy.ts`。

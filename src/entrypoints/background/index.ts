@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
+import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { RpcRefusal } from '@/platform/rpc/errors';
@@ -46,6 +47,16 @@ export default defineBackground(() => {
           throw new RpcRefusal('forbidden', 'This panel was not mounted by YiPie in this tab.');
         }
         return { tabId };
+      },
+      'page.getContext': async (_input, { tabId, documentId }) => {
+        if (
+          tabId === undefined ||
+          documentId === undefined ||
+          !(await panels.isAttached(tabId, documentId))
+        ) {
+          throw new RpcRefusal('forbidden', 'Only the panel attached in this tab may read it.');
+        }
+        return requestPageContext(tabId);
       },
     },
     { storageIsolated: ensureLocalStorageIsolated },
