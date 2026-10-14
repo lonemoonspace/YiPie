@@ -3,6 +3,7 @@ import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
 import { ModelConfig, ModelConfigDraft, ModelConfigPatch } from './model-config';
 import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
+import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
@@ -71,8 +72,12 @@ export type ListView<T> = Omit<z.infer<ReturnType<typeof listView>>, 'items'> & 
 export const ModelConfigsView = listView(ModelConfig);
 export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
 
+export const PromptConfigsView = listView(PromptConfig);
+export type PromptConfigsView = z.infer<typeof PromptConfigsView>;
+
 /** A draft after the server parsed it: defaults filled in. */
 export type ParsedModelConfigDraft = z.output<typeof ModelConfigDraft>;
+export type ParsedPromptConfigDraft = z.output<typeof PromptConfigDraft>;
 
 /**
  * Every background method. A method that is not listed here does not exist,
@@ -123,6 +128,38 @@ export const RPC_METHODS = {
     input: SetDefaultInput,
     output: ModelConfigsView,
     callers: ['options', 'panel'],
+  },
+  // The panel reads the default prompt; prompts change only in the settings
+  // page (docs/development-plan.md §4.3, decision 7).
+  'prompts.list': {
+    input: z.strictObject({}),
+    output: PromptConfigsView,
+    callers: ['options', 'panel'],
+  },
+  'prompts.add': {
+    input: PromptConfigDraft,
+    output: PromptConfigsView,
+    callers: ['options'],
+  },
+  'prompts.update': {
+    input: updateInput(PromptConfigPatch),
+    output: PromptConfigsView,
+    callers: ['options'],
+  },
+  'prompts.remove': {
+    input: RemoveInput,
+    output: PromptConfigsView,
+    callers: ['options'],
+  },
+  'prompts.move': {
+    input: MoveInput,
+    output: PromptConfigsView,
+    callers: ['options'],
+  },
+  'prompts.setDefault': {
+    input: SetDefaultInput,
+    output: PromptConfigsView,
+    callers: ['options'],
   },
   // The content script's only method: a nonce for the panel frame it is about
   // to mount in its tab (docs/development-plan.md §2.1, §8).

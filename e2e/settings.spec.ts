@@ -192,3 +192,80 @@ test('models: a service we hold no access to is marked, with a way to grant it',
   await expect(row).toContainText('尚未授权访问 https://api.unreachable.example');
   await expect(row.getByRole('button', { name: '授权访问' })).toBeVisible();
 });
+
+const promptRow = (page: Page, name: string) =>
+  section(page, 'Prompt').getByRole('listitem').filter({ hasText: name });
+
+test('prompts: the built-in one is there from the start, and an edit to it is stored', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const prompts = section(page, 'Prompt');
+  const row = promptRow(page, '网页总结');
+
+  await expect(prompts.getByRole('listitem')).toHaveCount(1);
+  await expect(row.getByText('默认', { exact: true })).toBeVisible();
+  // Shown, not stored: nothing is written until the user changes something.
+  expect(await stored(serviceWorker, 'prompt-configs')).toBeUndefined();
+
+  await row.getByRole('button', { name: '编辑' }).click();
+  await row.getByLabel('用户模板').fill('标题：{{title}}\n{{ foo }}');
+  // Pointed out while typing; neither stops the save.
+  await expect(row).toContainText('未知变量 {{ foo }} 会原样发送给模型。');
+  await expect(row).toContainText('两个模板里都没有 {{content}}：页面正文不会发送给模型。');
+  await row.getByLabel('用户模板').fill('标题：{{title}}\n{{ foo }}\n{{content}}');
+  await expect(row).not.toContainText('两个模板里都没有');
+  await row.getByRole('button', { name: '保存' }).click();
+  await expect(prompts.getByRole('status')).toHaveText('已保存');
+
+  expect(await stored(serviceWorker, 'prompt-configs')).toEqual({
+    version: 1,
+    data: [
+      expect.objectContaining({
+        id: 'builtin-summary',
+        name: '网页总结',
+        user: '标题：{{title}}\n{{ foo }}\n{{content}}',
+      }),
+    ],
+  });
+});
+
+test('prompts: a new one starts from the built-in templates, needs a name, and can be the default', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const prompts = section(page, 'Prompt');
+
+  await prompts.getByRole('button', { name: '添加 Prompt' }).click();
+  const form = prompts.getByRole('form', { name: '添加 Prompt' });
+  await expect(form.getByLabel('用户模板')).toHaveValue(/\{\{content\}\}/);
+  await expect(form.getByLabel('系统模板')).toHaveValue(/网页阅读助手/);
+
+  await form.getByRole('button', { name: '保存' }).click();
+  await expect(form.getByText('请填写名称')).toBeVisible();
+  expect(await stored(serviceWorker, 'prompt-configs')).toBeUndefined();
+
+  await form.getByLabel('名称').fill('要点');
+  await form.getByLabel('系统模板').fill('');
+  await form.getByLabel('用户模板').fill('列出要点：{{content}}');
+  await form.getByRole('button', { name: '保存' }).click();
+  await expect(prompts.getByRole('status')).toHaveText('已保存');
+  await expect(prompts.getByRole('listitem')).toHaveCount(2);
+
+  await promptRow(page, '要点').getByRole('button', { name: '设为默认' }).click();
+  await expect(prompts.getByRole('status')).toHaveText('已将「要点」设为默认');
+
+  const list = (await stored(serviceWorker, 'prompt-configs')) as StoredList;
+  const added = list.data.find((prompt) => prompt.name === '要点');
+  expect(added).toMatchObject({ system: '', user: '列出要点：{{content}}' });
+  expect(await stored(serviceWorker, 'selection')).toEqual({
+    version: 1,
+    data: { defaultModelId: null, defaultPromptId: added?.id },
+  });
+});

@@ -5,7 +5,8 @@ import type { Usage } from '@/domain/llm/stream';
 export type PanelProblem =
   | { kind: 'attach' }
   | { kind: 'no-model' }
-  | { kind: 'models'; detail: string }
+  | { kind: 'no-prompt' }
+  | { kind: 'config'; detail: string }
   | { kind: 'extract'; detail: string }
   | { kind: 'empty-page' }
   | { kind: 'llm'; error: LlmError };

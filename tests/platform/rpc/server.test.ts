@@ -337,6 +337,53 @@ describe('RPC dispatcher: model configurations', () => {
   });
 });
 
+describe('RPC dispatcher: prompts', () => {
+  const prompts = { ...models, items: [] };
+
+  it('lets the settings page and the attached panel read the prompts, and nothing else', async () => {
+    const { dispatch } = setup({ 'prompts.list': () => Promise.resolve(prompts) });
+
+    expect(await dispatch(request('prompts.list'), OPTIONS)).toEqual({ ok: true, value: prompts });
+    expect(await dispatch(request('prompts.list'), PANEL)).toEqual({ ok: true, value: prompts });
+    for (const sender of [STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request('prompts.list'), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+  });
+
+  it.each([
+    ['prompts.add', { name: 'n', user: '{{content}}' }],
+    ['prompts.update', { id: 'p', patch: { name: 'n' } }],
+    ['prompts.remove', { id: 'p' }],
+    ['prompts.move', { id: 'p', direction: 'down' }],
+    // Unlike the model, the panel may not change the default prompt.
+    ['prompts.setDefault', { id: 'p' }],
+  ] as const)('accepts %s only from the settings page', async (method, input) => {
+    const handler = vi.fn(() => Promise.resolve(prompts));
+    const { dispatch } = setup({ [method]: handler });
+
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request(method, input), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(await dispatch(request(method, input), OPTIONS)).toEqual({ ok: true, value: prompts });
+  });
+
+  it('rejects a prompt without a user template', async () => {
+    const { dispatch, handlers } = setup();
+
+    expect(
+      await dispatch(request('prompts.add', { name: 'n', user: '   ' }), OPTIONS),
+    ).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+    expect(handlers['prompts.add']).not.toHaveBeenCalled();
+  });
+});
+
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce', async () => {
     const { dispatch } = setup({ 'content.hello': () => Promise.resolve({ nonce: 'n' }) });
@@ -387,6 +434,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
   const PANEL_METHODS = [
     ['models.list', {}],
     ['models.setDefault', { id: 'a' }],
+    ['prompts.list', {}],
     ['page.getContext', {}],
   ] as const;
 

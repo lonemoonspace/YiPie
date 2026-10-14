@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { displayName, type ModelConfig } from '@/contract/model-config';
 import type { PageContext } from '@/contract/page-context';
+import type { PromptConfig } from '@/contract/prompt-config';
 import { t } from '@/domain/i18n';
-import { builtinPrompt } from '@/domain/prompt/default-prompt';
 import { buildPromptMessages, promptValues } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
@@ -30,18 +30,28 @@ export function usePanel(): PanelControls {
     const current = () => run.current === controller;
     dispatch({ type: 'start' });
 
+    // The defaults of both lists: the panel always uses what the settings say.
     let config: ModelConfig | undefined;
+    let prompt: PromptConfig | undefined;
     try {
-      const models = await callRpc('models.list', {});
+      const [models, prompts] = await Promise.all([
+        callRpc('models.list', {}),
+        callRpc('prompts.list', {}),
+      ]);
       config = models.items.find((item) => item.id === models.defaultId);
+      prompt = prompts.items.find((item) => item.id === prompts.defaultId);
     } catch (error) {
       if (current())
-        dispatch({ type: 'failed', problem: { kind: 'models', detail: messageOf(error) } });
+        dispatch({ type: 'failed', problem: { kind: 'config', detail: messageOf(error) } });
       return;
     }
     if (!current()) return;
     if (config === undefined) {
       dispatch({ type: 'failed', problem: { kind: 'no-model' } });
+      return;
+    }
+    if (prompt === undefined) {
+      dispatch({ type: 'failed', problem: { kind: 'no-prompt' } });
       return;
     }
 
@@ -76,10 +86,7 @@ export function usePanel(): PanelControls {
     };
     const outcome = await streamChat({
       config,
-      messages: buildPromptMessages(
-        builtinPrompt(),
-        promptValues(page, t('prompt.answerLanguage')),
-      ),
+      messages: buildPromptMessages(prompt, promptValues(page, t('prompt.answerLanguage'))),
       signal: controller.signal,
       onText: (text) => {
         pending += text;

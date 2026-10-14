@@ -256,3 +256,9 @@ button.secondary.danger {
 .warning p {
   margin: 0;
 }
+
+.preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

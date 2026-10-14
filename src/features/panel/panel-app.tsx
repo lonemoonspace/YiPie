@@ -73,8 +73,12 @@ function Problem({ problem, origin }: { problem: PanelProblem; origin: string | 
       lines.push(t('panel.noModel'));
       settings = true;
       break;
-    case 'models':
-      lines.push(t('panel.modelsFailed', { detail: problem.detail }));
+    case 'no-prompt':
+      lines.push(t('panel.noPrompt'));
+      settings = true;
+      break;
+    case 'config':
+      lines.push(t('panel.configFailed', { detail: problem.detail }));
       break;
     case 'extract':
       lines.push(t('panel.extractFailed', { detail: problem.detail }));

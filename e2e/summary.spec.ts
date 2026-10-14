@@ -1,7 +1,7 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import type { RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { E2E_KEY as KEY, expect, test, useModel } from './fixtures';
+import { E2E_KEY as KEY, expect, storePrompts, test, useModel } from './fixtures';
 
 interface Opened {
   page: Page;
@@ -188,4 +188,46 @@ test('model output cannot inject markup or make the panel fetch images', async (
   await expect(answer.locator('a')).toHaveCount(1);
   await expect(answer.locator('a')).toHaveAttribute('href', 'https://example.com/ok');
   expect(await frame.evaluate(() => document.title)).toBe('一瞥');
+});
+
+test('the default prompt shapes the request, unknown placeholders included', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  await storePrompts(serviceWorker, [
+    { id: 'mine', name: '我的', system: '', user: '标题：{{title}}；{{ foo }}\n{{content}}' },
+  ]);
+
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  // A blank system template sends no system message.
+  const messages = (lastRequest(server)?.body as { messages: { role: string; content: string }[] })
+    .messages;
+  expect(messages.map((message) => message.role)).toEqual(['user']);
+  expect(messages[0]?.content).toMatch(/^标题：一篇普通的文章；\{\{ foo \}\}\n/);
+  expect(messages[0]?.content).toContain('一瞥是一个浏览器扩展');
+});
+
+test('without a prompt the panel says how to fix it', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  await storePrompts(serviceWorker, []);
+  const before = server.requests.length;
+
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+
+  await expect(frame.locator('main')).toHaveAttribute('data-problem', 'no-prompt');
+  await expect(frame.getByRole('alert')).toContainText('还没有 Prompt');
+  await expect(frame.getByRole('button', { name: '打开设置' })).toBeVisible();
+  expect(server.requests).toHaveLength(before);
 });

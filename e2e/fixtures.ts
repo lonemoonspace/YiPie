@@ -127,15 +127,15 @@ export interface StoredModel {
 }
 
 /**
- * Stores model configurations pointing at the fake service, in this order,
- * with `defaultId` as the chosen default (none chosen when omitted). `extra`
- * rows are stored after them as they are, such as rows no version can read.
+ * Stores model configurations pointing at the fake service, in this order.
+ * `extra` rows are stored after them as they are, such as rows no version can
+ * read. No default is chosen: the first one is in use.
  */
 export async function storeModels(
   serviceWorker: Worker,
   server: FakeServer,
   models: StoredModel[],
-  { defaultId, extra = [] }: { defaultId?: string; extra?: unknown[] } = {},
+  { extra = [] }: { extra?: unknown[] } = {},
 ) {
   const data = [
     ...models.map((model) => ({
@@ -149,10 +149,33 @@ export async function storeModels(
     })),
     ...extra,
   ];
-  const items: Record<string, unknown> = { 'model-configs': { version: 1, data } };
-  if (defaultId !== undefined) {
-    items.selection = { version: 1, data: { defaultModelId: defaultId, defaultPromptId: null } };
-  }
+  await store(serviceWorker, { 'model-configs': { version: 1, data } });
+}
+
+export interface StoredPrompt {
+  id: string;
+  name: string;
+  system: string;
+  user: string;
+}
+
+/** Stores prompts, in this order, in place of the built-in one. */
+export async function storePrompts(serviceWorker: Worker, prompts: StoredPrompt[]) {
+  await store(serviceWorker, { 'prompt-configs': { version: 1, data: prompts } });
+}
+
+/** Stores the chosen defaults. */
+export async function storeDefaults(
+  serviceWorker: Worker,
+  defaults: { defaultModelId?: string; defaultPromptId?: string },
+) {
+  await store(serviceWorker, {
+    selection: { version: 1, data: { defaultModelId: null, defaultPromptId: null, ...defaults } },
+  });
+}
+
+/** Writes `storage.local` from the service worker, as the extension's own writes land there. */
+async function store(serviceWorker: Worker, items: Record<string, unknown>) {
   await serviceWorker.evaluate(
     (values) => (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set(values),
     items,

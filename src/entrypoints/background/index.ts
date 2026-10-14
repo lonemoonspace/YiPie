@@ -9,6 +9,7 @@ import { RpcRefusal } from '@/platform/rpc/errors';
 import { registerRpcServer } from '@/platform/rpc/server';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
+import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
@@ -21,6 +22,7 @@ export default defineBackground(() => {
   const models = createModelConfigsService(store, writeQueue, {
     releaseOrigins: (patterns) => releaseOriginAccess(patterns),
   });
+  const prompts = createPromptConfigsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
 
   // Register listeners first: the message or click being handled may be what
@@ -40,6 +42,12 @@ export default defineBackground(() => {
       'models.remove': ({ id }) => models.remove(id),
       'models.move': ({ id, direction }) => models.move(id, direction),
       'models.setDefault': ({ id }) => models.setDefault(id),
+      'prompts.list': () => prompts.list(),
+      'prompts.add': (draft) => prompts.add(draft),
+      'prompts.update': ({ id, patch }) => prompts.update(id, patch),
+      'prompts.remove': ({ id }) => prompts.remove(id),
+      'prompts.move': ({ id, direction }) => prompts.move(id, direction),
+      'prompts.setDefault': ({ id }) => prompts.setDefault(id),
       'content.hello': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         return { nonce: await panels.issue(tabId) };
