@@ -28,8 +28,8 @@ CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate �
 ```
 src/contract     schema、类型、存储信封版本、RPC 方法表（含允许的调用方）
 src/domain       纯函数，不碰浏览器 API
-src/platform     唯一调用浏览器 API 的层：storage、rpc、settings、logger
-src/features     界面逻辑：React 组件、hooks、主题 token
+src/platform     唯一调用浏览器 API 的层：storage、rpc、settings、llm、inject、panel-host、extract 等
+src/features     界面逻辑：React 组件、hooks、Markdown 渲染、主题 token
 src/entrypoints  薄壳：background、options、panel、injected（内容脚本）
 tests/           Vitest 单测，路径与被测文件同构
 e2e/             Playwright；fixtures.ts 负责加载扩展
@@ -62,9 +62,9 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 
 - `src/contract/rpc.ts` 的方法表是唯一权威：每个方法声明 input / output schema 和允许的调用方（options / panel / content）。
 - 调用方由浏览器提供的 sender 判定（`src/platform/rpc/caller-policy.ts`），不看消息内容。
-- **凭据隔离 fail closed**：浏览器确认 `storage.local` 只对扩展页面开放之前，dispatcher 不运行任何 handler；确认失败时一律返回 `storage-not-isolated`，下一次请求再重试。闸门是 `ensureLocalStorageIsolated()`（`src/platform/storage/access-level.ts`），只记住成功。之后任何会产生内容脚本的代码（阶段 1 的注入）也必须先 `await` 它，失败就不注入。
+- **凭据隔离 fail closed**：浏览器确认 `storage.local` 只对扩展页面开放之前，dispatcher 不运行任何 handler；确认失败时一律返回 `storage-not-isolated`，下一次请求再重试。闸门是 `ensureLocalStorageIsolated()`（`src/platform/storage/access-level.ts`），只记住成功。注入内容脚本（`src/platform/inject/inject.ts`）也先 `await` 它，失败就不注入，只在图标上提示。
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
-- 扩展页面用 `callRpc`，它会校验返回值。内容脚本用的轻量客户端在阶段 1 加入，不引入 zod；届时通道名和请求 / 回复的形状移到不依赖 zod 的 `contract/rpc-wire.ts`（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
+- 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 测试约定
 
@@ -73,6 +73,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
 - E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
+- 模型输出只经 `src/features/markdown/render.ts` 变成 HTML，`dangerouslySetInnerHTML` 只用于它的结果。计划 §8 列出的注入回归用例在 `tests/features/markdown/render.test.ts` 里，改渲染器时它们必须仍然通过；要放行新的语法或属性，先补用例并更新测试里的白名单。
 
 ## 依赖版本约束
 
