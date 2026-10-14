@@ -56,7 +56,11 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 覆盖无法识别的值之前，repo 会先把原值备份到 `<area>:quarantine:<key>`（每个 key 保留最近 3 份）。
 - 存储里的版本比代码新：只读，repo 拒绝写入。
 - **加字段**：给默认值，不升版本（schema 用 `z.looseObject`，未知字段原样保留）。**改名、删字段、改语义**：升版本，在 `RecordDefinition.upgrade` 里写纯函数升级，并补幂等测试。
-- patch schema 逐字段 `.optional()`，不要从存储 schema `.partial()` 派生：那样会带上默认值，保存一个字段就会静默重置其它字段。
+- patch schema 逐字段 `.optional()`，不要从存储 schema `.partial()` 派生：那样会带上默认值，保存一个字段就会静默重置其它字段。编辑表单只发送改过的字段（`domain/patch.ts` 的 `changedFields`），别的标签页同时改的字段不会被改回去。
+- **列表记录**用 `createListRepo`（`platform/storage/list-repo.ts`）：一行通不过 schema、或者 id 与前面的行重复，就放进 `unrecognized`，不参与业务、界面不显示，写回时原样放在已识别的行之后。只有整个值不是数组才算 invalid。
+- **几条记录一起变**（列表与默认项）时，在一个 `queue(...)` 任务里依次调用各自的 `updateUnqueued`。在队列任务之外调用它，写入会交错、丢更新。
+- **默认项**（`local:selection`）里的 id 找不到时，以列表首项为默认。只在一次变更会让默认项变化时才写它，规则是 `domain/list-mutations.ts` 的 `defaultAfterChange`；设置页删除前的确认也用它预告默认项的去向。
+- 扩展页面想知道存储变了，用 `platform/storage/watch.ts` 的 `onStoredChange` 当信号，值仍经 RPC 读：存储只由后台解读。
 
 ## RPC 约定
 
@@ -65,12 +69,16 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **凭据隔离 fail closed**：浏览器确认 `storage.local` 只对扩展页面开放之前，dispatcher 不运行任何 handler；确认失败时一律返回 `storage-not-isolated`，下一次请求再重试。闸门是 `ensureLocalStorageIsolated()`（`src/platform/storage/access-level.ts`），只记住成功。注入内容脚本（`src/platform/inject/inject.ts`）也先 `await` 它，失败就不注入，只在图标上提示。
 - **面板必须先接上**：调用方是面板时，除方法表里标了 `beforeAttach` 的 `panel.attach`，dispatcher 还要求发送方就是本 tab 登记表里已接上的文档（`sender.tab.id` + `sender.documentId`），否则返回 `forbidden`。`panel.html` 是 web 可访问资源，任何得知其 URL 的页面都能加载它，所以「是面板页」本身证明不了什么。新增的面板方法自动受这条约束，不要给它加 `beforeAttach`。
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
+- 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
+- 面板唯一能调用的变更是 `models.setDefault`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志
 
 - 展示给用户的错误详情一律经 `redact(detail, requestSecrets(config))`（`src/domain/llm/`）：Key、每个请求头的值、base URL 的查询参数都算凭据，不论长短。
 - 日志里不写凭据，也不写完整 URL：base URL 的查询参数可能带 key，页面 URL 可能带 token。只记 origin（或权限模式）。
+- 离开扩展的数据（目前是备份导出）默认经 `withoutCredentials`（`src/domain/credentials.ts`）剔除 `apiKey`、`headers` 与 `baseURL` 的查询参数，用户勾选后才包含；设置页显示原始数据时一律经过它。
+- 主机访问权：申请必须在设置页的点击 / 提交回调里、任何 `await` 之前调用 `requestOriginAccess`（浏览器只在用户手势里弹出提示）。回收由 SW 的模型列表服务在变更写入后、同一个队列槽内完成，只回收不再被任何行（含认不出的行）使用的 origin。
 
 ## 测试约定
 
@@ -78,6 +86,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
 - E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
+- E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels` / `storePrompts` / `storeDefaults`，读回存储用 `stored`。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
 - 模型输出只经 `src/features/markdown/render.ts` 变成 HTML，`dangerouslySetInnerHTML` 只用于它的结果。计划 §8 列出的注入回归用例在 `tests/features/markdown/render.test.ts` 里，改渲染器时它们必须仍然通过；要放行新的语法或属性，先补用例并更新测试里的白名单。
 
