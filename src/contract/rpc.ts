@@ -71,6 +71,19 @@ export const RPC_METHODS = {
     output: ModelConfigsView,
     callers: ['options'],
   },
+  // The content script's only method: a nonce for the panel frame it is about
+  // to mount in its tab (docs/development-plan.md §2.1, §8).
+  'content.hello': {
+    input: z.strictObject({}),
+    output: z.object({ nonce: z.string() }),
+    callers: ['content'],
+  },
+  // A panel proves it was mounted by our content script in the same tab.
+  'panel.attach': {
+    input: z.strictObject({ nonce: z.string().min(1).max(100) }),
+    output: z.object({ tabId: z.number().int() }),
+    callers: ['panel'],
+  },
 } as const satisfies Record<string, MethodDefinition>;
 
 export type RpcMethods = typeof RPC_METHODS;

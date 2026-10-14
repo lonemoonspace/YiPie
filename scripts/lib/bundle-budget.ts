@@ -29,7 +29,8 @@ export interface BundleReport {
 
 export function categorize(path: string): Category {
   if (path === 'background.js') return 'background';
-  if (/^content-scripts\/[^/]+\.js$/.test(path)) return 'contentScript';
+  // Our one content script, injected on demand (src/entrypoints/injected.ts).
+  if (path === 'injected.js' || /^content-scripts\/[^/]+\.js$/.test(path)) return 'contentScript';
   if (/^chunks\/panel-[^/]+\.js$/.test(path)) return 'panelEntry';
   if (/^chunks\/options-[^/]+\.js$/.test(path)) return 'optionsEntry';
   // Any other chunk is code shared between extension pages (React and friends).

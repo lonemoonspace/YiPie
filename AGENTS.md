@@ -15,12 +15,13 @@
 | ------------------------ | ----------------------------------------------------------------------------- |
 | `npm run gate`           | compile + test + lint + format，每次提交前必须全绿                            |
 | `npm run build`          | 生产构建到 `.output/chrome-mv3`（Chrome「加载已解压的扩展」用这个目录）       |
+| `npm run build:e2e`      | E2E 构建到 `.output/chrome-mv3-e2e`：多了对 127.0.0.1 的主机权限与触发入口   |
 | `npm run check:manifest` | 比对构建产物的 manifest 与计划附录 C（先 build）                              |
 | `npm run check:bundle`   | 按入口检查计划 §9 的体积预算，写出 `.output/bundle-report.json`（先 build）   |
-| `npm run test:e2e`       | Playwright 在真实 Chromium 里加载构建产物（先 build）                         |
+| `npm run test:e2e`       | Playwright 在真实 Chromium 里加载 E2E 构建（先 build:e2e）                   |
 | `npm run format`         | 用 Prettier 改写格式（Markdown 不在格式检查范围内）                           |
 
-CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → E2E。
+CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → build:e2e → E2E。两项检查只针对生产构建，其中 check:manifest 会确认 E2E 专用的主机权限和触发入口没有混进来。
 
 ## 目录与分层
 
@@ -29,7 +30,7 @@ src/contract     schema、类型、存储信封版本、RPC 方法表（含允�
 src/domain       纯函数，不碰浏览器 API
 src/platform     唯一调用浏览器 API 的层：storage、rpc、settings、logger
 src/features     界面逻辑：React 组件、hooks、主题 token
-src/entrypoints  薄壳：background、options（之后加入 content、panel）
+src/entrypoints  薄壳：background、options、panel、injected（内容脚本）
 tests/           Vitest 单测，路径与被测文件同构
 e2e/             Playwright；fixtures.ts 负责加载扩展
 scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 scripts/lib，有单测
@@ -41,7 +42,9 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 
 - **分层**：`import-x/no-restricted-paths`。
 - **单一写入口**：只有 `src/platform/storage/**` 能引用 `wxt-store.ts`。其它代码通过 repo（`createRepo(...).update`）写入，写入都在 SW 的唯一写队列里执行。扩展页面要改数据就发 RPC，不要自己写存储。
-- **SW 不含界面**：background 入口不能引用 `features/**`；contract / domain / platform / background 不能在运行时引用 `react`、`react-dom`（`import type` 可以）。React 只出现在 features 和扩展页面入口里。内容脚本的同类规则（不带 React、zod、`platform/storage`）随阶段 1 加入。
+- **SW 不含界面**：background 入口不能引用 `features/**`；contract / domain / platform / background 不能在运行时引用 `react`、`react-dom`（`import type` 可以）。React 只出现在 features 和扩展页面入口里。
+- **内容脚本只带外壳、提取与定位**：`src/entrypoints/injected.ts`、`platform/panel-host/**`、`platform/extract/**`、`platform/rpc/lite-client.ts` 不能在运行时引用 React、zod、`@/contract/rpc`、`platform/storage`、`platform/llm`、`platform/settings`、`features`（纯类型导入可以）。通道名等常量从 `@/contract/rpc-wire` 取。
+- **内容脚本按需注入，不进 manifest**：入口文件叫 `injected.ts` 而不是 `content.ts`（WXT 会把 `content.ts` 当成 manifest 声明的内容脚本），由 `platform/inject/inject.ts` 在用户触发、隔离闸门通过之后 `executeScript`。
 - **不用 `eslint-disable`、不用 `any`**：`noInlineConfig` 让 `eslint-disable` 注释无效并报告，`--max-warnings 0` 让它失败。
 - **manifest 与计划附录 C 一致**：新增权限或 manifest 键，先改附录 C，再在同一提交里改 `scripts/lib/manifest-policy.ts`。
 - **体积预算**（计划 §9）：超出时先找原因，不要直接调高预算；确需调高，在计划附录 F 写明理由。
@@ -68,6 +71,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 单测在 node 环境跑，不加载浏览器 API；存储用 `tests/helpers/memory-store.ts`，它每次操作都让出事件循环，能复现并发交错。
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
+- E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
 
 ## 依赖版本约束

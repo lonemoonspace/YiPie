@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 /**
  * What the built manifest may contain, mirroring appendix C of
  * docs/development-plan.md. Each phase that introduces a manifest entry
@@ -8,22 +10,38 @@ export interface ManifestPolicy {
   permissions: string[];
   /** `optional_host_permissions`, exactly. */
   optionalHostPermissions: string[];
-  /** Top-level keys that must not appear yet. */
+  /** Keys whose value must equal this exactly. */
+  exact: Record<string, unknown>;
+  /** Keys that must be present (an object), and keys that must not appear inside them. */
+  present: Record<string, { forbidden: string[] }>;
+  /** Top-level keys that must not appear. */
   absent: string[];
 }
 
 export const MANIFEST_POLICY: ManifestPolicy = {
-  permissions: ['storage'],
+  permissions: ['storage', 'activeTab', 'scripting'],
   // Requested per origin at runtime, only for the model services the user configures.
   optionalHostPermissions: ['https://*/*', 'http://*/*'],
+  exact: {
+    web_accessible_resources: [
+      { resources: ['panel.html'], matches: ['http://*/*', 'https://*/*'], use_dynamic_url: true },
+    ],
+    content_security_policy: {
+      extension_pages:
+        "script-src 'self'; object-src 'none'; img-src 'self' data:; frame-src 'none'; form-action 'none'; base-uri 'none'",
+    },
+  },
+  present: {
+    // A popup would swallow the click that opens the panel.
+    action: { forbidden: ['default_popup'] },
+    commands: { forbidden: [] },
+  },
   absent: [
+    // Also what keeps the E2E build's test-only host access out of production.
     'host_permissions',
     'optional_permissions',
     'content_scripts',
-    'web_accessible_resources',
     'externally_connectable',
-    'action',
-    'commands',
     'side_panel',
     'declarative_net_request',
   ],
@@ -48,11 +66,36 @@ export function checkManifest(
     policy.optionalHostPermissions,
   );
 
+  for (const [key, expected] of Object.entries(policy.exact)) {
+    if (!isDeepStrictEqual(manifest[key], expected)) {
+      problems.push(`"${key}" 与附录 C 不一致：${JSON.stringify(manifest[key])}`);
+    }
+  }
+
+  for (const [key, { forbidden }] of Object.entries(policy.present)) {
+    const value = manifest[key];
+    if (typeof value !== 'object' || value === null) {
+      problems.push(`manifest 里缺少 "${key}"（见附录 C）`);
+      continue;
+    }
+    for (const inner of forbidden) {
+      if (inner in value) problems.push(`"${key}" 里不应出现 "${inner}"（见附录 C）`);
+    }
+  }
+
   for (const key of policy.absent) {
     if (key in manifest) problems.push(`manifest 里不应出现 "${key}"（见附录 C）`);
   }
 
   return problems;
+}
+
+/** Marks the trigger the E2E build exposes; it must never reach a production build. */
+export const E2E_HOOK_MARKER = '__yipieE2E';
+
+/** Paths of built scripts that still contain the E2E hook. */
+export function findTestHooks(files: { path: string; text: string }[]): string[] {
+  return files.filter((file) => file.text.includes(E2E_HOOK_MARKER)).map((file) => file.path);
 }
 
 /** The list must hold exactly `expected`, in any order. */

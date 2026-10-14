@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
+    "build:e2e": "wxt build --mode e2e",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
     "test": "vitest run",

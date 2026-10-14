@@ -5,6 +5,7 @@ describe('categorize', () => {
   it.each([
     ['background.js', 'background'],
     ['content-scripts/content.js', 'contentScript'],
+    ['injected.js', 'contentScript'],
     ['chunks/panel-Ab12.js', 'panelEntry'],
     ['chunks/options-Ab12.js', 'optionsEntry'],
     ['chunks/react-dom-Ab12.js', 'sharedChunks'],

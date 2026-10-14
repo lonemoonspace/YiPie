@@ -14,12 +14,16 @@ import { createLogger } from '@/platform/logger';
 import { NotFoundError } from '@/platform/settings/errors';
 import { ReadOnlyRecordError } from '@/platform/storage';
 import { classifyCaller, type SenderLike } from './caller-policy';
+import { RpcRefusal } from './errors';
 import { failure, isRpcMessage } from './messaging';
 
 const logger = createLogger('rpc');
 
 export interface HandlerContext {
   caller: CallerKind;
+  /** The sender's tab, for the panel and the content script (both live in one). */
+  tabId: number | undefined;
+  documentId: string | undefined;
 }
 
 export type RpcHandlers = {
@@ -80,9 +84,14 @@ export function createDispatcher(
 
     try {
       const handler = handlers[method as RpcMethod] as AnyHandler;
-      const value = await handler(input.data, { caller });
+      const value = await handler(input.data, {
+        caller,
+        tabId: sender.tab?.id,
+        documentId: sender.documentId,
+      });
       return { ok: true, value: definition.output.parse(value) };
     } catch (error) {
+      if (error instanceof RpcRefusal) return failure(error.code, error.message);
       if (error instanceof ReadOnlyRecordError) return failure('read-only', error.message);
       if (error instanceof NotFoundError) return failure('not-found', error.message);
       logger.error(method, 'failed', error);

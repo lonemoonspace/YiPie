@@ -39,6 +39,11 @@ jobs:
       - name: Bundle within budget
         run: npm run check:bundle
 
+      # The E2E build adds host access to 127.0.0.1 and a trigger hook; the
+      # checks above ran on the production build, which must have neither.
+      - name: Build for E2E
+        run: npm run build:e2e
+
       # Installs the Chromium build that the pinned @playwright/test expects.
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

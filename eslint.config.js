@@ -71,6 +71,44 @@ const noReactAtRuntime = {
   patterns: [{ group: ['react/*', 'react-dom/*'], allowTypeImports: true, message: reactOnlyInUi }],
 };
 
+// The content script (§2.2) runs in the page's renderer and carries only the
+// shell, extraction and locating: no React, no zod (the background validates
+// its messages), no storage, no model requests, no UI code. Types are fine.
+const contentScriptFiles = [
+  'src/entrypoints/injected.ts',
+  'src/platform/panel-host/**/*.ts',
+  'src/platform/extract/**/*.ts',
+  'src/platform/rpc/lite-client.ts',
+];
+const contentOnly =
+  '内容脚本跑在网页的渲染进程里，只带外壳、提取与定位：运行时不能引用 React、zod、存储、模型请求或界面代码（§2.2）。';
+const contentScriptImports = {
+  paths: ['react', 'react-dom', 'zod', '@/contract/rpc'].map((name) => ({
+    name,
+    allowTypeImports: true,
+    message: contentOnly,
+  })),
+  patterns: [
+    {
+      group: [
+        'react/*',
+        'react-dom/*',
+        'zod/*',
+        '@/platform/storage',
+        '@/platform/storage/*',
+        '@/platform/llm',
+        '@/platform/llm/*',
+        '@/platform/settings/*',
+        '@/platform/rpc/client',
+        '@/platform/rpc/server',
+        '@/features/*',
+      ],
+      allowTypeImports: true,
+      message: contentOnly,
+    },
+  ],
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -126,6 +164,11 @@ export default tseslint.config(
       'src/entrypoints/background/**/*.{ts,tsx}',
     ],
     rules: { '@typescript-eslint/no-restricted-imports': ['error', noReactAtRuntime] },
+  },
+  {
+    // Replaces the rule above for these files; the React restriction is part of it.
+    files: contentScriptFiles,
+    rules: { '@typescript-eslint/no-restricted-imports': ['error', contentScriptImports] },
   },
   {
     files: ['scripts/**/*.ts', 'tests/**/*.ts', 'e2e/**/*.ts', '*.config.ts'],

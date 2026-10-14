@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RPC_CHANNEL, type GeneralSettingsView, type ModelConfigsView } from '@/contract/rpc';
+import { RpcRefusal } from '@/platform/rpc/errors';
 import { createDispatcher, type RpcHandlers } from '@/platform/rpc/server';
 import { NotFoundError } from '@/platform/settings/errors';
 import { ReadOnlyRecordError } from '@/platform/storage';
@@ -52,7 +53,7 @@ describe('RPC dispatcher', () => {
     expect(reply).toEqual({ ok: true, value: view });
     expect(handlers['settings.patch']).toHaveBeenCalledWith(
       { theme: 'dark' },
-      { caller: 'options' },
+      { caller: 'options', tabId: undefined, documentId: undefined },
     );
   });
 
@@ -240,5 +241,52 @@ describe('RPC dispatcher: model configurations', () => {
     expect(
       await dispatch(request('models.update', { id: 'x', patch: { model: 'y' } }), OPTIONS),
     ).toMatchObject({ ok: false, error: { code: 'not-found' } });
+  });
+});
+
+describe('RPC dispatcher: panel handshake', () => {
+  it('lets only the content script ask for a nonce', async () => {
+    const { dispatch } = setup({ 'content.hello': () => Promise.resolve({ nonce: 'n' }) });
+
+    expect(await dispatch(request('content.hello'), CONTENT)).toEqual({
+      ok: true,
+      value: { nonce: 'n' },
+    });
+    for (const sender of [PANEL, OPTIONS]) {
+      expect(await dispatch(request('content.hello'), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+  });
+
+  it('lets only a panel attach, and passes its tab and document', async () => {
+    const attach = vi.fn(() => Promise.resolve({ tabId: 1 }));
+    const { dispatch } = setup({ 'panel.attach': attach });
+    const panel = { ...PANEL, documentId: 'DOC' };
+
+    expect(await dispatch(request('panel.attach', { nonce: 'n' }), panel)).toEqual({
+      ok: true,
+      value: { tabId: 1 },
+    });
+    expect(attach).toHaveBeenCalledWith(
+      { nonce: 'n' },
+      { caller: 'panel', tabId: 1, documentId: 'DOC' },
+    );
+    expect(await dispatch(request('panel.attach', { nonce: 'n' }), CONTENT)).toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' },
+    });
+  });
+
+  it('turns a handler refusal into its code', async () => {
+    const { dispatch } = setup({
+      'panel.attach': () => Promise.reject(new RpcRefusal('forbidden', 'not ours')),
+    });
+
+    expect(await dispatch(request('panel.attach', { nonce: 'n' }), PANEL)).toEqual({
+      ok: false,
+      error: { code: 'forbidden', message: 'not ours' },
+    });
   });
 });
