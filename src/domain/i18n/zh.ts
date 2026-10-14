@@ -137,6 +137,8 @@ export const zh = {
   'panel.attachFailed': '面板无法连接到这个标签页，请重新点击工具栏图标。',
   'panel.noPrompt': '还没有 Prompt。请先在设置页添加一个。',
   'panel.configFailed': '读取设置失败：{detail}',
+  'panel.model': '模型',
+  'panel.switchFailed': '切换模型失败：{detail}',
   'panel.extractFailed': '读取正文失败：{detail}',
   'panel.emptyPage': '这个页面没有可总结的正文。',
 

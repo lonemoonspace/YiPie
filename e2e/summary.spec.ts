@@ -1,7 +1,15 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import type { RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { E2E_KEY as KEY, expect, storePrompts, test, useModel } from './fixtures';
+import {
+  E2E_KEY as KEY,
+  expect,
+  storeModels,
+  storePrompts,
+  stored,
+  test,
+  useModel,
+} from './fixtures';
 
 interface Opened {
   page: Page;
@@ -230,4 +238,40 @@ test('without a prompt the panel says how to fix it', async ({
   await expect(frame.getByRole('alert')).toContainText('还没有 Prompt');
   await expect(frame.getByRole('button', { name: '打开设置' })).toBeVisible();
   expect(server.requests).toHaveLength(before);
+});
+
+test('the model menu makes another model the default and summarizes again with it', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await storeModels(serviceWorker, server, [
+    { id: 'main', name: '主力', model: 'scenario:slow' },
+    { id: 'spare', name: '备用', model: 'scenario:normal' },
+  ]);
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  const menu = frame.getByRole('combobox', { name: '模型' });
+
+  await expect(menu).toHaveValue('main');
+  await expect(frame.locator('article.answer')).toContainText('片段2');
+  const slow = lastRequest(server);
+  expect((slow?.body as { model: string }).model).toBe('scenario:slow');
+
+  await menu.selectOption({ label: '备用' });
+
+  // The slow answer is dropped and its request ended; the new model answers.
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(frame.locator('article.answer h2')).toHaveText('概要');
+  await expect(frame.locator('article.answer')).not.toContainText('片段');
+  await expect.poll(() => slow?.aborted).toBe(true);
+  expect((lastRequest(server)?.body as { model: string }).model).toBe('scenario:normal');
+  await expect(menu).toHaveValue('spare');
+
+  // The menu wrote the global default, which the next trigger uses too.
+  expect(await stored(serviceWorker, 'selection')).toEqual({
+    version: 1,
+    data: { defaultModelId: 'spare', defaultPromptId: null },
+  });
 });

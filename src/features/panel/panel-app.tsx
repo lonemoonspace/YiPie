@@ -2,11 +2,11 @@ import { useMemo } from 'react';
 import { t } from '@/domain/i18n';
 import { renderMarkdown } from '@/features/markdown/render';
 import { openSettingsPage } from '@/platform/runtime/settings-page';
-import { isBusy, type PanelProblem, type PanelState } from './state';
+import { isBusy, modelName, type PanelProblem, type PanelState } from './state';
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, stop, retry } = usePanel();
+  const { state, stop, retry, switchModel } = usePanel();
   const busy = isBusy(state);
   const html = useMemo(() => renderMarkdown(state.text), [state.text]);
   const canRetry = !busy && state.phase !== 'attaching' && state.problem?.kind !== 'attach';
@@ -14,6 +14,20 @@ export function PanelApp() {
   return (
     <main className="panel" data-phase={state.phase} data-problem={state.problem?.kind}>
       <div className="toolbar">
+        {state.models.length > 0 ? (
+          <select
+            className="model"
+            aria-label={t('panel.model')}
+            value={state.modelId ?? ''}
+            onChange={(event) => switchModel(event.target.value)}
+          >
+            {state.models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <p className="status" role="status">
           {describePhase(state)}
         </p>
@@ -42,7 +56,7 @@ export function PanelApp() {
 }
 
 function describePhase(state: PanelState): string {
-  const model = state.model ?? '';
+  const model = modelName(state);
   switch (state.phase) {
     case 'attaching':
       return t('panel.status.attaching');
@@ -79,6 +93,9 @@ function Problem({ problem, origin }: { problem: PanelProblem; origin: string | 
       break;
     case 'config':
       lines.push(t('panel.configFailed', { detail: problem.detail }));
+      break;
+    case 'switch':
+      lines.push(t('panel.switchFailed', { detail: problem.detail }));
       break;
     case 'extract':
       lines.push(t('panel.extractFailed', { detail: problem.detail }));

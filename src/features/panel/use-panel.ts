@@ -12,12 +12,15 @@ export interface PanelControls {
   state: PanelState;
   stop: () => void;
   retry: () => void;
+  /** Makes `id` the default model and summarizes again with it. */
+  switchModel: (id: string) => void;
 }
 
 /**
  * The panel's whole run: attach with the nonce in our URL, then summarize
- * right away (docs/development-plan.md §4.2, decision 3). Retrying starts a
- * new run and aborts the old one, so at most one request is ever in flight.
+ * right away (docs/development-plan.md §4.2, decision 3). Retrying or picking
+ * another model starts a new run and drops the old one, so at most one
+ * request is ever in flight.
  */
 export function usePanel(): PanelControls {
   const [state, dispatch] = useReducer(reducePanel, INITIAL_PANEL_STATE);
@@ -40,6 +43,13 @@ export function usePanel(): PanelControls {
       ]);
       config = models.items.find((item) => item.id === models.defaultId);
       prompt = prompts.items.find((item) => item.id === prompts.defaultId);
+      if (current()) {
+        dispatch({
+          type: 'models',
+          models: models.items.map((item) => ({ id: item.id, name: displayName(item) })),
+          modelId: models.defaultId,
+        });
+      }
     } catch (error) {
       if (current())
         dispatch({ type: 'failed', problem: { kind: 'config', detail: messageOf(error) } });
@@ -71,7 +81,6 @@ export function usePanel(): PanelControls {
 
     dispatch({
       type: 'requesting',
-      model: displayName(config),
       origin: new URL(config.baseURL).origin,
       truncated: page.truncated,
     });
@@ -122,7 +131,24 @@ export function usePanel(): PanelControls {
   const stop = useCallback(() => run.current?.abort(), []);
   const retry = useCallback(() => void summarize(), [summarize]);
 
-  return { state, stop, retry };
+  // The menu sets the global default (docs/development-plan.md §4.3,
+  // decision 7), and the summary starts over with that model right away.
+  const switchModel = useCallback(
+    (id: string) => {
+      // The old run's request ends now, and nothing it reports is shown.
+      run.current?.abort();
+      run.current = null;
+      dispatch({ type: 'select', modelId: id });
+      callRpc('models.setDefault', { id }).then(
+        () => void summarize(),
+        (error: unknown) =>
+          dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } }),
+      );
+    },
+    [summarize],
+  );
+
+  return { state, stop, retry, switchModel };
 }
 
 function messageOf(error: unknown): string {
