@@ -15,6 +15,12 @@ export interface MethodDefinition {
   output: z.ZodType;
   /** Who may call the method. Anyone not listed is refused (docs/development-plan.md §8). */
   callers: readonly CallerKind[];
+  /**
+   * A panel may call this before it has attached. Every other panel call is
+   * refused unless the sender is the panel attached in its tab: `panel.html`
+   * is web-accessible, so being a panel document proves nothing by itself.
+   */
+  beforeAttach?: true;
 }
 
 export const GeneralSettingsView = z.object({
@@ -57,6 +63,7 @@ export const RPC_METHODS = {
   },
   // The panel needs the key to call the model; it is an extension page, so the
   // key never reaches a content script or the page (docs/development-plan.md §8).
+  // Like every panel call but `panel.attach`, it is served to attached panels only.
   'models.list': {
     input: z.strictObject({}),
     output: ModelConfigsView,
@@ -84,6 +91,7 @@ export const RPC_METHODS = {
     input: z.strictObject({ nonce: z.string().min(1).max(100) }),
     output: z.object({ tabId: z.number().int() }),
     callers: ['panel'],
+    beforeAttach: true,
   },
   // Only the panel attached in a tab may read that tab's page.
   'page.getContext': {

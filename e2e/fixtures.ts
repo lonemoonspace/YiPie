@@ -111,6 +111,35 @@ export async function tabIdOf(serviceWorker: Worker, page: Page): Promise<number
   return id;
 }
 
+/** The API key every E2E model configuration uses; tests check where it does and does not appear. */
+export const E2E_KEY = 'sk-e2e-not-a-real-key';
+
+/** Stores one model configuration pointing at the fake service, as the settings page would. */
+export async function useModel(serviceWorker: Worker, server: FakeServer, model: string) {
+  await serviceWorker.evaluate(
+    ({ baseURL, model, key }) =>
+      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
+        'model-configs': {
+          version: 1,
+          data: [
+            {
+              id: 'e2e',
+              name: '',
+              baseURL,
+              apiKey: key,
+              model,
+              headers: {},
+              extraBody: {},
+              contextWindow: null,
+              streamUsage: true,
+            },
+          ],
+        },
+      }),
+    { baseURL: `${server.origin}/v1`, model, key: E2E_KEY },
+  );
+}
+
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */
 interface MaybeChromeGlobal {
   chrome?: { storage?: { local?: unknown } };

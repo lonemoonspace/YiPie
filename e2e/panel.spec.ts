@@ -1,5 +1,6 @@
 import type { Frame, Page, Worker } from '@playwright/test';
-import { expect, tabIdOf, test, type ChromeStorageGlobal } from './fixtures';
+import { RPC_CHANNEL } from '../src/contract/rpc-wire';
+import { E2E_KEY, expect, tabIdOf, test, useModel, type ChromeStorageGlobal } from './fixtures';
 
 /**
  * These tests configure no model, so a panel that attached goes on to read
@@ -200,6 +201,41 @@ test('a page cannot embed the panel itself', async ({
   expect(await attachedDocument(serviceWorker, await tabIdOf(serviceWorker, page))).toBeNull();
 });
 
+test('a panel document that has not attached gets nothing from the background', async ({
+  context,
+  server,
+  serviceWorker,
+  extensionId,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+
+  // As a page that learned the panel's URL could load it: no nonce was issued
+  // for this tab, so the panel cannot attach.
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/panel.html#forged`);
+  await expect(page.locator('main')).toHaveAttribute('data-problem', 'attach');
+
+  // Calls the panel code would never make unattached, sent from inside it.
+  const replies = await page.evaluate(
+    (channel) =>
+      Promise.all(
+        ['models.list', 'page.getContext'].map((method) =>
+          (globalThis as unknown as RuntimeGlobal).chrome.runtime.sendMessage({
+            channel,
+            method,
+            input: {},
+          }),
+        ),
+      ),
+    RPC_CHANNEL,
+  );
+
+  for (const reply of replies) {
+    expect(reply).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+  }
+  expect(JSON.stringify(replies)).not.toContain(E2E_KEY);
+});
+
 test('our content script cannot read storage.local', async ({
   context,
   server,
@@ -348,6 +384,10 @@ interface ActionGlobal {
       getTitle(details: { tabId: number }): Promise<string>;
     };
   };
+}
+
+interface RuntimeGlobal {
+  chrome: { runtime: { sendMessage(message: unknown): Promise<unknown> } };
 }
 
 interface ScriptingGlobal {

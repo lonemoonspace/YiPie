@@ -38,19 +38,34 @@ export interface DispatcherOptions {
    * runs before that, and every call is refused while it rejects.
    */
   storageIsolated: () => Promise<void>;
+  /** Whether `documentId` is the panel attached in `tabId` (platform/inject/registry). */
+  panelAttached: (tabId: number, documentId: string) => Promise<boolean>;
 }
 
 /**
  * Turns one incoming message into a reply. Every check lives here, so no
  * handler can skip one: the method must exist, the caller must be allowed to
- * call it, the input must match the contract, storage must be isolated, and
- * the handler's output must match the contract too.
+ * call it (a panel must also be the one attached in its tab), the input must
+ * match the contract, storage must be isolated, and the handler's output must
+ * match the contract too.
  */
 export function createDispatcher(
   handlers: RpcHandlers,
   extensionId: string,
-  { storageIsolated }: DispatcherOptions,
+  { storageIsolated, panelAttached }: DispatcherOptions,
 ) {
+  /** Fails closed: no tab, no document id or an unreadable registry all mean "not attached". */
+  const isAttachedPanel = async (sender: SenderLike): Promise<boolean> => {
+    const tabId = sender.tab?.id;
+    if (tabId === undefined || sender.documentId === undefined) return false;
+    try {
+      return await panelAttached(tabId, sender.documentId);
+    } catch (error) {
+      logger.error('Could not read the panel registry:', error);
+      return false;
+    }
+  };
+
   return async (message: unknown, sender: SenderLike): Promise<RpcReply> => {
     const request = RpcRequest.safeParse(message);
     if (!request.success) return failure('bad-request', 'Malformed RPC request.');
@@ -65,6 +80,17 @@ export function createDispatcher(
     if (caller === null || !definition.callers.includes(caller)) {
       logger.warn('Refused', method, 'from', caller ?? 'an unrecognized sender', sender.url);
       return failure('forbidden', `${caller ?? 'This sender'} may not call ${method}.`);
+    }
+
+    // Any page that learns the panel's URL can load it, so a panel document
+    // is trusted only once it has attached with its tab's nonce.
+    if (
+      caller === 'panel' &&
+      definition.beforeAttach !== true &&
+      !(await isAttachedPanel(sender))
+    ) {
+      logger.warn('Refused', method, 'from a panel that is not attached in its tab');
+      return failure('forbidden', `Only the panel attached in this tab may call ${method}.`);
     }
 
     const input = definition.input.safeParse(request.data.input);

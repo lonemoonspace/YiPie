@@ -48,18 +48,16 @@ export default defineBackground(() => {
         }
         return { tabId };
       },
-      'page.getContext': async (_input, { tabId, documentId }) => {
-        if (
-          tabId === undefined ||
-          documentId === undefined ||
-          !(await panels.isAttached(tabId, documentId))
-        ) {
-          throw new RpcRefusal('forbidden', 'Only the panel attached in this tab may read it.');
-        }
+      // The dispatcher has checked that the caller is the panel attached in this tab.
+      'page.getContext': async (_input, { tabId }) => {
+        if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to read.');
         return requestPageContext(tabId);
       },
     },
-    { storageIsolated: ensureLocalStorageIsolated },
+    {
+      storageIsolated: ensureLocalStorageIsolated,
+      panelAttached: (tabId, documentId) => panels.isAttached(tabId, documentId),
+    },
   );
 
   const open = (tab: TabLike) => {

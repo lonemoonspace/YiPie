@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RPC_CHANNEL, type GeneralSettingsView, type ModelConfigsView } from '@/contract/rpc';
+import {
+  RPC_CHANNEL,
+  RPC_METHODS,
+  type GeneralSettingsView,
+  type MethodDefinition,
+  type ModelConfigsView,
+} from '@/contract/rpc';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { createDispatcher, type RpcHandlers } from '@/platform/rpc/server';
 import { NotFoundError } from '@/platform/settings/errors';
@@ -8,13 +14,20 @@ import { stubHandlers } from '../../helpers/rpc-handlers';
 
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const OPTIONS = { id: EXTENSION_ID, url: `chrome-extension://${EXTENSION_ID}/options.html` };
+/** The panel attached in tab 1 (see `attachedInTab1`). */
 const PANEL = {
   id: EXTENSION_ID,
   url: `chrome-extension://${EXTENSION_ID}/panel.html#n=1`,
   tab: { id: 1 },
   frameId: 3,
+  documentId: 'DOC',
 };
+/** Another panel document in the same tab, which never attached: e.g. one a page embedded. */
+const STRAY_PANEL = { ...PANEL, documentId: 'STRAY' };
 const CONTENT = { id: EXTENSION_ID, url: 'https://example.com/', tab: { id: 1 }, frameId: 0 };
+
+const attachedInTab1 = (tabId: number, documentId: string) =>
+  Promise.resolve(tabId === 1 && documentId === 'DOC');
 
 const view: GeneralSettingsView = {
   settings: { theme: 'dark', logLevel: 'info' },
@@ -28,6 +41,7 @@ const models: ModelConfigsView = { configs: [], status: 'ok', readOnly: false, q
 function setup(
   overrides: Partial<RpcHandlers> = {},
   storageIsolated: () => Promise<void> = () => Promise.resolve(),
+  panelAttached: (tabId: number, documentId: string) => Promise<boolean> = attachedInTab1,
 ) {
   const handlers = stubHandlers({
     'settings.get': vi.fn(() => Promise.resolve(view)),
@@ -36,7 +50,10 @@ function setup(
     'models.add': vi.fn(() => Promise.resolve(models)),
     ...overrides,
   });
-  return { handlers, dispatch: createDispatcher(handlers, EXTENSION_ID, { storageIsolated }) };
+  return {
+    handlers,
+    dispatch: createDispatcher(handlers, EXTENSION_ID, { storageIsolated, panelAttached }),
+  };
 }
 
 const request = (method: string, input: unknown = {}) => ({ channel: RPC_CHANNEL, method, input });
@@ -199,15 +216,17 @@ describe('RPC dispatcher before storage.local is isolated', () => {
 });
 
 describe('RPC dispatcher: model configurations', () => {
-  it('lets the settings page and the panel list models, and nothing else', async () => {
+  it('lets the settings page and the attached panel list models, and nothing else', async () => {
     const { dispatch } = setup();
 
     expect(await dispatch(request('models.list'), OPTIONS)).toEqual({ ok: true, value: models });
     expect(await dispatch(request('models.list'), PANEL)).toEqual({ ok: true, value: models });
-    expect(await dispatch(request('models.list'), CONTENT)).toMatchObject({
-      ok: false,
-      error: { code: 'forbidden' },
-    });
+    for (const sender of [STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request('models.list'), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
   });
 
   it('accepts changes only from the settings page', async () => {
@@ -260,18 +279,17 @@ describe('RPC dispatcher: panel handshake', () => {
     }
   });
 
-  it('lets only a panel attach, and passes its tab and document', async () => {
+  it('lets only a panel attach, before it is attached, and passes its tab and document', async () => {
     const attach = vi.fn(() => Promise.resolve({ tabId: 1 }));
     const { dispatch } = setup({ 'panel.attach': attach });
-    const panel = { ...PANEL, documentId: 'DOC' };
 
-    expect(await dispatch(request('panel.attach', { nonce: 'n' }), panel)).toEqual({
+    expect(await dispatch(request('panel.attach', { nonce: 'n' }), STRAY_PANEL)).toEqual({
       ok: true,
       value: { tabId: 1 },
     });
     expect(attach).toHaveBeenCalledWith(
       { nonce: 'n' },
-      { caller: 'panel', tabId: 1, documentId: 'DOC' },
+      { caller: 'panel', tabId: 1, documentId: 'STRAY' },
     );
     expect(await dispatch(request('panel.attach', { nonce: 'n' }), CONTENT)).toMatchObject({
       ok: false,
@@ -288,5 +306,81 @@ describe('RPC dispatcher: panel handshake', () => {
       ok: false,
       error: { code: 'forbidden', message: 'not ours' },
     });
+  });
+});
+
+describe('RPC dispatcher: a panel is served only once attached', () => {
+  const PANEL_METHODS = [
+    ['models.list', {}],
+    ['page.getContext', {}],
+  ] as const;
+
+  it.each(PANEL_METHODS)(
+    'refuses %s to a panel document that is not attached, without running the handler',
+    async (method, input) => {
+      const { dispatch, handlers } = setup();
+
+      expect(await dispatch(request(method, input), STRAY_PANEL)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+      expect(handlers[method]).not.toHaveBeenCalled();
+    },
+  );
+
+  it('asks the registry about the sending document in its own tab', async () => {
+    const panelAttached = vi.fn(attachedInTab1);
+    const { dispatch } = setup({}, undefined, panelAttached);
+
+    await dispatch(request('models.list'), PANEL);
+    await dispatch(request('models.list'), { ...PANEL, tab: { id: 2 } });
+
+    expect(panelAttached.mock.calls).toEqual([
+      [1, 'DOC'],
+      [2, 'DOC'],
+    ]);
+  });
+
+  it('refuses a panel without a tab or a document id, without asking the registry', async () => {
+    const panelAttached = vi.fn(() => Promise.resolve(true));
+    const { dispatch } = setup({}, undefined, panelAttached);
+    const { id, url, tab, frameId, documentId } = PANEL;
+    const withoutDocument = { id, url, tab, frameId };
+    const withoutTab = { id, url, frameId, documentId };
+
+    for (const sender of [withoutDocument, withoutTab]) {
+      expect(await dispatch(request('models.list'), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(panelAttached).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the registry cannot be read', async () => {
+    const { dispatch, handlers } = setup({}, undefined, () =>
+      Promise.reject(new Error('session storage unavailable')),
+    );
+
+    expect(await dispatch(request('models.list'), PANEL)).toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' },
+    });
+    expect(handlers['models.list']).not.toHaveBeenCalled();
+  });
+
+  it('does not consult the registry for other callers', async () => {
+    const panelAttached = vi.fn(() => Promise.resolve(false));
+    const { dispatch } = setup({}, undefined, panelAttached);
+
+    expect(await dispatch(request('models.list'), OPTIONS)).toEqual({ ok: true, value: models });
+    expect(panelAttached).not.toHaveBeenCalled();
+  });
+
+  it('marks only panel.attach as callable before attaching', () => {
+    const early = Object.entries(RPC_METHODS)
+      .filter(([, definition]) => (definition as MethodDefinition).beforeAttach === true)
+      .map(([method]) => method);
+    expect(early).toEqual(['panel.attach']);
   });
 });

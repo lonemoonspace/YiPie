@@ -1,35 +1,7 @@
-import type { BrowserContext, Frame, Page, Worker } from '@playwright/test';
+import type { BrowserContext, Frame, Page } from '@playwright/test';
 import type { RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { expect, test, type ChromeStorageGlobal } from './fixtures';
-
-const KEY = 'sk-e2e-not-a-real-key';
-
-/** Stores one model configuration pointing at the fake service, as the settings page would. */
-async function useModel(serviceWorker: Worker, server: FakeServer, model: string) {
-  await serviceWorker.evaluate(
-    ({ baseURL, model, key }) =>
-      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
-        'model-configs': {
-          version: 1,
-          data: [
-            {
-              id: 'e2e',
-              name: '',
-              baseURL,
-              apiKey: key,
-              model,
-              headers: {},
-              extraBody: {},
-              contextWindow: null,
-              streamUsage: true,
-            },
-          ],
-        },
-      }),
-    { baseURL: `${server.origin}/v1`, model, key: KEY },
-  );
-}
+import { E2E_KEY as KEY, expect, test, useModel } from './fixtures';
 
 interface Opened {
   page: Page;
