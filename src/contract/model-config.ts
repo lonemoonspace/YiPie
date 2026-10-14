@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { StorageKey } from './storage';
 
-export const MODEL_CONFIGS_KEY: StorageKey = 'local:model-configs';
+export const MODEL_CONFIGS_KEY = 'local:model-configs' satisfies StorageKey;
 export const MODEL_CONFIGS_VERSION = 1;
 
 /** Only http(s) endpoints; `normalizeBaseURL` in domain/url tidies input first. */

@@ -1,6 +1,14 @@
 import type { Frame, Page, Worker } from '@playwright/test';
 import { RPC_CHANNEL } from '../src/contract/rpc-wire';
-import { E2E_KEY, expect, tabIdOf, test, useModel, type ChromeStorageGlobal } from './fixtures';
+import {
+  E2E_KEY,
+  expect,
+  storeModels,
+  tabIdOf,
+  test,
+  useModel,
+  type ChromeStorageGlobal,
+} from './fixtures';
 
 /**
  * These tests configure no model, so a panel that attached goes on to read
@@ -219,7 +227,7 @@ test('a panel document that has not attached gets nothing from the background', 
   const replies = await page.evaluate(
     (channel) =>
       Promise.all(
-        ['models.list', 'page.getContext'].map((method) =>
+        ['models.list', 'models.current', 'prompts.list', 'page.getContext'].map((method) =>
           (globalThis as unknown as RuntimeGlobal).chrome.runtime.sendMessage({
             channel,
             method,
@@ -234,6 +242,52 @@ test('a panel document that has not attached gets nothing from the background', 
     expect(reply).toMatchObject({ ok: false, error: { code: 'forbidden' } });
   }
   expect(JSON.stringify(replies)).not.toContain(E2E_KEY);
+});
+
+test('the attached panel holds the key of the model it uses, and no other', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await storeModels(serviceWorker, server, [
+    { id: 'main', name: '主力', model: 'scenario:normal', apiKey: 'sk-e2e-main-model' },
+    { id: 'spare', name: '备用', model: 'scenario:normal', apiKey: 'sk-e2e-spare-model' },
+  ]);
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  await openPanel(page);
+  const frame = await panelFrame(page);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  // Sent from inside the attached panel, which the background does serve.
+  const [current, list] = await frame.evaluate(
+    (channel) =>
+      Promise.all(
+        ['models.current', 'models.list'].map((method) =>
+          (globalThis as unknown as RuntimeGlobal).chrome.runtime.sendMessage({
+            channel,
+            method,
+            input: {},
+          }),
+        ),
+      ),
+    RPC_CHANNEL,
+  );
+
+  expect(current).toMatchObject({
+    ok: true,
+    value: {
+      choices: [
+        { id: 'main', name: '主力' },
+        { id: 'spare', name: '备用' },
+      ],
+      current: { id: 'main', apiKey: 'sk-e2e-main-model' },
+    },
+  });
+  expect(JSON.stringify(current)).not.toContain('sk-e2e-spare-model');
+  expect(list).toMatchObject({ ok: false, error: { code: 'forbidden' } });
 });
 
 test('our content script cannot read storage.local', async ({

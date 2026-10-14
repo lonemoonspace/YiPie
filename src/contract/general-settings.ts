@@ -9,7 +9,7 @@ export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
 export const LogLevel = z.enum(LOG_LEVELS);
 export type LogLevel = z.infer<typeof LogLevel>;
 
-export const GENERAL_SETTINGS_KEY: StorageKey = 'local:general-settings';
+export const GENERAL_SETTINGS_KEY = 'local:general-settings' satisfies StorageKey;
 export const GENERAL_SETTINGS_VERSION = 1;
 
 /**

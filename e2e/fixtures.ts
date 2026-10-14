@@ -116,28 +116,81 @@ export const E2E_KEY = 'sk-e2e-not-a-real-key';
 
 /** Stores one model configuration pointing at the fake service, as the settings page would. */
 export async function useModel(serviceWorker: Worker, server: FakeServer, model: string) {
+  await storeModels(serviceWorker, server, [{ id: 'e2e', name: '', model }]);
+}
+
+export interface StoredModel {
+  id: string;
+  name: string;
+  /** A fake-service scenario (`scenario:<name>`), sent as the model name. */
+  model: string;
+  /** `E2E_KEY` unless given. */
+  apiKey?: string;
+}
+
+/**
+ * Stores model configurations pointing at the fake service, in this order.
+ * `extra` rows are stored after them as they are, such as rows no version can
+ * read. No default is chosen: the first one is in use.
+ */
+export async function storeModels(
+  serviceWorker: Worker,
+  server: FakeServer,
+  models: StoredModel[],
+  { extra = [] }: { extra?: unknown[] } = {},
+) {
+  const data = [
+    ...models.map((model) => ({
+      apiKey: E2E_KEY,
+      ...model,
+      baseURL: `${server.origin}/v1`,
+      headers: {},
+      extraBody: {},
+      contextWindow: null,
+      streamUsage: true,
+    })),
+    ...extra,
+  ];
+  await store(serviceWorker, { 'model-configs': { version: 1, data } });
+}
+
+export interface StoredPrompt {
+  id: string;
+  name: string;
+  system: string;
+  user: string;
+}
+
+/** Stores prompts, in this order, in place of the built-in one. */
+export async function storePrompts(serviceWorker: Worker, prompts: StoredPrompt[]) {
+  await store(serviceWorker, { 'prompt-configs': { version: 1, data: prompts } });
+}
+
+/** Stores the chosen defaults. */
+export async function storeDefaults(
+  serviceWorker: Worker,
+  defaults: { defaultModelId?: string; defaultPromptId?: string },
+) {
+  await store(serviceWorker, {
+    selection: { version: 1, data: { defaultModelId: null, defaultPromptId: null, ...defaults } },
+  });
+}
+
+/** Writes `storage.local` from the service worker, as the extension's own writes land there. */
+async function store(serviceWorker: Worker, items: Record<string, unknown>) {
   await serviceWorker.evaluate(
-    ({ baseURL, model, key }) =>
-      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
-        'model-configs': {
-          version: 1,
-          data: [
-            {
-              id: 'e2e',
-              name: '',
-              baseURL,
-              apiKey: key,
-              model,
-              headers: {},
-              extraBody: {},
-              contextWindow: null,
-              streamUsage: true,
-            },
-          ],
-        },
-      }),
-    { baseURL: `${server.origin}/v1`, model, key: E2E_KEY },
+    (values) => (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set(values),
+    items,
   );
+}
+
+/** What `storage.local` holds under `key`, read in the service worker. */
+export async function stored(serviceWorker: Worker, key: string): Promise<unknown> {
+  const all = await serviceWorker.evaluate(
+    (name) => (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get(name),
+    key,
+  );
+  return all[key];
 }
 
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */

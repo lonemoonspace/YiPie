@@ -14,8 +14,14 @@ import { hasOriginAccess } from '@/platform/permissions/origin-access';
 export type ChatOutcome =
   { kind: 'done'; usage: Usage | null } | { kind: 'stopped' } | { kind: 'error'; error: LlmError };
 
+/** The parts of a model configuration a request uses. */
+export type ChatConfig = Pick<
+  ModelConfig,
+  'baseURL' | 'apiKey' | 'model' | 'headers' | 'extraBody' | 'streamUsage'
+>;
+
 export interface ChatOptions {
-  config: ModelConfig;
+  config: ChatConfig;
   messages: readonly ChatMessage[];
   /** The user's stop button. Text received so far has already been delivered. */
   signal: AbortSignal;

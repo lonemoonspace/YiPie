@@ -1,3 +1,4 @@
+import type { ModelChoice } from '@/contract/rpc';
 import type { LlmError } from '@/domain/llm/errors';
 import type { Usage } from '@/domain/llm/stream';
 
@@ -5,7 +6,10 @@ import type { Usage } from '@/domain/llm/stream';
 export type PanelProblem =
   | { kind: 'attach' }
   | { kind: 'no-model' }
-  | { kind: 'models'; detail: string }
+  | { kind: 'no-prompt' }
+  | { kind: 'config'; detail: string }
+  /** The model picked from the menu could not be made the default. */
+  | { kind: 'switch'; detail: string }
   | { kind: 'extract'; detail: string }
   | { kind: 'empty-page' }
   | { kind: 'llm'; error: LlmError };
@@ -17,8 +21,10 @@ export type PanelProblem =
  */
 export interface PanelState {
   phase: 'attaching' | 'extracting' | 'requesting' | 'streaming' | 'done' | 'stopped' | 'error';
-  /** Display name of the model in use, once known. */
-  model: string | null;
+  /** What the model menu offers, as last read. Kept across runs, so the menu does not flicker. */
+  models: ModelChoice[];
+  /** The model in use: the global default, or the one just picked from the menu. */
+  modelId: string | null;
   /** Origin of the model service, for error messages. */
   origin: string | null;
   /** The page text was cut before sending. */
@@ -31,7 +37,10 @@ export interface PanelState {
 
 export type PanelEvent =
   | { type: 'start' }
-  | { type: 'requesting'; model: string; origin: string; truncated: boolean }
+  | { type: 'models'; models: ModelChoice[]; modelId: string | null }
+  /** A model picked from the menu: the old run is dropped and a new one begins. */
+  | { type: 'select'; modelId: string }
+  | { type: 'requesting'; origin: string; truncated: boolean }
   | { type: 'text'; text: string }
   | { type: 'finished'; usage: Usage | null }
   | { type: 'stopped' }
@@ -39,7 +48,8 @@ export type PanelEvent =
 
 export const INITIAL_PANEL_STATE: PanelState = {
   phase: 'attaching',
-  model: null,
+  models: [],
+  modelId: null,
   origin: null,
   truncated: false,
   text: '',
@@ -53,18 +63,31 @@ export function isBusy(state: PanelState): boolean {
   );
 }
 
+/** Display name of the model in use, or empty while unknown. */
+export function modelName(state: PanelState): string {
+  return state.models.find((model) => model.id === state.modelId)?.name ?? '';
+}
+
 export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
   switch (event.type) {
     case 'start':
-      return { ...INITIAL_PANEL_STATE, phase: 'extracting' };
-    case 'requesting':
       return {
-        ...state,
-        phase: 'requesting',
-        model: event.model,
-        origin: event.origin,
-        truncated: event.truncated,
+        ...INITIAL_PANEL_STATE,
+        phase: 'extracting',
+        models: state.models,
+        modelId: state.modelId,
       };
+    case 'models':
+      return { ...state, models: event.models, modelId: event.modelId };
+    case 'select':
+      return {
+        ...INITIAL_PANEL_STATE,
+        phase: 'extracting',
+        models: state.models,
+        modelId: event.modelId,
+      };
+    case 'requesting':
+      return { ...state, phase: 'requesting', origin: event.origin, truncated: event.truncated };
     case 'text':
       // A late chunk after a stop or an error changes nothing.
       if (state.phase !== 'requesting' && state.phase !== 'streaming') return state;

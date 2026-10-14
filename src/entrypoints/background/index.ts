@@ -4,10 +4,13 @@ import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
+import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { registerRpcServer } from '@/platform/rpc/server';
+import { createBackupsService } from '@/platform/settings/backups-service';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
+import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
@@ -17,7 +20,11 @@ const logger = createLogger('background');
 export default defineBackground(() => {
   const store = getExtensionStore();
   const settings = createGeneralSettingsService(store, writeQueue);
-  const models = createModelConfigsService(store, writeQueue);
+  const models = createModelConfigsService(store, writeQueue, {
+    releaseOrigins: (patterns) => releaseOriginAccess(patterns),
+  });
+  const prompts = createPromptConfigsService(store, writeQueue);
+  const backups = createBackupsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
 
   // Register listeners first: the message or click being handled may be what
@@ -34,6 +41,19 @@ export default defineBackground(() => {
       'models.list': () => models.list(),
       'models.add': (draft) => models.add(draft),
       'models.update': ({ id, patch }) => models.update(id, patch),
+      'models.remove': ({ id }) => models.remove(id),
+      'models.move': ({ id, direction }) => models.move(id, direction),
+      'models.setDefault': ({ id }) => models.setDefault(id),
+      'models.current': () => models.current(),
+      'models.choose': ({ id }) => models.choose(id),
+      'prompts.list': () => prompts.list(),
+      'prompts.add': (draft) => prompts.add(draft),
+      'prompts.update': ({ id, patch }) => prompts.update(id, patch),
+      'prompts.remove': ({ id }) => prompts.remove(id),
+      'prompts.move': ({ id, direction }) => prompts.move(id, direction),
+      'prompts.setDefault': ({ id }) => prompts.setDefault(id),
+      'backups.list': () => backups.list(),
+      'backups.remove': ({ key, at }) => backups.remove(key, at),
       'content.hello': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         return { nonce: await panels.issue(tabId) };

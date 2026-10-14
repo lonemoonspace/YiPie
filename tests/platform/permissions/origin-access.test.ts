@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   hasOriginAccess,
+  releaseOriginAccess,
   requestOriginAccess,
   type PermissionsLike,
 } from '@/platform/permissions/origin-access';
@@ -12,6 +13,7 @@ function permissions(overrides: Partial<PermissionsLike> = {}) {
   return {
     request: vi.fn(() => Promise.resolve(true)),
     contains: vi.fn(() => Promise.resolve(true)),
+    remove: vi.fn(() => Promise.resolve(true)),
     ...overrides,
   } satisfies PermissionsLike;
 }
@@ -46,5 +48,39 @@ describe('origin access', () => {
     expect(logged).toContain('https://gw.example:8443/*');
     expect(logged).not.toContain('query-secret');
     expect(logged).not.toContain('#part');
+  });
+});
+
+describe('releasing origin access', () => {
+  it('gives back each pattern on its own', async () => {
+    const remove = vi.fn(() => Promise.resolve(true));
+
+    await releaseOriginAccess(
+      ['https://a.example/*', 'http://localhost:11434/*'],
+      permissions({ remove }),
+    );
+
+    expect(remove.mock.calls).toEqual([
+      [{ origins: ['https://a.example/*'] }],
+      [{ origins: ['http://localhost:11434/*'] }],
+    ]);
+  });
+
+  it('keeps going past a pattern the browser will not drop, and never throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const api = permissions({
+      remove: vi.fn(({ origins }: { origins: string[] }) =>
+        origins[0] === 'http://127.0.0.1/*'
+          ? Promise.reject(new Error('You cannot remove required permissions.'))
+          : Promise.resolve(true),
+      ),
+    });
+
+    await expect(
+      releaseOriginAccess(['http://127.0.0.1/*', 'https://b.example/*'], api),
+    ).resolves.toBeUndefined();
+
+    expect(api.remove).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls.flat().map(String).join(' ')).toContain('http://127.0.0.1/*');
   });
 });
