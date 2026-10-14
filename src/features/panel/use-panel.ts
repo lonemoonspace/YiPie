@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import type { ModelConfig } from '@/contract/model-config';
 import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
+import type { PanelModelConfig } from '@/contract/rpc';
 import { t } from '@/domain/i18n';
 import { buildPromptMessages, promptValues } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
@@ -35,7 +35,7 @@ export function usePanel(): PanelControls {
 
     // The defaults of both lists: the panel always uses what the settings say.
     // Of the models it gets only the menu and the one in use, key included.
-    let config: ModelConfig | undefined;
+    let config: PanelModelConfig | undefined;
     let prompt: PromptConfig | undefined;
     try {
       const [models, prompts] = await Promise.all([

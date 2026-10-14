@@ -5,7 +5,12 @@ import {
   displayName,
   type ModelConfigPatch,
 } from '@/contract/model-config';
-import type { ListView, PanelModelsView, ParsedModelConfigDraft } from '@/contract/rpc';
+import type {
+  ListView,
+  PanelModelConfig,
+  PanelModelsView,
+  ParsedModelConfigDraft,
+} from '@/contract/rpc';
 import { originsNoLongerNeeded } from '@/domain/origins';
 import type { Queue, StorageLike } from '@/platform/storage';
 import { createConfigListService, type ConfigListService } from './config-list-service';
@@ -68,8 +73,24 @@ export function createModelConfigsService(
  * configuration it calls. Another model's key never reaches the panel.
  */
 export function forPanel(view: ListView<ModelConfig>): PanelModelsView {
+  const current = view.items.find((config) => config.id === view.defaultId);
   return {
     choices: view.items.map((config) => ({ id: config.id, name: displayName(config) })),
-    current: view.items.find((config) => config.id === view.defaultId) ?? null,
+    current: current === undefined ? null : requestFields(current),
+  };
+}
+
+/** The known fields, copied one by one: nothing else stored on the row comes along. */
+function requestFields(config: ModelConfig): PanelModelConfig {
+  return {
+    id: config.id,
+    name: config.name,
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+    model: config.model,
+    headers: config.headers,
+    extraBody: config.extraBody,
+    contextWindow: config.contextWindow,
+    streamUsage: config.streamUsage,
   };
 }

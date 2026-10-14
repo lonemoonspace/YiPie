@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { BackedUpKey, BackupsView } from './backups';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
-import { ModelConfig, ModelConfigDraft, ModelConfigPatch } from './model-config';
+import {
+  BaseURL,
+  ExtraBody,
+  HeaderMap,
+  ModelConfig,
+  ModelConfigDraft,
+  ModelConfigPatch,
+} from './model-config';
 import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
 import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
@@ -78,14 +85,34 @@ export const ModelChoice = z.object({ id: z.string(), name: z.string() });
 export type ModelChoice = z.infer<typeof ModelChoice>;
 
 /**
+ * The model in use, as the panel receives it: the fields a request needs and
+ * nothing else. `ModelConfig` keeps fields it does not know (`z.looseObject`),
+ * so whatever else is stored on the row (a field a newer version added,
+ * anything odd) would ride along; this schema drops it, after
+ * `forPanel` has already copied the known fields one by one.
+ */
+export const PanelModelConfig = z.object({
+  id: z.string(),
+  name: z.string(),
+  baseURL: BaseURL,
+  apiKey: z.string(),
+  model: z.string(),
+  headers: HeaderMap,
+  extraBody: ExtraBody,
+  contextWindow: z.number().int().positive().nullable(),
+  streamUsage: z.boolean(),
+});
+export type PanelModelConfig = z.infer<typeof PanelModelConfig>;
+
+/**
  * What the panel gets about models: the menu, without credentials, and the
- * full configuration of the one model in use (the default). The panel needs
- * that key to call the model and no other, so it never holds another model's
- * key (docs/development-plan.md §4.3, §8).
+ * one model in use (the default). The panel needs that key to call the model
+ * and no other, so it never holds another model's key
+ * (docs/development-plan.md §4.3, §8).
  */
 export const PanelModelsView = z.object({
   choices: z.array(ModelChoice),
-  current: ModelConfig.nullable(),
+  current: PanelModelConfig.nullable(),
 });
 export type PanelModelsView = z.infer<typeof PanelModelsView>;
 

@@ -290,6 +290,16 @@ describe('model configurations: what the panel gets', () => {
     expect(store.dump()[SELECTION_KEY]).toMatchObject({ data: { defaultModelId: 'b' } });
   });
 
+  it('leaves out every field it does not know, whatever else the row holds', async () => {
+    const odd = { ...keyed('a', 'sk-a'), futureToken: 'tok-from-a-newer-version', extra: { x: 1 } };
+    const { models } = setup(list(odd));
+
+    for (const panel of [await models.current(), await models.choose('a')]) {
+      expect(panel.current).toEqual(keyed('a', 'sk-a'));
+      expect(JSON.stringify(panel)).not.toContain('tok-from-a-newer-version');
+    }
+  });
+
   it('has nothing in use while there are no models', async () => {
     const { models } = setup();
     expect(await models.current()).toEqual({ choices: [], current: null });

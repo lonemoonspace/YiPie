@@ -334,6 +334,29 @@ describe('RPC dispatcher: model configurations', () => {
     expect(JSON.stringify(reply)).not.toContain('sk-other-model');
   });
 
+  it('drops fields the model in use carries beyond what a request needs', async () => {
+    const inUse = {
+      id: 'a',
+      name: '',
+      baseURL: 'https://api.example.com/v1',
+      apiKey: 'sk-a',
+      model: 'm',
+      headers: {},
+      extraBody: {},
+      contextWindow: null,
+      streamUsage: true,
+    };
+    const { dispatch } = setup({
+      'models.current': () =>
+        Promise.resolve({ choices: [], current: { ...inUse, futureToken: 'tok-unknown' } }),
+    });
+
+    const reply = await dispatch(request('models.current'), PANEL);
+
+    expect(reply).toEqual({ ok: true, value: { choices: [], current: inUse } });
+    expect(JSON.stringify(reply)).not.toContain('tok-unknown');
+  });
+
   it.each([
     ['models.move', { id: 'a', direction: 'top' }],
     ['models.remove', { id: '' }],
