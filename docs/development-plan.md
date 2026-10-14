@@ -104,7 +104,7 @@
 1. 用户手势：点工具栏图标、右键菜单或快捷键（都会授予当前页的 activeTab）。
 2. SW 先等隔离闸门（`storage.local` 关上之前不注入，失败就不注入），再用 `executeScript` 注入内容脚本。受限页面不注入，在工具栏图标上给出提示。
 3. 内容脚本立即画出宿主外壳，经 `content.hello` 取得一个新 nonce（每挂载一次面板 iframe 换一个，登记在 `storage.session`），在外壳里嵌入 `panel.html#<nonce>`。iframe 带 `credentialless`，带 COEP 的页面也能加载（附录 F）。
-4. 面板的第一个 RPC 是 `panel.attach(nonce)`。SW 核对「nonce + 发送方标签页」一致，把 nonce 绑定到这个面板文档（`documentId`）；之后只有它能读这一页。
+4. 面板的第一个 RPC 是 `panel.attach(nonce)`。SW 核对「nonce + 发送方标签页」一致，把 nonce 绑定到这个面板文档（`documentId`）。之后后台只为它服务：除 `panel.attach` 外，面板的每个调用都要求发送方就是这个文档，没接上的面板文档（例如页面自己加载的）什么也拿不到。
 5. 面板经 RPC 请求正文：SW 用 `tabs.sendMessage` 问内容脚本（frameId 0），用 schema 校验回复，再转交给面板。
 6. 面板经 RPC 读取模型配置（`models.list`），渲染 Prompt，`fetch` 用户的服务，流式渲染。阶段 1 起改为经后台读，不直接读 `storage.local`：解读存储的只有一处，读也走隔离闸门（附录 F）。
 7. 写入（快照、配置变更）一律经 RPC，交给 SW 的写队列。
@@ -121,7 +121,7 @@
 | 分层单向依赖             | `contract → domain → platform → features → entrypoints`    | ESLint `import-x/no-restricted-paths`（反向依赖直接报错）                                                                                                                                                        |
 | 运行上下文边界           | 附录 A 中每个 platform 模块都标注了允许的上下文            | ESLint（纯类型导入放行）。**SW**：background 入口不得引用 `features/**`；contract / domain / platform / background 不得在运行时引用 React，所以 SW 能触及的代码里没有 React。**内容脚本**（`entrypoints/injected.ts`、`platform/{panel-host,extract}/**`、`platform/rpc/lite-client.ts`）：不得在运行时引用 React、zod、定义 schema 的 contract 文件、`platform/{storage,llm,settings}`、`features`（内容脚本侧的 RPC 客户端不做 zod 校验，校验在服务端）。都已落地，并用故意违规的临时文件自测过 |
 | 单一写队列               | `src/platform/storage/tx.ts`                               | `createRepo(...).update` 在队列内完成读改写；`wxt-store` 只允许 `platform/storage/**` 引用（ESLint）                                                                                                              |
-| RPC 全校验 + 调用方策略  | `platform/rpc/server.ts`；方法表在 `contract/rpc.ts`       | 每个方法声明允许的调用方（设置页 / 面板 / 内容脚本）。服务端统一校验：发送方是本扩展、调用方类型在白名单内、入参通过 zod；未声明即拒绝                                                                             |
+| RPC 全校验 + 调用方策略  | `platform/rpc/server.ts`；方法表在 `contract/rpc.ts`       | 每个方法声明允许的调用方（设置页 / 面板 / 内容脚本）。服务端统一校验：发送方是本扩展、调用方类型在白名单内、入参通过 zod；未声明即拒绝。调用方是面板时，除 `panel.attach` 外还须是本 tab 已接上的文档 |
 | 凭据隔离                 | SW 启动时调用 `storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })`，经 `ensureLocalStorageIsolated()` 闸门使用，失败即关闭（fail closed） | 单测：浏览器确认隔离之前不运行任何 RPC handler、不注入内容脚本，确认失败时 RPC 一律返回 `storage-not-isolated`、注入改为图标提示。E2E：在内容脚本的隔离世界里读 `storage.local` 失败 |
 | 模型请求只在扩展页面发起 | `src/platform/llm/**`                                      | 只允许 `features/{panel,settings}` 引用（ESLint，阶段 1 落地）                                                                                                                                                   |
 | 权限最小化               | `wxt.config.ts` 的 `manifest`                              | `scripts/check-manifest.ts` 比对产物 manifest 与附录 C（清单在 `scripts/lib/manifest-policy.ts`），多一项或少一项都失败；并扫描产物，确认 E2E 构建专用的触发入口没有混进生产构建                             |
@@ -224,7 +224,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | 1. iframe 嵌入 | 普通页、严格 CSP（含 `frame-src 'none'`）的页都能加载。**带 COEP 的页不能**，manifest 里声明 COEP 也没用；给 iframe 加 `credentialless` 后能加载，`chrome.storage`、消息和跨域豁免都照常，已采用。面板消息的 `sender.url` 用的是扩展的固定 id（不是动态 GUID），调用方判定无需改动。页面用固定 URL 自行嵌入 `panel.html` 只会得到错误页 |
 | 2. 跨域与本地网络 | 让测试页被当作公网页面（`--ip-address-space-overrides`），面板对 `http://localhost` 的流式请求不被拦截；同一个页面自己的脚本去请求 localhost 则被「本地网络访问」拦住，说明该限制是开着的，只是不作用于有主机权限的扩展面板。不带 CORS 头的响应也能读到，主机权限的跨域豁免在 `use_dynamic_url` 下成立。**这是 Chromium 141 的结果，当前 Chrome 稳定版需要你复核** |
 | 3. Edge | 需要你在 Edge 当前稳定版上手工验证（附录 H） |
-| 4. 就绪耗时 | 外壳可见：脚本里约 4 ms，E2E 里约 17–19 ms（含 Playwright 往返）；面板就绪（接上并读完模型配置）：E2E 里约 145–155 ms |
+| 4. 就绪耗时 | 外壳可见：脚本里约 4 ms，E2E 里约 18–22 ms（含 Playwright 往返）；面板就绪（接上并读完模型配置）：E2E 里约 150–175 ms |
 | 5. 体积 | 见 §9：各入口都远低于预算，预算不变 |
 
 **交付物**
@@ -269,7 +269,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 1. **请求只发协议必需的字段。** 默认不发 `temperature` 和 `max_tokens`：OpenAI 的推理模型不接受 `max_tokens`（要求 `max_completion_tokens`），也不接受自定义温度，而很多兼容服务只认识 `max_tokens`。需要时由用户写进 extraBody——服务是用户的，参数也由用户定。
 2. **权限申请不阻塞保存。** 保存时对 base URL 的 origin 调 `permissions.request`；用户拒绝也照样保存，配置标为「未授权」，面板遇到相应错误时给出「去授权」入口。服务本身允许浏览器跨域时，未授权也可能可用，所以「未授权」只是提示，不拦请求。
 3. **触发即总结。** 图标、快捷键触发时，面板出现后直接对当前页开始总结（阶段 3 起：本页已有对话就先恢复）。
-4. **面板只在登记过的标签页工作。** 页面自己嵌入 `panel.html` 时，`attach` 失败，面板什么也不做。
+4. **面板只在登记过的标签页工作。** 页面自己嵌入 `panel.html` 时，`attach` 失败，面板什么也不做。后台也不依赖面板代码自律：没接上的面板文档，除 `panel.attach` 外的调用一律拒绝。
 5. **取消是一等公民。** 停止 → `AbortController.abort()` → 停止读取并取消响应体；已收到的内容保留，状态为「已停止」。关闭面板或离开页面时，iframe 销毁，请求随之结束。
 6. **重复注入幂等。** 同一文档里多次触发只会复用已有面板：守卫是隔离世界里的标志，加上自己持有的宿主引用，不查 DOM，所以页面预先放置的同名元素挡不住挂载。
 7. **本阶段不自动重试。** 重试策略在阶段 4 和完整的错误分类一起定。
@@ -282,10 +282,13 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
   - 请求体构造：extraBody 合并、保留键不可覆盖、headers 非字符串值被拒；
   - SSE 归一，语料覆盖：普通、分块边界切在多字节字符中间、注释行、`[DONE]`、流中错误、无 usage、末尾 usage；
   - base URL 规范化、可注入 URL 判定、错误分类 v0；
-  - 注入等待隔离闸门：闸门未确认时不调用 `executeScript`，确认失败时不注入。
+  - 注入等待隔离闸门：闸门未确认时不调用 `executeScript`，确认失败时不注入；
+  - 面板必须先接上：未接上的面板文档调用 `models.list`、`page.getContext` 被拒，handler 不运行；
+  - 错误详情脱敏：Key（再短也算）、自定义请求头的值、base URL 的查询参数在回显时都被替换；浏览器不会发送的请求头在保存时被拒；日志里的 URL 只记 origin。
 - [x] Markdown 安全回归（用例清单见 §8；三处防线分别故意破坏，测试都会失败）
 - [x] E2E：fixture 页 → 触发 → 面板出现 → 文本逐步流出 → 停止后内容保留；另有一条正常完成的路径
 - [x] E2E：在内容脚本的隔离世界里调用 `storage.local.get` 失败
+- [x] E2E：直接打开 `panel.html`（无从接上）时，从面板里发出的 `models.list`、`page.getContext` 都被拒，回复里没有 Key
 - [x] E2E：页面预置同名元素时面板仍能挂载；页面清空并替换 body 时面板原样不动、不用重挂（宿主挂在 `<html>` 下）；页面删掉宿主后面板重新挂载并换新的 nonce；页面自行嵌入 `panel.html` 时连页面都加载不出来，也就无从 `attach`
 - [ ] 手工冒烟：附录 H 中阶段 1 的各项
 - [ ] 手工：你用真实 Key 在真实页面上总结一次，结论写进 CHANGELOG
@@ -296,6 +299,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
   - D3 / D4 的主要风险在 Chromium 141 上都过了：按需注入、页面内扩展 iframe（含严格 CSP 与 COEP 页面）、本地模型、主机权限的跨域豁免；
   - 完整路径「触发 → 外壳 → 面板接上 → 读正文 → 流式请求 → 安全渲染 → 停止 / 完成」在真实浏览器里跑通，假服务不带 CORS 头，请求靠的就是主机权限；
   - 凭据隔离 fail closed：内容脚本读不到 `storage.local`，闸门不通过就不注入；
+  - 后台只为已接上的面板服务，错误详情和日志里不出现凭据（PR #2 审阅后补上，见附录 F）；
   - 模型输出注入不了标记，也让面板加载不了图片。
 - **怎么复现**：`npm ci && npm run gate && npm run build && npm run check:manifest && npm run check:bundle && npm run build:e2e && npm run test:e2e`
 - **还没做**：
@@ -564,10 +568,10 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 每个阶段结束时过一遍，与本阶段相关的项必须仍然成立：
 
-- [ ] **RPC 调用方策略**：发送方必须是本扩展（`sender.id`）；调用方类型（由 `sender.url` 的协议与路径、`sender.tab`、`frameId` 判定）必须在该方法的白名单内；入参通过 zod 解析。内容脚本只能调用登记握手和「打开设置页」；配置变更与导出只接受设置页，例外逐条列在 `contract/rpc.ts`（如面板里切换默认模型、面板记录 `stream_options` 降级）
-- [ ] **凭据隔离**：`storage.local` 只对扩展页面开放，且 fail closed：浏览器确认之前不处理 RPC、不注入内容脚本，确认失败时拒绝（下一次请求再重试）；凭据不进内容脚本、不进日志（脱敏）、不进快照，导出时默认剔除
+- [ ] **RPC 调用方策略**：发送方必须是本扩展（`sender.id`）；调用方类型（由 `sender.url` 的协议与路径、`sender.tab`、`frameId` 判定）必须在该方法的白名单内；调用方是面板时，除 `panel.attach` 外还须是本 tab 已接上的文档；入参通过 zod 解析。内容脚本只能调用登记握手和「打开设置页」；配置变更与导出只接受设置页，例外逐条列在 `contract/rpc.ts`（如面板里切换默认模型、面板记录 `stream_options` 降级）
+- [ ] **凭据隔离**：`storage.local` 只对扩展页面开放，且 fail closed：浏览器确认之前不处理 RPC、不注入内容脚本，确认失败时拒绝（下一次请求再重试）；凭据不进内容脚本、不进日志、不进快照，导出时默认剔除。展示给用户的错误详情按配置里的全部凭据脱敏（Key、每个请求头的值、base URL 的查询参数，不论长短）；日志里的 URL 只记 origin：base URL 的查询参数可能带 key，页面 URL 可能带 token
 - [ ] **不加 `externally_connectable`**：一旦加上，发送方校验就从「纵深防御」变成「唯一屏障」，需要重新评估
-- [ ] **面板嵌入校验**：`panel.html` 以 `use_dynamic_url` 暴露，是唯一的 web 可访问资源；面板只在后台登记过的标签页里工作
+- [ ] **面板嵌入校验**：`panel.html` 以 `use_dynamic_url` 暴露，是唯一的 web 可访问资源；面板只在后台登记过的标签页里工作。任何得知其 URL 的页面都能加载它，所以「是面板页」本身证明不了什么：后台只为已接上的面板文档服务
 - [ ] **Markdown 注入面**：
   - `html` token 一律转义；
   - `link` 只放行 `http(s)` / `mailto` 并转义，悬停时显示真实目标；
@@ -589,16 +593,16 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 | 指标                                 | 预算                       | 依据 / 当前                                                                                         | 由什么看守          |
 | ------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------- |
-| `background.js`                      | < 150 kB                   | 阶段 1 实测 115.56 kB（阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码          | CI（阶段 0 起）     |
-| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 1 实测 45.37 kB：Readability、外壳、提取；不含 React 与 zod                                    | CI                  |
-| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 1 实测 318.20 kB：react-dom、react、scheduler、zod 与共用代码（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
-| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 1 实测 60.65 kB：marked、eventsource-parser、客户端、Markdown 管线与面板                      | CI                  |
-| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 1 实测 555.34 kB（阶段 0 为 407.85 kB）；按各项估算，完成后约 700–800 kB                       | CI                  |
+| `background.js`                      | < 150 kB                   | 阶段 1 实测 116.72 kB（阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码          | CI（阶段 0 起）     |
+| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 1 实测 45.48 kB：Readability、外壳、提取；不含 React 与 zod                                    | CI                  |
+| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 1 实测 318.91 kB：react-dom、react、scheduler、zod 与共用代码（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
+| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 1 实测 61.28 kB：marked、eventsource-parser、客户端、Markdown 管线与面板                      | CI                  |
+| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 1 实测 558.04 kB（阶段 0 为 407.85 kB）；按各项估算，完成后约 700–800 kB                       | CI                  |
 | SW 冷启动引入的静态资源              | 不得出现 > 100 kB 的新资源 | 无词表                                                                                              | review + 体积报告   |
-| 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 阶段 1：脚本里约 4 ms；E2E 里约 17–19 ms（含 Playwright 往返）                                      | 阶段 1 基准；E2E 只设宽松上限 |
-| 面板可交互（注入 → 面板就绪）        | < 300 ms                   | 阶段 1：E2E 里约 145–155 ms（接上并读完模型配置，含 Playwright 往返）                               | 阶段 1 基准，记录不卡 CI |
-| 单测总时长                           | < 10 s                     | 阶段 1 实测约 3.4 s（28 文件 / 257 用例）                                                           | CI 时长             |
-| E2E 单场景                           | < 60 s                     | 阶段 1 实测每条约 0.7–2.0 s（25 条共约 26–28 s）                                                    | Playwright timeout  |
+| 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 阶段 1：脚本里约 4 ms；E2E 里约 18–22 ms（含 Playwright 往返）                                      | 阶段 1 基准；E2E 只设宽松上限 |
+| 面板可交互（注入 → 面板就绪）        | < 300 ms                   | 阶段 1：E2E 里约 150–175 ms（接上并读完模型配置，含 Playwright 往返）                               | 阶段 1 基准，记录不卡 CI |
+| 单测总时长                           | < 10 s                     | 阶段 1 实测约 3.8 s（29 文件 / 290 用例）                                                           | CI 时长             |
+| E2E 单场景                           | < 60 s                     | 阶段 1 实测每条约 0.7–2.1 s（26 条共约 26–29 s）                                                    | Playwright timeout  |
 
 阶段 1 结束时用实测值校准过一次：各入口都远低于预算，预算不变；「面板可交互」定为 300 ms。之后要上调必须在附录 F 写明理由。
 
@@ -790,7 +794,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-10-13 | v3：把界面改为浏览器侧边栏。这是误记——D4 的选择是 B（页面内扩展 iframe），见下一行 |
 | 2026-10-13 | v4，更正 v3 并落实 §11 的已决事项：<br>· D4 恢复为页面内扩展 iframe 面板；浏览器侧边栏列为被否决方案，并作为「页面无法嵌入 iframe」时的退路<br>· 去掉 popup：点图标直接在页面里打开面板并开始总结；受限页面在图标上提示<br>· 换页后靠图标、右键菜单或快捷键再触发，不做全站权限与按站点授权（D3）<br>· D2 补充原型实测（110 行、5.4 kB）<br>· 阶段 0 改为在本仓库重做，原型环境的数据移到附录 E 作参考；manifest 与体积检查提前到阶段 0<br>· 开放问题全部关闭，改为「已决事项」；只发 GitHub Release，只做 Chrome / Edge，界面中英文可切换<br>· 新增附录 H（触发路径手工冒烟清单） |
 | 2026-10-13 | v4.1，阶段 0 完成：<br>· §3、§4.1 标记完成，补上阶段小结；附录 E 换成本仓库的实测数据，原型数据保留作参考<br>· 交付物按实际调整：隔离备份（`quarantine.ts`）从阶段 2 提前到阶段 0；不设 `contract/index.ts` 汇总导出；检查脚本改用 TypeScript（`scripts/*.ts`）<br>· §2.2：SW 的运行上下文边界在阶段 0 落地（ESLint），内容脚本的规则随阶段 1 加入<br>· §4.2：新增 `contract/rpc-wire.ts`，让内容脚本拿通道名时不带上 zod<br>· §4.3：隔离备份的查看、导出、删除归入阶段 2 的验收<br>· §7：隔离键改为每个 key 一个列表 `<区域>:quarantine:<key>`；写明「加字段不升版本」和 patch 的写法<br>· §9：换成构建产物按 source map 归因的实测值。zod 与 React 都比估计大，预算不变；记下 `zod/mini` 作为 SW 逼近预算时第一个评估的办法<br>· 附录 B 增加提交类型 `ci`；附录 G 已迁入 `AGENTS.md`<br>· 凭据隔离改为 fail closed（PR 审阅意见）：§2.2、§4.1 小结、§8 写明浏览器确认之前不运行 RPC handler、确认失败就拒绝；§4.2 的注入与验收加上「先等隔离闸门」 |
-| 2026-10-14 | v4.2，阶段 1 实现完成（待手工验证）：<br>· **技术验证**（Playwright 自带的 Chromium 141，用一次性的手写扩展做实验）：<br>　1）严格 CSP（含 `frame-src 'none'`）的页面能嵌入 `use_dynamic_url` 的 `panel.html`；带 `Cross-Origin-Embedder-Policy: require-corp` 或 `credentialless` 的页面不能，在 manifest 声明 `cross_origin_embedder_policy` 也不行，给 iframe 加 `credentialless` 后可以，且 `chrome.storage`、消息、主机权限的跨域豁免都照常（连 COOP + COEP 完全跨源隔离的页面也行）；面板消息的 `sender.url` 是扩展的固定 id，`documentId` 可用；页面用固定 URL 嵌入面板只得到错误页<br>　2）把 https 测试页设为公网地址（`--ip-address-space-overrides`）：面板对 `http://localhost` 的流式请求成功，带不带 CORS 头都行；同一页面自己的脚本请求 localhost 被「本地网络访问」拦下，关掉该功能后才通过，说明限制开着、只是不管有主机权限的扩展面板<br>　3）按 tab 设置的角标与标题在跨文档导航、刷新时由 Chrome 清除，因此不监听 `tabs.onUpdated`（否则每次页面加载都会唤醒 SW）<br>　4）含端口的匹配模式（`http://localhost:11434/*`）能被 `permissions.contains` 接受，也能匹配更宽的授权<br>　5）就绪与体积见 §9<br>· **与交付物表的出入**：内容脚本入口叫 `injected.ts`（WXT 会把 `content.ts` 写进 manifest）；面板经 `models.list` 读模型配置，不直接读 `storage.local`；nonce 在 `content.hello` 时签发，页面删掉宿主后能换新的；错误分类 v0 加了超时与流中错误；正文长度上限放在 `platform/extract`<br>· §2.1、§2.2、§6、§9（预算不变，「面板可交互」定为 300 ms）、§10 风险 3、附录 A、C、H 同步更新 |
+| 2026-10-14 | v4.2，阶段 1 实现完成（待手工验证）：<br>· **技术验证**（Playwright 自带的 Chromium 141，用一次性的手写扩展做实验）：<br>　1）严格 CSP（含 `frame-src 'none'`）的页面能嵌入 `use_dynamic_url` 的 `panel.html`；带 `Cross-Origin-Embedder-Policy: require-corp` 或 `credentialless` 的页面不能，在 manifest 声明 `cross_origin_embedder_policy` 也不行，给 iframe 加 `credentialless` 后可以，且 `chrome.storage`、消息、主机权限的跨域豁免都照常（连 COOP + COEP 完全跨源隔离的页面也行）；面板消息的 `sender.url` 是扩展的固定 id，`documentId` 可用；页面用固定 URL 嵌入面板只得到错误页<br>　2）把 https 测试页设为公网地址（`--ip-address-space-overrides`）：面板对 `http://localhost` 的流式请求成功，带不带 CORS 头都行；同一页面自己的脚本请求 localhost 被「本地网络访问」拦下，关掉该功能后才通过，说明限制开着、只是不管有主机权限的扩展面板<br>　3）按 tab 设置的角标与标题在跨文档导航、刷新时由 Chrome 清除，因此不监听 `tabs.onUpdated`（否则每次页面加载都会唤醒 SW）<br>　4）含端口的匹配模式（`http://localhost:11434/*`）能被 `permissions.contains` 接受，也能匹配更宽的授权<br>　5）就绪与体积见 §9<br>· **与交付物表的出入**：内容脚本入口叫 `injected.ts`（WXT 会把 `content.ts` 写进 manifest）；面板经 `models.list` 读模型配置，不直接读 `storage.local`；nonce 在 `content.hello` 时签发，页面删掉宿主后能换新的；错误分类 v0 加了超时与流中错误；正文长度上限放在 `platform/extract`<br>· §2.1、§2.2、§6、§9（预算不变，「面板可交互」定为 300 ms）、§10 风险 3、附录 A、C、H 同步更新<br>· **PR #2 审阅意见**（3 项安全问题，已修复）：1）后台只为已接上的面板文档服务，此前 `models.list` 对任何 `panel.html` 文档都开放，只靠面板代码不在接上前调用；2）错误详情按配置里的全部凭据脱敏（Key、每个请求头的值、base URL 的查询参数），短 key 不再跳过；浏览器不会发送的请求头（`Cookie`、`Host`、`Proxy-*`、`Sec-*` 等）在保存时拒绝；3）日志里的 URL 只记 origin。§2.1、§2.2、§4.2、§8、§9 同步 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
