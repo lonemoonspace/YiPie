@@ -73,6 +73,22 @@ export type ListView<T> = Omit<z.infer<ReturnType<typeof listView>>, 'items'> & 
 export const ModelConfigsView = listView(ModelConfig);
 export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
 
+/** One entry of the panel's model menu: a name, no credentials. */
+export const ModelChoice = z.object({ id: z.string(), name: z.string() });
+export type ModelChoice = z.infer<typeof ModelChoice>;
+
+/**
+ * What the panel gets about models: the menu, without credentials, and the
+ * full configuration of the one model in use (the default). The panel needs
+ * that key to call the model and no other, so it never holds another model's
+ * key (docs/development-plan.md §4.3, §8).
+ */
+export const PanelModelsView = z.object({
+  choices: z.array(ModelChoice),
+  current: ModelConfig.nullable(),
+});
+export type PanelModelsView = z.infer<typeof PanelModelsView>;
+
 export const PromptConfigsView = listView(PromptConfig);
 export type PromptConfigsView = z.infer<typeof PromptConfigsView>;
 
@@ -95,13 +111,12 @@ export const RPC_METHODS = {
     output: GeneralSettingsView,
     callers: ['options'],
   },
-  // The panel needs the key to call the model; it is an extension page, so the
-  // key never reaches a content script or the page (docs/development-plan.md §8).
-  // Like every panel call but `panel.attach`, it is served to attached panels only.
+  // Every configuration, keys included: the settings page only. The panel
+  // reads `models.current` instead.
   'models.list': {
     input: z.strictObject({}),
     output: ModelConfigsView,
-    callers: ['options', 'panel'],
+    callers: ['options'],
   },
   'models.add': {
     input: ModelConfigDraft,
@@ -123,12 +138,26 @@ export const RPC_METHODS = {
     output: ModelConfigsView,
     callers: ['options'],
   },
-  // The one change a panel may make: its model menu sets the global default
-  // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
   'models.setDefault': {
     input: SetDefaultInput,
     output: ModelConfigsView,
-    callers: ['options', 'panel'],
+    callers: ['options'],
+  },
+  // The model menu and the model in use, with only that model's key. The key
+  // stays in extension pages: it never reaches a content script or the page
+  // (docs/development-plan.md §8). Like every panel call but `panel.attach`,
+  // this and `models.choose` are served to attached panels only.
+  'models.current': {
+    input: z.strictObject({}),
+    output: PanelModelsView,
+    callers: ['panel'],
+  },
+  // The one change a panel may make: its model menu sets the global default
+  // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
+  'models.choose': {
+    input: SetDefaultInput,
+    output: PanelModelsView,
+    callers: ['panel'],
   },
   // The panel reads the default prompt; prompts change only in the settings
   // page (docs/development-plan.md §4.3, decision 7).

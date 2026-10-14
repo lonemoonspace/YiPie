@@ -1,3 +1,4 @@
+import type { ModelChoice } from '@/contract/rpc';
 import type { LlmError } from '@/domain/llm/errors';
 import type { Usage } from '@/domain/llm/stream';
 
@@ -12,12 +13,6 @@ export type PanelProblem =
   | { kind: 'extract'; detail: string }
   | { kind: 'empty-page' }
   | { kind: 'llm'; error: LlmError };
-
-/** One entry of the model menu. */
-export interface ModelChoice {
-  id: string;
-  name: string;
-}
 
 /**
  * attaching → extracting → requesting → streaming → done / stopped / error

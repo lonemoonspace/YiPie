@@ -2,18 +2,24 @@ import {
   MODEL_CONFIGS_KEY,
   MODEL_CONFIGS_VERSION,
   ModelConfig,
+  displayName,
   type ModelConfigPatch,
 } from '@/contract/model-config';
-import type { ParsedModelConfigDraft } from '@/contract/rpc';
+import type { ListView, PanelModelsView, ParsedModelConfigDraft } from '@/contract/rpc';
 import { originsNoLongerNeeded } from '@/domain/origins';
 import type { Queue, StorageLike } from '@/platform/storage';
 import { createConfigListService, type ConfigListService } from './config-list-service';
 
-export type ModelConfigsService = ConfigListService<
+export interface ModelConfigsService extends ConfigListService<
   ModelConfig,
   ParsedModelConfigDraft,
   ModelConfigPatch
->;
+> {
+  /** What the panel may hold: the menu without credentials, and the model in use. */
+  current(): Promise<PanelModelsView>;
+  /** The panel's menu: makes `id` the default, then answers like `current`. */
+  choose(id: string): Promise<PanelModelsView>;
+}
 
 export interface ModelConfigsDeps {
   newId?: () => string;
@@ -31,7 +37,7 @@ export function createModelConfigsService(
   queue: Queue,
   { newId = () => crypto.randomUUID(), releaseOrigins }: ModelConfigsDeps = {},
 ): ModelConfigsService {
-  return createConfigListService(store, queue, {
+  const configs = createConfigListService(store, queue, {
     what: 'model configuration',
     list: {
       key: MODEL_CONFIGS_KEY,
@@ -49,4 +55,21 @@ export function createModelConfigsService(
       if (released.length > 0 && releaseOrigins) await releaseOrigins(released);
     },
   });
+
+  return {
+    ...configs,
+    current: async () => forPanel(await configs.list()),
+    choose: async (id) => forPanel(await configs.setDefault(id)),
+  };
+}
+
+/**
+ * Narrows the list to what the panel needs: names for its menu, and the one
+ * configuration it calls. Another model's key never reaches the panel.
+ */
+export function forPanel(view: ListView<ModelConfig>): PanelModelsView {
+  return {
+    choices: view.items.map((config) => ({ id: config.id, name: displayName(config) })),
+    current: view.items.find((config) => config.id === view.defaultId) ?? null,
+  };
 }

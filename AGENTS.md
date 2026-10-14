@@ -70,7 +70,8 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **面板必须先接上**：调用方是面板时，除方法表里标了 `beforeAttach` 的 `panel.attach`，dispatcher 还要求发送方就是本 tab 登记表里已接上的文档（`sender.tab.id` + `sender.documentId`），否则返回 `forbidden`。`panel.html` 是 web 可访问资源，任何得知其 URL 的页面都能加载它，所以「是面板页」本身证明不了什么。新增的面板方法自动受这条约束，不要给它加 `beforeAttach`。
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
 - 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
-- 面板唯一能调用的变更是 `models.setDefault`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。
+- 面板只拿它要用的东西：读模型用 `models.current`，只有菜单（名称）和正在用的那个模型的配置；`models.list` 带着全部 Key，只给设置页。给面板新增方法时同样收窄输出 schema（`z.object` 会丢掉 handler 多塞的字段）。
+- 面板唯一能调用的变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志

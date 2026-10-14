@@ -248,6 +248,46 @@ describe('model configurations: the default', () => {
   });
 });
 
+describe('model configurations: what the panel gets', () => {
+  const keyed = (id: string, key: string, name = '') =>
+    config(id, 'https://api.example.com/v1', { name, apiKey: key });
+
+  it('names every model, and carries only the key of the one in use', async () => {
+    const { models } = setup(list(keyed('a', 'sk-a', '主力'), keyed('b', 'sk-b')));
+
+    const panel = await models.current();
+
+    expect(panel).toEqual({
+      choices: [
+        { id: 'a', name: '主力' },
+        { id: 'b', name: 'model-b' },
+      ],
+      current: keyed('a', 'sk-a', '主力'),
+    });
+    expect(JSON.stringify(panel)).not.toContain('sk-b');
+  });
+
+  it('makes the chosen model the default, and answers with that one alone', async () => {
+    const { models, store } = setup(list(keyed('a', 'sk-a'), keyed('b', 'sk-b')));
+
+    const panel = await models.choose('b');
+
+    expect(panel.current?.id).toBe('b');
+    expect(JSON.stringify(panel)).not.toContain('sk-a');
+    expect(store.dump()[SELECTION_KEY]).toMatchObject({ data: { defaultModelId: 'b' } });
+  });
+
+  it('has nothing in use while there are no models', async () => {
+    const { models } = setup();
+    expect(await models.current()).toEqual({ choices: [], current: null });
+  });
+
+  it('refuses to choose a model that is not in the list', async () => {
+    const { models } = setup(list(openai));
+    await expect(models.choose('gone')).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
 describe('model configurations: host access', () => {
   it('gives back the origin of a removed configuration that nothing else uses', async () => {
     const { models, released } = setup(list(openai, deepseek));

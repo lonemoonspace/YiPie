@@ -5,6 +5,7 @@ import {
   type GeneralSettingsView,
   type MethodDefinition,
   type ModelConfigsView,
+  type PanelModelsView,
 } from '@/contract/rpc';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { createDispatcher, type RpcHandlers } from '@/platform/rpc/server';
@@ -36,6 +37,8 @@ const view: GeneralSettingsView = {
   quarantined: false,
 };
 
+const panelModels: PanelModelsView = { choices: [{ id: 'a', name: 'A' }], current: null };
+
 const models: ModelConfigsView = {
   items: [],
   defaultId: null,
@@ -61,6 +64,8 @@ function setup(
     'models.remove': vi.fn(() => Promise.resolve(models)),
     'models.move': vi.fn(() => Promise.resolve(models)),
     'models.setDefault': vi.fn(() => Promise.resolve(models)),
+    'models.current': vi.fn(() => Promise.resolve(panelModels)),
+    'models.choose': vi.fn(() => Promise.resolve(panelModels)),
     ...overrides,
   });
   return {
@@ -243,17 +248,33 @@ describe('RPC dispatcher before storage.local is isolated', () => {
 });
 
 describe('RPC dispatcher: model configurations', () => {
-  it('lets the settings page and the attached panel list models, and nothing else', async () => {
-    const { dispatch } = setup();
+  it('lists every configuration, keys included, to the settings page only', async () => {
+    const { dispatch, handlers } = setup();
 
     expect(await dispatch(request('models.list'), OPTIONS)).toEqual({ ok: true, value: models });
-    expect(await dispatch(request('models.list'), PANEL)).toEqual({ ok: true, value: models });
-    for (const sender of [STRAY_PANEL, CONTENT]) {
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
       expect(await dispatch(request('models.list'), sender)).toMatchObject({
         ok: false,
         error: { code: 'forbidden' },
       });
     }
+    expect(handlers['models.list']).toHaveBeenCalledOnce();
+  });
+
+  it('gives the attached panel the menu and the model in use, and no one else', async () => {
+    const { dispatch, handlers } = setup();
+
+    expect(await dispatch(request('models.current'), PANEL)).toEqual({
+      ok: true,
+      value: panelModels,
+    });
+    for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request('models.current'), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handlers['models.current']).toHaveBeenCalledOnce();
   });
 
   it('accepts changes only from the settings page', async () => {
@@ -271,6 +292,7 @@ describe('RPC dispatcher: model configurations', () => {
     ['models.update', { id: 'a', patch: { name: 'n' } }],
     ['models.remove', { id: 'a' }],
     ['models.move', { id: 'a', direction: 'up' }],
+    ['models.setDefault', { id: 'a' }],
   ] as const)('accepts %s only from the settings page', async (method, input) => {
     const { dispatch, handlers } = setup();
 
@@ -284,19 +306,32 @@ describe('RPC dispatcher: model configurations', () => {
     expect(await dispatch(request(method, input), OPTIONS)).toEqual({ ok: true, value: models });
   });
 
-  it('lets the attached panel set the default model, as its one change', async () => {
+  it('lets the attached panel choose the default model, as its one change', async () => {
     const { dispatch, handlers } = setup();
-    const choose = request('models.setDefault', { id: 'a' });
+    const choose = request('models.choose', { id: 'a' });
 
-    expect(await dispatch(choose, PANEL)).toEqual({ ok: true, value: models });
-    expect(await dispatch(choose, OPTIONS)).toEqual({ ok: true, value: models });
-    for (const sender of [STRAY_PANEL, CONTENT]) {
+    expect(await dispatch(choose, PANEL)).toEqual({ ok: true, value: panelModels });
+    for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
       expect(await dispatch(choose, sender)).toMatchObject({
         ok: false,
         error: { code: 'forbidden' },
       });
     }
-    expect(handlers['models.setDefault']).toHaveBeenCalledTimes(2);
+    expect(handlers['models.choose']).toHaveBeenCalledOnce();
+    expect(await dispatch(request('models.choose', { id: 'a', items: [] }), PANEL)).toMatchObject({
+      ok: false,
+      error: { code: 'bad-request' },
+    });
+  });
+
+  it('drops anything else a handler adds to the panel answer, such as every configuration', async () => {
+    const leaky = { ...panelModels, items: [{ id: 'b', apiKey: 'sk-other-model' }] };
+    const { dispatch } = setup({ 'models.current': () => Promise.resolve(leaky) });
+
+    const reply = await dispatch(request('models.current'), PANEL);
+
+    expect(reply).toEqual({ ok: true, value: panelModels });
+    expect(JSON.stringify(reply)).not.toContain('sk-other-model');
   });
 
   it.each([
@@ -465,8 +500,8 @@ describe('RPC dispatcher: panel handshake', () => {
 
 describe('RPC dispatcher: a panel is served only once attached', () => {
   const PANEL_METHODS = [
-    ['models.list', {}],
-    ['models.setDefault', { id: 'a' }],
+    ['models.current', {}],
+    ['models.choose', { id: 'a' }],
     ['prompts.list', {}],
     ['page.getContext', {}],
   ] as const;
@@ -488,8 +523,8 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     const panelAttached = vi.fn(attachedInTab1);
     const { dispatch } = setup({}, undefined, panelAttached);
 
-    await dispatch(request('models.list'), PANEL);
-    await dispatch(request('models.list'), { ...PANEL, tab: { id: 2 } });
+    await dispatch(request('models.current'), PANEL);
+    await dispatch(request('models.current'), { ...PANEL, tab: { id: 2 } });
 
     expect(panelAttached.mock.calls).toEqual([
       [1, 'DOC'],
@@ -505,7 +540,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     const withoutTab = { id, url, frameId, documentId };
 
     for (const sender of [withoutDocument, withoutTab]) {
-      expect(await dispatch(request('models.list'), sender)).toMatchObject({
+      expect(await dispatch(request('models.current'), sender)).toMatchObject({
         ok: false,
         error: { code: 'forbidden' },
       });
@@ -518,11 +553,11 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
       Promise.reject(new Error('session storage unavailable')),
     );
 
-    expect(await dispatch(request('models.list'), PANEL)).toMatchObject({
+    expect(await dispatch(request('models.current'), PANEL)).toMatchObject({
       ok: false,
       error: { code: 'forbidden' },
     });
-    expect(handlers['models.list']).not.toHaveBeenCalled();
+    expect(handlers['models.current']).not.toHaveBeenCalled();
   });
 
   it('does not consult the registry for other callers', async () => {

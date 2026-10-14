@@ -124,6 +124,8 @@ export interface StoredModel {
   name: string;
   /** A fake-service scenario (`scenario:<name>`), sent as the model name. */
   model: string;
+  /** `E2E_KEY` unless given. */
+  apiKey?: string;
 }
 
 /**
@@ -139,9 +141,9 @@ export async function storeModels(
 ) {
   const data = [
     ...models.map((model) => ({
+      apiKey: E2E_KEY,
       ...model,
       baseURL: `${server.origin}/v1`,
-      apiKey: E2E_KEY,
       headers: {},
       extraBody: {},
       contextWindow: null,

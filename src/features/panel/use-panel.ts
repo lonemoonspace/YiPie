@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { displayName, type ModelConfig } from '@/contract/model-config';
+import type { ModelConfig } from '@/contract/model-config';
 import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import { t } from '@/domain/i18n';
@@ -34,21 +34,18 @@ export function usePanel(): PanelControls {
     dispatch({ type: 'start' });
 
     // The defaults of both lists: the panel always uses what the settings say.
+    // Of the models it gets only the menu and the one in use, key included.
     let config: ModelConfig | undefined;
     let prompt: PromptConfig | undefined;
     try {
       const [models, prompts] = await Promise.all([
-        callRpc('models.list', {}),
+        callRpc('models.current', {}),
         callRpc('prompts.list', {}),
       ]);
-      config = models.items.find((item) => item.id === models.defaultId);
+      config = models.current ?? undefined;
       prompt = prompts.items.find((item) => item.id === prompts.defaultId);
       if (current()) {
-        dispatch({
-          type: 'models',
-          models: models.items.map((item) => ({ id: item.id, name: displayName(item) })),
-          modelId: models.defaultId,
-        });
+        dispatch({ type: 'models', models: models.choices, modelId: config?.id ?? null });
       }
     } catch (error) {
       if (current())
@@ -139,7 +136,7 @@ export function usePanel(): PanelControls {
       run.current?.abort();
       run.current = null;
       dispatch({ type: 'select', modelId: id });
-      callRpc('models.setDefault', { id }).then(
+      callRpc('models.choose', { id }).then(
         () => void summarize(),
         (error: unknown) =>
           dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } }),
