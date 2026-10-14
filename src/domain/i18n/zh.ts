@@ -116,6 +116,7 @@ export const zh = {
   'backups.removed': '已删除备份。',
 
   'panel.close': '关闭',
+  'panel.model': '模型',
   'panel.stop': '停止',
   'panel.retry': '重新总结',
   'panel.openSettings': '打开设置',

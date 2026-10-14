@@ -10,6 +10,12 @@ export type PanelProblem =
   | { kind: 'empty-page' }
   | { kind: 'llm'; error: LlmError };
 
+/** A model the panel can switch to: its name only, never its key. */
+export interface ModelChoice {
+  id: string;
+  name: string;
+}
+
 /**
  * attaching → extracting → requesting → streaming → done / stopped / error
  * (docs/development-plan.md §4.2). Text received before a stop or an error
@@ -27,10 +33,17 @@ export interface PanelState {
   text: string;
   usage: Usage | null;
   problem: PanelProblem | null;
+  /** The models to choose from; kept across runs, so a failed run can switch. */
+  choices: ModelChoice[];
+  /** The default model, which runs use. */
+  modelId: string | null;
 }
 
 export type PanelEvent =
   | { type: 'start' }
+  | { type: 'setup'; choices: ModelChoice[]; modelId: string | null }
+  /** The user picked another model; shown at once, before the run that uses it. */
+  | { type: 'choose'; modelId: string }
   | { type: 'requesting'; model: string; origin: string; truncated: boolean }
   | { type: 'text'; text: string }
   | { type: 'finished'; usage: Usage | null }
@@ -45,6 +58,8 @@ export const INITIAL_PANEL_STATE: PanelState = {
   text: '',
   usage: null,
   problem: null,
+  choices: [],
+  modelId: null,
 };
 
 export function isBusy(state: PanelState): boolean {
@@ -56,7 +71,16 @@ export function isBusy(state: PanelState): boolean {
 export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
   switch (event.type) {
     case 'start':
-      return { ...INITIAL_PANEL_STATE, phase: 'extracting' };
+      return {
+        ...INITIAL_PANEL_STATE,
+        phase: 'extracting',
+        choices: state.choices,
+        modelId: state.modelId,
+      };
+    case 'setup':
+      return { ...state, choices: event.choices, modelId: event.modelId };
+    case 'choose':
+      return { ...state, modelId: event.modelId };
     case 'requesting':
       return {
         ...state,

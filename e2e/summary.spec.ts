@@ -1,4 +1,5 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
+import { RPC_CHANNEL } from '../src/contract/rpc-wire';
 import type { RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
 import {
@@ -107,6 +108,72 @@ test('the default prompt from the settings is filled in and sent', async ({
   expect(messages[0]?.content).toMatch(/^请总结《一篇普通的文章》（zh-CN）：\n/);
   expect(messages[0]?.content).toContain('一瞥是一个浏览器扩展');
   expect(messages[0]?.content).toMatch(/\n\{\{author\}\}$/);
+});
+
+test('the panel switches the default model, and summarizes again with it', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  const config = (id: string, name: string, model: string, apiKey: string) => ({
+    id,
+    name,
+    baseURL: `${server.origin}/v1`,
+    apiKey,
+    model,
+    headers: {},
+    extraBody: {},
+    contextWindow: null,
+    streamUsage: true,
+  });
+  await waitForSeededPrompt(serviceWorker);
+  await serviceWorker.evaluate(
+    (configs) =>
+      (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.set({
+        'model-configs': { version: 1, data: configs },
+      }),
+    [
+      config('m1', '甲', 'scenario:normal', 'sk-first-key'),
+      config('m2', '乙', 'scenario:unsafe', 'sk-second-key'),
+    ],
+  );
+
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const picker = frame.getByRole('combobox', { name: '模型' });
+  await expect(picker).toHaveValue('m1');
+  await expect(picker.locator('option')).toHaveText(['甲', '乙']);
+
+  await picker.selectOption('m2');
+
+  await expect(frame.locator('article.answer')).toContainText('追踪像素');
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  expect(lastRequest(server)).toMatchObject({
+    authorization: 'Bearer sk-second-key',
+    body: { model: 'scenario:unsafe' },
+  });
+  const stored = await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get('selection'),
+  );
+  expect(stored.selection).toMatchObject({ data: { defaultModelId: 'm2' } });
+
+  // What the panel itself is given: names for both, the key of the default alone.
+  const setup = await frame.evaluate(
+    (channel) =>
+      (
+        globalThis as unknown as {
+          chrome: { runtime: { sendMessage(message: unknown): Promise<unknown> } };
+        }
+      ).chrome.runtime.sendMessage({ channel, method: 'panel.setup', input: {} }),
+    RPC_CHANNEL,
+  );
+  expect(setup).toMatchObject({
+    ok: true,
+    value: { models: [{ name: '甲' }, { name: '乙' }], model: { id: 'm2' } },
+  });
+  expect(JSON.stringify(setup)).not.toContain('sk-first-key');
 });
 
 test('the answer appears as it streams, and stopping keeps what arrived', async ({

@@ -173,3 +173,19 @@ button:focus-visible {
   border: 0;
   border-top: 1px solid var(--color-border);
 }
+
+.model {
+  max-width: 40%;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.model:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

@@ -11,6 +11,8 @@ export interface PanelControls {
   state: PanelState;
   stop: () => void;
   retry: () => void;
+  /** Makes `id` the default model everywhere, then summarizes again with it. */
+  choose: (id: string) => void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function usePanel(): PanelControls {
       return;
     }
     if (!current()) return;
+    dispatch({ type: 'setup', choices: setup.models, modelId: setup.model?.id ?? null });
     const config = setup.model;
     if (config === null) {
       dispatch({ type: 'failed', problem: { kind: 'no-model' } });
@@ -113,7 +116,21 @@ export function usePanel(): PanelControls {
   const stop = useCallback(() => run.current?.abort(), []);
   const retry = useCallback(() => void summarize(), [summarize]);
 
-  return { state, stop, retry };
+  // The panel's one change to the settings: its dropdown sets the global
+  // default (docs/development-plan.md §4.3, decision 7).
+  const choose = useCallback(
+    (id: string) => {
+      dispatch({ type: 'choose', modelId: id });
+      callRpc('models.setDefault', { id }).then(
+        () => void summarize(),
+        (error: unknown) =>
+          dispatch({ type: 'failed', problem: { kind: 'models', detail: messageOf(error) } }),
+      );
+    },
+    [summarize],
+  );
+
+  return { state, stop, retry, choose };
 }
 
 function messageOf(error: unknown): string {

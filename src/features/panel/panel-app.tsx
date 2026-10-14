@@ -6,7 +6,7 @@ import { isBusy, type PanelProblem, type PanelState } from './state';
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, stop, retry } = usePanel();
+  const { state, stop, retry, choose } = usePanel();
   const busy = isBusy(state);
   const html = useMemo(() => renderMarkdown(state.text), [state.text]);
   const canRetry = !busy && state.phase !== 'attaching' && state.problem?.kind !== 'attach';
@@ -14,6 +14,20 @@ export function PanelApp() {
   return (
     <main className="panel" data-phase={state.phase} data-problem={state.problem?.kind}>
       <div className="toolbar">
+        {state.choices.length > 1 ? (
+          <select
+            className="model"
+            aria-label={t('panel.model')}
+            value={state.modelId ?? ''}
+            onChange={(event) => choose(event.target.value)}
+          >
+            {state.choices.map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <p className="status" role="status">
           {describePhase(state)}
         </p>

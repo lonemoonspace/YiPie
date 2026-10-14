@@ -85,3 +85,29 @@ describe('reducePanel', () => {
     expect(isBusy(INITIAL_PANEL_STATE)).toBe(false);
   });
 });
+
+describe('model choices', () => {
+  const choices = [
+    { id: 'a', name: '甲' },
+    { id: 'b', name: '乙' },
+  ];
+
+  it('are kept when a new run starts, so a failed run can still switch models', () => {
+    const state = play([
+      { type: 'start' },
+      { type: 'setup', choices, modelId: 'a' },
+      { type: 'failed', problem: { kind: 'empty-page' } },
+      { type: 'start' },
+    ]);
+
+    expect(state).toMatchObject({ phase: 'extracting', choices, modelId: 'a', problem: null });
+  });
+
+  it('show a new choice at once, before the run that uses it', () => {
+    const state = play([
+      { type: 'setup', choices, modelId: 'a' },
+      { type: 'choose', modelId: 'b' },
+    ]);
+    expect(state.modelId).toBe('b');
+  });
+});
