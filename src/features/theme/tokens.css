@@ -13,6 +13,9 @@
   --color-accent: #2f6fdb;
   --color-notice-bg: #fff4e5;
   --color-notice-text: #7a4300;
+  --color-danger: #c62828;
+  --color-on-accent: #ffffff;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     sans-serif;
@@ -28,6 +31,8 @@
   --color-accent: #6b9dff;
   --color-notice-bg: #3a2a12;
   --color-notice-text: #ffd8a8;
+  --color-danger: #ff8a80;
+  --color-on-accent: #0b1220;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,5 +46,7 @@
     --color-accent: #6b9dff;
     --color-notice-bg: #3a2a12;
     --color-notice-text: #ffd8a8;
+    --color-danger: #ff8a80;
+    --color-on-accent: #0b1220;
   }
 }

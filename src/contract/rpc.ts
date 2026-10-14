@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
+import { ModelConfigDraft, ModelConfigList, ModelConfigPatch } from './model-config';
+import { PageContext } from './page-context';
+import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 
 /**
  * The contexts that call the background, told apart by the browser-supplied
@@ -12,6 +15,12 @@ export interface MethodDefinition {
   output: z.ZodType;
   /** Who may call the method. Anyone not listed is refused (docs/development-plan.md §8). */
   callers: readonly CallerKind[];
+  /**
+   * A panel may call this before it has attached. Every other panel call is
+   * refused unless the sender is the panel attached in its tab: `panel.html`
+   * is web-accessible, so being a panel document proves nothing by itself.
+   */
+  beforeAttach?: true;
 }
 
 export const GeneralSettingsView = z.object({
@@ -24,6 +33,18 @@ export const GeneralSettingsView = z.object({
   quarantined: z.boolean(),
 });
 export type GeneralSettingsView = z.infer<typeof GeneralSettingsView>;
+
+/** Model configurations as read, with the same read-state flags as general settings. */
+export const ModelConfigsView = z.object({
+  configs: ModelConfigList,
+  status: z.enum(['ok', 'missing', 'invalid']),
+  readOnly: z.boolean(),
+  quarantined: z.boolean(),
+});
+export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
+
+/** A draft after the server parsed it: defaults filled in. */
+export type ParsedModelConfigDraft = z.output<typeof ModelConfigDraft>;
 
 /**
  * Every background method. A method that is not listed here does not exist,
@@ -40,6 +61,44 @@ export const RPC_METHODS = {
     output: GeneralSettingsView,
     callers: ['options'],
   },
+  // The panel needs the key to call the model; it is an extension page, so the
+  // key never reaches a content script or the page (docs/development-plan.md §8).
+  // Like every panel call but `panel.attach`, it is served to attached panels only.
+  'models.list': {
+    input: z.strictObject({}),
+    output: ModelConfigsView,
+    callers: ['options', 'panel'],
+  },
+  'models.add': {
+    input: ModelConfigDraft,
+    output: ModelConfigsView,
+    callers: ['options'],
+  },
+  'models.update': {
+    input: z.strictObject({ id: z.string().min(1), patch: ModelConfigPatch }),
+    output: ModelConfigsView,
+    callers: ['options'],
+  },
+  // The content script's only method: a nonce for the panel frame it is about
+  // to mount in its tab (docs/development-plan.md §2.1, §8).
+  'content.hello': {
+    input: z.strictObject({}),
+    output: z.object({ nonce: z.string() }),
+    callers: ['content'],
+  },
+  // A panel proves it was mounted by our content script in the same tab.
+  'panel.attach': {
+    input: z.strictObject({ nonce: z.string().min(1).max(100) }),
+    output: z.object({ tabId: z.number().int() }),
+    callers: ['panel'],
+    beforeAttach: true,
+  },
+  // Only the panel attached in a tab may read that tab's page.
+  'page.getContext': {
+    input: z.strictObject({}),
+    output: PageContext,
+    callers: ['panel'],
+  },
 } as const satisfies Record<string, MethodDefinition>;
 
 export type RpcMethods = typeof RPC_METHODS;
@@ -50,8 +109,7 @@ export type RpcInput<M extends RpcMethod> = z.input<RpcMethods[M]['input']>;
 export type RpcParsedInput<M extends RpcMethod> = z.output<RpcMethods[M]['input']>;
 export type RpcOutput<M extends RpcMethod> = z.output<RpcMethods[M]['output']>;
 
-/** Marks our messages, so the listener can ignore everything else. */
-export const RPC_CHANNEL = 'yipie.rpc/1';
+export { RPC_CHANNEL };
 
 export const RpcRequest = z.object({
   channel: z.literal(RPC_CHANNEL),
@@ -60,16 +118,6 @@ export const RpcRequest = z.object({
 });
 export type RpcRequest = z.infer<typeof RpcRequest>;
 
-export const RPC_ERROR_CODES = [
-  'forbidden',
-  'unknown-method',
-  'bad-request',
-  'read-only',
-  // The browser has not confirmed that storage.local is closed to content
-  // scripts, so the background serves nothing (it fails closed).
-  'storage-not-isolated',
-  'internal',
-] as const;
 export const RpcErrorCode = z.enum(RPC_ERROR_CODES);
 export type RpcErrorCode = z.infer<typeof RpcErrorCode>;
 

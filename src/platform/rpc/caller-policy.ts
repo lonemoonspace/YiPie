@@ -1,11 +1,13 @@
 import type { CallerKind } from '@/contract/rpc';
 
-/** The parts of `runtime.MessageSender` the policy looks at. */
+/** The parts of `runtime.MessageSender` the background looks at. */
 export interface SenderLike {
   id?: string;
   url?: string;
-  tab?: unknown;
+  tab?: { id?: number };
   frameId?: number;
+  /** Identifies one document in one frame; a reload gets a new one. */
+  documentId?: string;
 }
 
 const EXTENSION_PAGES = new Map<string, CallerKind>([

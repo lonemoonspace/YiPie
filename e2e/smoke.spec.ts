@@ -1,6 +1,8 @@
+import type { Page } from '@playwright/test';
 import { expect, test, type ChromeStorageGlobal } from './fixtures';
 
 const optionsUrl = (extensionId: string) => `chrome-extension://${extensionId}/options.html`;
+const section = (page: Page, name: string) => page.getByRole('region', { name });
 
 test('the service worker starts and the options page renders', async ({ context, extensionId }) => {
   const page = await context.newPage();
@@ -19,7 +21,7 @@ test('a setting saved through the background RPC survives a reload', async ({
   await page.goto(optionsUrl(extensionId));
 
   await page.getByLabel('主题').selectOption('dark');
-  await expect(page.getByRole('status')).toHaveText('已保存');
+  await expect(section(page, '通用').getByRole('status')).toHaveText('已保存');
 
   // Written by the background, inside the versioned envelope.
   const stored = await serviceWorker.evaluate(() =>
@@ -51,11 +53,13 @@ test('unreadable settings show defaults and are backed up before the next save',
 
   const page = await context.newPage();
   await page.goto(optionsUrl(extensionId));
-  await expect(page.getByRole('alert')).toContainText('无法识别');
+  await expect(section(page, '通用').getByRole('alert')).toContainText('无法识别');
   await expect(page.getByLabel('主题')).toHaveValue('system');
 
   await page.getByLabel('主题').selectOption('light');
-  await expect(page.getByRole('status')).toHaveText('已保存（无法识别的旧数据已备份）');
+  await expect(section(page, '通用').getByRole('status')).toHaveText(
+    '已保存（无法识别的旧数据已备份）',
+  );
 
   const backup = await serviceWorker.evaluate(() =>
     (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get(
@@ -65,4 +69,62 @@ test('unreadable settings show defaults and are backed up before the next save',
   expect(backup['quarantine:general-settings']).toEqual([
     expect.objectContaining({ key: 'local:general-settings', raw: broken }),
   ]);
+});
+
+test('a model configuration is saved through the background and shown after a reload', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const models = section(page, '模型');
+
+  await models.getByLabel('Base URL').fill('http://127.0.0.1:11434/v1/chat/completions/');
+  await models.getByLabel('API Key').fill('sk-e2e-not-a-real-key');
+  await models.getByLabel('模型名').fill('qwen2.5:7b');
+  await models.getByRole('button', { name: '保存' }).click();
+  await expect(models.getByRole('status')).toHaveText('已保存');
+
+  const stored = await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get('model-configs'),
+  );
+  expect(stored['model-configs']).toEqual({
+    version: 1,
+    data: [
+      expect.objectContaining({
+        id: expect.any(String),
+        baseURL: 'http://127.0.0.1:11434/v1',
+        apiKey: 'sk-e2e-not-a-real-key',
+        model: 'qwen2.5:7b',
+      }),
+    ],
+  });
+
+  await page.reload();
+  await expect(section(page, '模型').getByLabel('Base URL')).toHaveValue(
+    'http://127.0.0.1:11434/v1',
+  );
+  await expect(section(page, '模型').getByLabel('模型名')).toHaveValue('qwen2.5:7b');
+});
+
+test('the model form reports problems next to their fields and saves nothing', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const models = section(page, '模型');
+
+  await models.getByLabel('Base URL').fill('localhost:11434');
+  await models.getByRole('button', { name: '保存' }).click();
+
+  await expect(models.getByText('Base URL 必须以 http:// 或 https:// 开头')).toBeVisible();
+  await expect(models.getByText('请填写模型名')).toBeVisible();
+  await expect(models.getByLabel('Base URL')).toHaveAttribute('aria-invalid', 'true');
+  const stored = await serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get('model-configs'),
+  );
+  expect(stored).toEqual({});
 });

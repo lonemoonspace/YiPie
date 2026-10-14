@@ -11,14 +11,19 @@ import {
   type RpcReply,
 } from '@/contract/rpc';
 import { createLogger } from '@/platform/logger';
+import { NotFoundError } from '@/platform/settings/errors';
 import { ReadOnlyRecordError } from '@/platform/storage';
 import { classifyCaller, type SenderLike } from './caller-policy';
+import { RpcRefusal } from './errors';
 import { failure, isRpcMessage } from './messaging';
 
 const logger = createLogger('rpc');
 
 export interface HandlerContext {
   caller: CallerKind;
+  /** The sender's tab, for the panel and the content script (both live in one). */
+  tabId: number | undefined;
+  documentId: string | undefined;
 }
 
 export type RpcHandlers = {
@@ -33,19 +38,34 @@ export interface DispatcherOptions {
    * runs before that, and every call is refused while it rejects.
    */
   storageIsolated: () => Promise<void>;
+  /** Whether `documentId` is the panel attached in `tabId` (platform/inject/registry). */
+  panelAttached: (tabId: number, documentId: string) => Promise<boolean>;
 }
 
 /**
  * Turns one incoming message into a reply. Every check lives here, so no
  * handler can skip one: the method must exist, the caller must be allowed to
- * call it, the input must match the contract, storage must be isolated, and
- * the handler's output must match the contract too.
+ * call it (a panel must also be the one attached in its tab), the input must
+ * match the contract, storage must be isolated, and the handler's output must
+ * match the contract too.
  */
 export function createDispatcher(
   handlers: RpcHandlers,
   extensionId: string,
-  { storageIsolated }: DispatcherOptions,
+  { storageIsolated, panelAttached }: DispatcherOptions,
 ) {
+  /** Fails closed: no tab, no document id or an unreadable registry all mean "not attached". */
+  const isAttachedPanel = async (sender: SenderLike): Promise<boolean> => {
+    const tabId = sender.tab?.id;
+    if (tabId === undefined || sender.documentId === undefined) return false;
+    try {
+      return await panelAttached(tabId, sender.documentId);
+    } catch (error) {
+      logger.error('Could not read the panel registry:', error);
+      return false;
+    }
+  };
+
   return async (message: unknown, sender: SenderLike): Promise<RpcReply> => {
     const request = RpcRequest.safeParse(message);
     if (!request.success) return failure('bad-request', 'Malformed RPC request.');
@@ -58,8 +78,19 @@ export function createDispatcher(
 
     const caller = classifyCaller(sender, extensionId);
     if (caller === null || !definition.callers.includes(caller)) {
-      logger.warn('Refused', method, 'from', caller ?? 'an unrecognized sender', sender.url);
+      logger.warn('Refused', method, 'from', caller ?? 'an unrecognized sender', originOf(sender));
       return failure('forbidden', `${caller ?? 'This sender'} may not call ${method}.`);
+    }
+
+    // Any page that learns the panel's URL can load it, so a panel document
+    // is trusted only once it has attached with its tab's nonce.
+    if (
+      caller === 'panel' &&
+      definition.beforeAttach !== true &&
+      !(await isAttachedPanel(sender))
+    ) {
+      logger.warn('Refused', method, 'from a panel that is not attached in its tab');
+      return failure('forbidden', `Only the panel attached in this tab may call ${method}.`);
     }
 
     const input = definition.input.safeParse(request.data.input);
@@ -79,10 +110,16 @@ export function createDispatcher(
 
     try {
       const handler = handlers[method as RpcMethod] as AnyHandler;
-      const value = await handler(input.data, { caller });
+      const value = await handler(input.data, {
+        caller,
+        tabId: sender.tab?.id,
+        documentId: sender.documentId,
+      });
       return { ok: true, value: definition.output.parse(value) };
     } catch (error) {
+      if (error instanceof RpcRefusal) return failure(error.code, error.message);
       if (error instanceof ReadOnlyRecordError) return failure('read-only', error.message);
+      if (error instanceof NotFoundError) return failure('not-found', error.message);
       logger.error(method, 'failed', error);
       return failure('internal', messageOf(error));
     }
@@ -99,6 +136,20 @@ export function registerRpcServer(handlers: RpcHandlers, options: DispatcherOpti
     // Keeps the channel open for the asynchronous reply.
     return true;
   });
+}
+
+/**
+ * Where a message came from, for logs: scheme and host only. A page's URL can
+ * carry tokens in its query or fragment.
+ */
+function originOf(sender: SenderLike): string {
+  if (sender.url === undefined) return '(no URL)';
+  try {
+    const url = new URL(sender.url);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '(unparseable URL)';
+  }
 }
 
 function messageOf(error: unknown): string {
