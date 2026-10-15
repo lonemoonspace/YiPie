@@ -24,6 +24,11 @@ export interface HandlerContext {
   /** The sender's tab, for the panel and the content script (both live in one). */
   tabId: number | undefined;
   documentId: string | undefined;
+  /**
+   * The sender's URL as the browser reports it. For our content script, the
+   * page it runs in; never write it to a log (it can carry tokens).
+   */
+  url: string | undefined;
 }
 
 export type RpcHandlers = {
@@ -114,6 +119,7 @@ export function createDispatcher(
         caller,
         tabId: sender.tab?.id,
         documentId: sender.documentId,
+        url: sender.url,
       });
       return { ok: true, value: definition.output.parse(value) };
     } catch (error) {

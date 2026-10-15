@@ -87,4 +87,19 @@ describe('general settings service', () => {
     await expect(settings.patch({ theme: 'light' })).rejects.toBeInstanceOf(ReadOnlyRecordError);
     expect(store.dump()[GENERAL_SETTINGS_KEY]).toEqual(newer);
   });
+
+  it('gives the panel only the fields it uses', async () => {
+    const { settings } = setup({
+      version: 1,
+      data: { theme: 'dark', logLevel: 'warn', trimming: 'front', fontSize: 'large' },
+    });
+
+    expect(await settings.current()).toEqual({ trimming: 'front' });
+  });
+
+  it('gives the panel the defaults when the stored value is unreadable', async () => {
+    const { settings } = setup({ version: 1, data: { trimming: 'sideways' } });
+
+    expect(await settings.current()).toEqual({ trimming: 'back' });
+  });
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BackedUpKey, BackupsView } from './backups';
-import { GeneralSettings, GeneralSettingsPatch } from './general-settings';
+import { GeneralSettings, GeneralSettingsPatch, TrimmingStrategy } from './general-settings';
 import {
   BaseURL,
   ExtraBody,
@@ -13,6 +13,7 @@ import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutation
 import { PageContext } from './page-context';
 import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
+import { SnapshotMessage } from './snapshot';
 
 /**
  * The contexts that call the background, told apart by the browser-supplied
@@ -36,6 +37,14 @@ export interface MethodDefinition {
 /** How a stored value read (docs/development-plan.md §7). */
 export const ReadStatus = z.enum(['ok', 'missing', 'invalid']);
 export type ReadStatus = z.infer<typeof ReadStatus>;
+
+/**
+ * The general settings a panel uses, field by field: `GeneralSettings` keeps
+ * fields it does not know (`z.looseObject`), and those have no business in
+ * the panel (docs/development-plan.md §4.3, decision 8).
+ */
+export const PanelSettings = z.object({ trimming: TrimmingStrategy });
+export type PanelSettings = z.infer<typeof PanelSettings>;
 
 export const GeneralSettingsView = z.object({
   settings: GeneralSettings,
@@ -119,6 +128,23 @@ export type PanelModelsView = z.infer<typeof PanelModelsView>;
 export const PromptConfigsView = listView(PromptConfig);
 export type PromptConfigsView = z.infer<typeof PromptConfigsView>;
 
+/**
+ * The conversation saved for the panel's page in its tab, as the panel
+ * restores it (docs/development-plan.md §4.4, decision 3).
+ */
+export const SnapshotView = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('found'),
+    messages: z.array(SnapshotMessage),
+    /** The oldest messages were dropped to keep the page under its limit. */
+    truncated: z.boolean(),
+  }),
+  z.object({ status: z.literal('none') }),
+  /** A conversation was saved, then evicted to make room for other pages. */
+  z.object({ status: z.literal('evicted') }),
+]);
+export type SnapshotView = z.infer<typeof SnapshotView>;
+
 /** A draft after the server parsed it: defaults filled in. */
 export type ParsedModelConfigDraft = z.output<typeof ModelConfigDraft>;
 export type ParsedPromptConfigDraft = z.output<typeof PromptConfigDraft>;
@@ -137,6 +163,12 @@ export const RPC_METHODS = {
     input: GeneralSettingsPatch,
     output: GeneralSettingsView,
     callers: ['options'],
+  },
+  // What the panel needs of the general settings, and nothing else.
+  'settings.current': {
+    input: z.strictObject({}),
+    output: PanelSettings,
+    callers: ['panel'],
   },
   // Every configuration, keys included: the settings page only. The panel
   // reads `models.current` instead.
@@ -248,6 +280,20 @@ export const RPC_METHODS = {
   'page.getContext': {
     input: z.strictObject({}),
     output: PageContext,
+    callers: ['panel'],
+  },
+  // The conversation of the page the panel was mounted on, in its own tab: a
+  // panel names neither, so it cannot reach another tab's or page's.
+  'snapshot.get': {
+    input: z.strictObject({}),
+    output: SnapshotView,
+    callers: ['panel'],
+  },
+  // Saves the panel's whole conversation (answers and follow-up questions,
+  // never the page or a credential) in session storage.
+  'snapshot.save': {
+    input: z.strictObject({ messages: z.array(SnapshotMessage).min(1).max(1_000) }),
+    output: z.object({ truncated: z.boolean() }),
     callers: ['panel'],
   },
 } as const satisfies Record<string, MethodDefinition>;

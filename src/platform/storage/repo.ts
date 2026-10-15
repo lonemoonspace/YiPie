@@ -70,6 +70,15 @@ export interface Repo<T> {
    * moves the default). Anywhere else, writes could interleave and lose updates.
    */
   updateUnqueued(change: (current: T) => T): Promise<UpdateResult<T>>;
+  /**
+   * Deletes the record, in a task that already runs in the queue. Only for
+   * records whose lifetime the extension manages by design: conversation
+   * snapshots are evicted for space and dropped with their tab
+   * (docs/development-plan.md §4.4). The user's own data goes only by the
+   * user's explicit action. Like every write, it refuses a value written by
+   * a newer version.
+   */
+  removeUnqueued(): Promise<void>;
 }
 
 export function createRepo<T>(
@@ -97,12 +106,23 @@ export function createRepo<T>(
     return { value, quarantined };
   };
 
+  const removeUnqueued = async (): Promise<void> => {
+    const raw = await store.get(definition.key);
+    if (raw === undefined) return;
+    const current = interpret(definition, raw);
+    if (current.status === 'invalid' && current.readOnly) {
+      throw new ReadOnlyRecordError(definition.key, storedVersionOf(raw));
+    }
+    await store.remove(definition.key);
+  };
+
   return {
     async read() {
       return interpret(definition, await store.get(definition.key));
     },
     update: (change) => queue(() => updateUnqueued(change)),
     updateUnqueued,
+    removeUnqueued,
   };
 }
 
