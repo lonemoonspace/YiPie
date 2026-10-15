@@ -12,7 +12,12 @@ import type { StorageKey } from './storage';
  * or the extension updates, readable by extension pages and the service
  * worker alone, written by the service worker alone. Each conversation has
  * its own key, so saving one rewrites only that one; a small index holds
- * what eviction and tab cleanup need.
+ * what eviction and tab cleanup need, and which key holds each page's
+ * conversation.
+ *
+ * Since the browser empties `storage.session` whenever the extension
+ * updates, no version of the extension ever reads what an earlier one wrote
+ * here: a format change needs no upgrade.
  */
 
 const Count = z.number().int().nonnegative();
@@ -67,6 +72,11 @@ export const SNAPSHOT_INDEX_KEY = 'session:snapshots' satisfies StorageKey;
 export const SNAPSHOT_INDEX_VERSION = 1;
 
 export const SnapshotIndexEntry = z.object({
+  /**
+   * The conversation is stored under `snapshotKey(id)`. Each save writes a
+   * new key and then points the entry at it, and ids are never reused: what
+   * an entry points at is always a whole conversation, written for it.
+   */
   id: z.string().min(1),
   tabId: z.number().int(),
   pageKey: z.string(),
@@ -87,13 +97,25 @@ export const SnapshotIndexEntry = z.object({
 });
 export type SnapshotIndexEntry = z.infer<typeof SnapshotIndexEntry>;
 
-export const SnapshotIndex = z.array(SnapshotIndexEntry);
+export const SnapshotIndex = z.object({
+  entries: z.array(SnapshotIndexEntry),
+  /**
+   * Conversation keys no entry points at that may still be stored: the one a
+   * save is writing (or wrote before the worker stopped), and those a save
+   * replaced or evicted. A key is listed here before it is written, and moves
+   * here in the same write that unhooks it from its entry, so the index knows
+   * of every stored key. They are deleted right after, or by the next save.
+   */
+  garbage: z.array(z.string().min(1)),
+});
 export type SnapshotIndex = z.infer<typeof SnapshotIndex>;
 
 /**
  * Bytes all conversations may take together. `storage.session` holds 10 MB
  * for the whole extension, shared by every tab, so the budget is global and
- * the least recently used conversations make room (§4.4, decision 2).
+ * the least recently used conversations make room (§4.4, decision 2). A
+ * save writes the new conversation before deleting what it replaces, so the
+ * quota must hold one more page's worth on top of it.
  */
 export const SNAPSHOT_TOTAL_BYTES = 6_000_000;
 

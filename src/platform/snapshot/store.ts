@@ -84,11 +84,14 @@ const DEFAULT_LIMITS: SnapshotLimits = {
  * decisions 1–3). Runs in the service worker; every change goes through the
  * shared write queue.
  *
- * The index never misses a stored conversation: a conversation's key is
- * removed before its entry, and written after it. An entry whose key is gone
- * (the worker stopped between two writes, a write failed) reads as nothing
- * saved; a key no entry knows about would hold memory until the browser
- * restarts.
+ * A save leaves what it replaces alone until it is complete. It writes the
+ * conversation under a new key, then one write of the index points the page
+ * at that key and lists what it replaced and what it evicted as garbage;
+ * only then are those deleted. Failed or stopped at any step, the store
+ * holds the conversations from before the save or the ones after it, whole,
+ * and the index says which. A key is in the index (an entry points at it, or
+ * it is listed as garbage) before it is written, so none holds memory
+ * unaccounted for; what a save could not delete goes with the next one.
  */
 export function createSnapshotStore(
   store: StorageLike,
@@ -103,7 +106,7 @@ export function createSnapshotStore(
     key: SNAPSHOT_INDEX_KEY,
     version: SNAPSHOT_INDEX_VERSION,
     schema: SnapshotIndex,
-    defaults: (): SnapshotIndex => [],
+    defaults: (): SnapshotIndex => ({ entries: [], garbage: [] }),
   });
   const conversation = (id: string) =>
     createRepo(store, queue, {
@@ -112,29 +115,46 @@ export function createSnapshotStore(
       schema: Snapshot,
       defaults: (): Snapshot => ({ pageKey: '', messages: [], updatedAt: 0, truncated: false }),
     });
-  const find = (entries: SnapshotIndex, tabId: number, pageKey: string) =>
+  const find = (entries: readonly SnapshotIndexEntry[], tabId: number, pageKey: string) =>
     entries.find((entry) => entry.tabId === tabId && entry.pageKey === pageKey);
+
+  /** Deletes the keys listed as garbage, then the listing. Inside a queued task. */
+  const collect = async () => {
+    const { garbage } = (await index.read()).value;
+    if (garbage.length === 0) return;
+    for (const id of garbage) await conversation(id).removeUnqueued();
+    await index.updateUnqueued((current) => ({
+      ...current,
+      garbage: current.garbage.filter((id) => !garbage.includes(id)),
+    }));
+  };
 
   return {
     get(tabId, pageKey) {
       return queue(async () => {
-        const entry = find((await index.read()).value, tabId, pageKey);
+        const entry = find((await index.read()).value.entries, tabId, pageKey);
         if (entry === undefined) return { status: 'none' };
         if (entry.evicted) return { status: 'evicted' };
 
         const read = await conversation(entry.id).read();
         if (read.status !== 'ok' || read.value.messages.length === 0) return { status: 'none' };
-        await index.updateUnqueued((entries) =>
-          entries.map((item) => (item.id === entry.id ? { ...item, usedAt: now() } : item)),
-        );
+        await index.updateUnqueued((current) => ({
+          ...current,
+          entries: current.entries.map((item) =>
+            item.id === entry.id ? { ...item, usedAt: now() } : item,
+          ),
+        }));
         return { status: 'found', messages: read.value.messages, truncated: read.value.truncated };
       });
     },
 
     save(tabId, pageKey, messages, { documentId, revision }) {
       return queue(async () => {
+        // First what an earlier save left behind: the worker stopped before
+        // it could delete, or deleting failed.
+        await collect();
         const at = now();
-        const entries = (await index.read()).value;
+        const { entries } = (await index.read()).value;
         const existing = find(entries, tabId, pageKey);
         // Saves from one panel may arrive in any order: a later one may have
         // been sent while an earlier one was still on its way. The newest
@@ -144,7 +164,6 @@ export function createSnapshotStore(
         if (existing?.documentId === documentId && existing.revision >= revision) {
           return { stored: false, truncated: false };
         }
-        const id = existing?.id ?? newId();
 
         const fitted = fitPage(pageKey, messages, at, limits.pageBytes);
         if (fitted === null) throw new SnapshotTooLargeError();
@@ -162,6 +181,7 @@ export function createSnapshotStore(
           total -= entry.bytes;
         }
 
+        const id = newId();
         const entry: SnapshotIndexEntry = {
           id,
           tabId,
@@ -175,36 +195,52 @@ export function createSnapshotStore(
         const kept = others.map((item) =>
           evicted.has(item.id) ? { ...item, usedAt: at, bytes: 0, evicted: true } : item,
         );
+        // What the new conversation replaces: the page's earlier one and the
+        // ones evicted to make room. An evicted entry's key is gone already.
+        const replaced = [...evicted];
+        if (existing !== undefined && !existing.evicted) replaced.push(existing.id);
 
-        for (const gone of evicted) await conversation(gone).removeUnqueued();
-        await index.updateUnqueued(() => forgetOldEvicted([...kept, entry], limits.evictedLimit));
         try {
+          // Listed before it exists: should the worker stop after writing
+          // it, the next save still knows to delete it.
+          await index.updateUnqueued((current) => ({
+            ...current,
+            garbage: [...current.garbage, id],
+          }));
+          // Nothing points at it yet: the page still reads as before.
           await conversation(id).updateUnqueued(() => fitted.snapshot);
+          // The commit, in one write: the page now reads the new key, and
+          // what it replaced is garbage.
+          await index.updateUnqueued((current) => ({
+            entries: forgetOldEvicted([...kept, entry], limits.evictedLimit),
+            garbage: [...current.garbage.filter((item) => item !== id), ...replaced],
+          }));
         } catch (error) {
-          // The conversation is not saved: let the index say so again. If even
-          // that fails, the entry reads as nothing saved, which is the truth.
-          await index
-            .updateUnqueued(() =>
-              forgetOldEvicted(
-                existing === undefined ? kept : [...kept, existing],
-                limits.evictedLimit,
-              ),
-            )
-            .catch(() => undefined);
+          // Not saved, and nothing that was saved before has been touched.
+          // The new key goes now, or with the next save if this fails too.
+          await collect().catch(() => undefined);
           throw error;
         }
+        // Saved, whatever happens here: what cannot be deleted now is still
+        // listed, and goes with the next save.
+        await collect().catch(() => undefined);
         return { stored: true, truncated: fitted.snapshot.truncated };
       });
     },
 
     removeTab(tabId) {
       return queue(async () => {
-        const gone = (await index.read()).value.filter((entry) => entry.tabId === tabId);
+        const gone = (await index.read()).value.entries.filter((entry) => entry.tabId === tabId);
         if (gone.length === 0) return;
-        for (const entry of gone) {
-          if (!entry.evicted) await conversation(entry.id).removeUnqueued();
-        }
-        await index.updateUnqueued((entries) => entries.filter((entry) => entry.tabId !== tabId));
+        // One write forgets the tab and lists its conversations as garbage.
+        await index.updateUnqueued((current) => ({
+          entries: current.entries.filter((entry) => entry.tabId !== tabId),
+          garbage: [
+            ...current.garbage,
+            ...gone.filter((entry) => !entry.evicted).map((entry) => entry.id),
+          ],
+        }));
+        await collect();
       });
     },
   };
@@ -260,7 +296,7 @@ export function fitPage(
 }
 
 /** Keeps the newest evicted entries, so the index cannot grow without end. */
-function forgetOldEvicted(entries: SnapshotIndex, limit: number): SnapshotIndex {
+function forgetOldEvicted(entries: SnapshotIndexEntry[], limit: number): SnapshotIndexEntry[] {
   const evicted = entries.filter((entry) => entry.evicted);
   if (evicted.length <= limit) return entries;
   const forgotten = new Set(

@@ -30,9 +30,10 @@ interface IndexEntry {
 /** The snapshot index and conversations in `storage.session`. */
 async function snapshots(serviceWorker: Parameters<typeof session>[0]) {
   const all = await session(serviceWorker);
-  const index = ((all.snapshots as { data?: IndexEntry[] } | undefined)?.data ?? []).filter(
-    (entry) => !entry.evicted,
-  );
+  const stored = (
+    all.snapshots as { data?: { entries: IndexEntry[]; garbage: string[] } } | undefined
+  )?.data;
+  const index = (stored?.entries ?? []).filter((entry) => !entry.evicted);
   const conversation = (id: string) =>
     (all[`snapshot:${id}`] as { data?: { pageKey: string; messages: Message[] } } | undefined)
       ?.data;
@@ -159,12 +160,19 @@ test('closing a tab deletes its conversation and leaves the others', async ({
 
   await first.page.close();
 
+  // The index forgets the tab first, then its conversation is deleted; the
+  // panel registry forgets it too.
   await expect
-    .poll(async () => (await snapshots(serviceWorker)).index.map((entry) => entry.tabId))
-    .toEqual([staying]);
-  const after = await snapshots(serviceWorker);
-  expect(after.all).not.toHaveProperty(`snapshot:${closedId}`);
-  expect(after.all['panel-registry']).not.toHaveProperty(String(closing));
+    .poll(async () => {
+      const { all, index } = await snapshots(serviceWorker);
+      const registry = (all['panel-registry'] as { data: Record<string, unknown> }).data;
+      return {
+        tabs: index.map((entry) => entry.tabId),
+        conversationKept: `snapshot:${closedId}` in all,
+        registered: Object.keys(registry).map(Number),
+      };
+    })
+    .toEqual({ tabs: [staying], conversationKept: false, registered: [staying] });
 });
 
 test('usage shows the figures the service reported, or an estimate marked ≈', async ({
