@@ -39,8 +39,13 @@ interface EditableListProps<T extends { id: string }> {
   editor: (item: T | null, controls: EditorControls) => ReactNode;
 }
 
-/** What is open for editing: nothing, a new item, or an existing one. */
-type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; id: string };
+/**
+ * What is open for editing: nothing, a new item, or an existing one. An
+ * existing one is kept as it was when the editor opened: the list may be read
+ * again meanwhile (another tab, an import), and the editor fills its form,
+ * and works out what the user changed, from the version the user saw.
+ */
+type Editing<T> = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; id: string; original: T };
 
 /**
  * A list of configurations with a default, as the settings page shows it:
@@ -51,7 +56,7 @@ type Editing = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; id: string
 export function EditableList<T extends { id: string }>(props: EditableListProps<T>) {
   const { kind, view, change, calls, nameOf } = props;
   const { items, readOnly } = view;
-  const [editing, setEditing] = useState<Editing>({ kind: 'closed' });
+  const [editing, setEditing] = useState<Editing<T>>({ kind: 'closed' });
   const locked = props.busy || readOnly;
   const close = () => setEditing({ kind: 'closed' });
   const nameIn = (among: readonly T[], id: string | null) => {
@@ -93,7 +98,7 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
         <ul className="items" aria-label={t(`${kind}.section`)}>
           {items.map((item, index) => {
             const name = nameOf(item);
-            const open = editing.kind === 'edit' && editing.id === item.id;
+            const open = editing.kind === 'edit' && editing.id === item.id ? editing : null;
             return (
               <ItemRow
                 key={item.id}
@@ -111,7 +116,11 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
                     () => t('list.madeDefault', { name }),
                   )
                 }
-                onEdit={() => setEditing(open ? { kind: 'closed' } : { kind: 'edit', id: item.id })}
+                onEdit={() =>
+                  setEditing(
+                    open ? { kind: 'closed' } : { kind: 'edit', id: item.id, original: item },
+                  )
+                }
                 onMove={(direction) =>
                   void change(
                     () => calls.move(item.id, direction),
@@ -120,7 +129,9 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
                 }
                 onRemove={() => remove(item)}
               >
-                {open ? props.editor(item, { focusOnOpen: true, close, cancel: close }) : null}
+                {open
+                  ? props.editor(open.original, { focusOnOpen: true, close, cancel: close })
+                  : null}
               </ItemRow>
             );
           })}

@@ -131,6 +131,8 @@ test('the selection is summarized on its own, and the page keeps its conversatio
 
   await select(page, '浮动面板');
   await openPanelOnSelection(serviceWorker, page);
+  // A new panel replaces the open one; Playwright may still list the old frame for a moment.
+  await expect.poll(() => frame.isDetached()).toBe(true);
   const selection = await panelFrame(page);
   await expect(selection.locator('main')).toHaveAttribute('data-phase', 'done');
 

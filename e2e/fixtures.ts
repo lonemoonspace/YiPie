@@ -89,7 +89,12 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
       const prefix = `chrome-extension://${extensionId}/panel.html`;
       let frame: Frame | undefined;
       await expect
-        .poll(() => (frame = page.frames().find((candidate) => candidate.url().startsWith(prefix))))
+        .poll(
+          () =>
+            (frame = page
+              .frames()
+              .find((candidate) => !candidate.isDetached() && candidate.url().startsWith(prefix))),
+        )
         .toBeDefined();
       return frame as Frame;
     });
