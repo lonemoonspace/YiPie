@@ -39,6 +39,12 @@ jobs:
       - name: Bundle within budget
         run: npm run check:bundle
 
+      # The release package, checked as a release would be (plan §4.7, step
+      # 6): `wxt zip` builds again, so the folder uploaded below is the one
+      # inside the zip.
+      - name: Release package
+        run: npm run zip && npm run verify:release
+
       # The E2E build adds host access to 127.0.0.1 and a trigger hook; the
       # checks above ran on the production build, which must have neither.
       - name: Build for E2E

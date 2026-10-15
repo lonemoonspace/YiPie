@@ -25,6 +25,7 @@
     "gate": "npm run compile && npm run test && npm run lint && npm run format:check",
     "check:manifest": "node scripts/check-manifest.ts",
     "check:bundle": "node scripts/check-bundle-budget.ts",
+    "verify:release": "node scripts/verify-release.ts",
     "test:e2e": "playwright test",
     "postinstall": "wxt prepare"
   },
