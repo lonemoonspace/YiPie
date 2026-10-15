@@ -76,6 +76,14 @@ export const SnapshotIndexEntry = z.object({
   bytes: Count,
   /** Evicted to make room for others. Remembered so the panel can say so. */
   evicted: z.boolean(),
+  /**
+   * Which save is stored: the panel document that sent it (its `documentId`)
+   * and that panel's count of its saves. A save from the same panel with a
+   * lower count arrived late and is ignored, so the newest one stands
+   * whatever order they come in (PR #4 review).
+   */
+  documentId: z.string().default(''),
+  revision: Count.default(0),
 });
 export type SnapshotIndexEntry = z.infer<typeof SnapshotIndexEntry>;
 

@@ -21,15 +21,34 @@ export type SnapshotLookup =
   | { status: 'evicted' };
 
 export interface SnapshotSaved {
+  /** False when a newer save from the same panel was stored already: this one arrived late. */
+  stored: boolean;
   /** The oldest messages did not fit the page's limit and were left out. */
   truncated: boolean;
 }
 
+/** Which save this is: the panel document that sent it, and that panel's count of its saves. */
+export interface SnapshotRevision {
+  documentId: string;
+  revision: number;
+}
+
 export interface SnapshotStore {
-  /** The conversation saved for `pageKey` in `tabId`. Restoring it counts as using it. */
+  /**
+   * The conversation saved for `pageKey` in `tabId`. Restoring it counts as
+   * using it. An empty conversation (the user started over) reads as none.
+   */
   get(tabId: number, pageKey: string): Promise<SnapshotLookup>;
-  /** Saves the whole conversation, replacing what was saved for the page before. */
-  save(tabId: number, pageKey: string, messages: SnapshotMessage[]): Promise<SnapshotSaved>;
+  /**
+   * Saves the whole conversation, replacing what was saved for the page
+   * before, unless the same panel already stored a newer one.
+   */
+  save(
+    tabId: number,
+    pageKey: string,
+    messages: SnapshotMessage[],
+    revision: SnapshotRevision,
+  ): Promise<SnapshotSaved>;
   /** Deletes every conversation of a tab that was closed. */
   removeTab(tabId: number): Promise<void>;
 }
@@ -104,7 +123,7 @@ export function createSnapshotStore(
         if (entry.evicted) return { status: 'evicted' };
 
         const read = await conversation(entry.id).read();
-        if (read.status !== 'ok') return { status: 'none' };
+        if (read.status !== 'ok' || read.value.messages.length === 0) return { status: 'none' };
         await index.updateUnqueued((entries) =>
           entries.map((item) => (item.id === entry.id ? { ...item, usedAt: now() } : item)),
         );
@@ -112,11 +131,19 @@ export function createSnapshotStore(
       });
     },
 
-    save(tabId, pageKey, messages) {
+    save(tabId, pageKey, messages, { documentId, revision }) {
       return queue(async () => {
         const at = now();
         const entries = (await index.read()).value;
         const existing = find(entries, tabId, pageKey);
+        // Saves from one panel may arrive in any order: a later one may have
+        // been sent while an earlier one was still on its way. The newest
+        // stands. A save from another panel document (the page was reloaded,
+        // the panel mounted again) always counts: the background no longer
+        // serves the old document at all.
+        if (existing?.documentId === documentId && existing.revision >= revision) {
+          return { stored: false, truncated: false };
+        }
         const id = existing?.id ?? newId();
 
         const fitted = fitPage(pageKey, messages, at, limits.pageBytes);
@@ -142,6 +169,8 @@ export function createSnapshotStore(
           usedAt: at,
           bytes: fitted.bytes,
           evicted: false,
+          documentId,
+          revision,
         };
         const kept = others.map((item) =>
           evicted.has(item.id) ? { ...item, usedAt: at, bytes: 0, evicted: true } : item,
@@ -164,7 +193,7 @@ export function createSnapshotStore(
             .catch(() => undefined);
           throw error;
         }
-        return { truncated: fitted.snapshot.truncated };
+        return { stored: true, truncated: fitted.snapshot.truncated };
       });
     },
 
@@ -189,7 +218,8 @@ export function byteSize(value: unknown): number {
 /**
  * The snapshot of `messages`, within `limit` bytes: the oldest exchanges are
  * dropped until it fits, so the conversation still begins with an answer
- * (§4.4, decision 2). Null when not even the latest answer fits.
+ * (§4.4, decision 2). Null when not even the latest answer fits. No messages
+ * make an empty snapshot: the user started over.
  */
 export function fitPage(
   pageKey: string,
@@ -201,6 +231,12 @@ export function fitPage(
   // array is its items, the commas between them, and what surrounds it.
   const sizes = messages.map(byteSize);
   const empty = (truncated: boolean) => byteSize({ pageKey, messages: [], updatedAt, truncated });
+  if (messages.length === 0) {
+    return {
+      snapshot: { pageKey, messages: [], updatedAt, truncated: false },
+      bytes: empty(false),
+    };
+  }
   let rest = sizes.reduce((sum, size) => sum + size, 0);
 
   for (let start = 0; start < messages.length;) {

@@ -15,8 +15,9 @@ export interface LatestOnlyDeps<T, R> {
  * A value that a newer one replaced before its turn is not sent at all, and
  * only the newest value's answer is reported.
  *
- * The panel's model menu (the default model) and its conversation saves (the
- * whole conversation each time) both work this way.
+ * The panel's model menu sends the default model this way. (Conversation
+ * saves carry a revision instead, which the background checks: they can go
+ * out at once, in any order.)
  */
 export function createLatestOnly<T, R>(deps: LatestOnlyDeps<T, R>): (value: T) => void {
   let newest = 0;

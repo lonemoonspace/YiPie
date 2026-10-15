@@ -13,6 +13,7 @@ import {
   fitPage,
   SnapshotTooLargeError,
   type SnapshotLimits,
+  type SnapshotRevision,
 } from '@/platform/snapshot/store';
 import { createQueue, type StorageLike } from '@/platform/storage';
 import { createMemoryStore, type MemoryStore } from '../../helpers/memory-store';
@@ -33,7 +34,8 @@ const sized = (bytes: number) => [answer('x'.repeat(bytes))];
 function setup(limits?: Partial<SnapshotLimits>, base: StorageLike = createMemoryStore()) {
   let id = 0;
   let clock = 1_000;
-  const snapshots = createSnapshotStore(base, createQueue(), {
+  let revision = 0;
+  const inner = createSnapshotStore(base, createQueue(), {
     newId: () => `s${++id}`,
     now: () => clock++,
     limits: {
@@ -43,6 +45,18 @@ function setup(limits?: Partial<SnapshotLimits>, base: StorageLike = createMemor
       ...limits,
     },
   });
+  // Unless a test says otherwise, each save comes from the tab's panel and
+  // is newer than every save before it.
+  const snapshots = {
+    ...inner,
+    save: (tabId: number, pageKey: string, messages: SnapshotMessage[], owner?: SnapshotRevision) =>
+      inner.save(
+        tabId,
+        pageKey,
+        messages,
+        owner ?? { documentId: `doc-${tabId}`, revision: ++revision },
+      ),
+  };
   return { snapshots };
 }
 
@@ -58,7 +72,7 @@ describe('snapshot store', () => {
     const { snapshots } = withStore();
     const messages = [answer('总结'), question('追问'), answer('回答', true)];
 
-    expect(await snapshots.save(1, PAGE, messages)).toEqual({ truncated: false });
+    expect(await snapshots.save(1, PAGE, messages)).toEqual({ stored: true, truncated: false });
 
     expect(await snapshots.get(1, PAGE)).toEqual({ status: 'found', messages, truncated: false });
     expect(await snapshots.get(2, PAGE)).toEqual({ status: 'none' });
@@ -99,6 +113,8 @@ describe('snapshot store', () => {
         usedAt: 1_000,
         bytes: byteSize(snapshot?.data),
         evicted: false,
+        documentId: 'doc-1',
+        revision: 1,
       },
     ]);
   });
@@ -193,7 +209,7 @@ describe('snapshot store: the page limit', () => {
     ];
     const { snapshots } = withStore({ pageBytes: 1_500 });
 
-    expect(await snapshots.save(1, PAGE, messages)).toEqual({ truncated: true });
+    expect(await snapshots.save(1, PAGE, messages)).toEqual({ stored: true, truncated: true });
 
     expect(await snapshots.get(1, PAGE)).toEqual({
       status: 'found',
@@ -290,5 +306,61 @@ describe('snapshot store: failures and cleanup', () => {
     expect(await snapshots.get(1, `${PAGE}#/other`)).toEqual({ status: 'none' });
     expect((await snapshots.get(2, PAGE)).status).toBe('found');
     expect(keys(store)).toEqual([snapshotKey('s3'), SNAPSHOT_INDEX_KEY]);
+  });
+});
+
+describe('snapshot store: saves that arrive late', () => {
+  const from = (documentId: string, revision: number) => ({ documentId, revision });
+
+  it('keeps the newest save from a panel, whatever order they arrive in', async () => {
+    const { snapshots } = withStore();
+    await snapshots.save(1, PAGE, [answer('第二版')], from('doc-a', 2));
+
+    expect(await snapshots.save(1, PAGE, [answer('第一版')], from('doc-a', 1))).toEqual({
+      stored: false,
+      truncated: false,
+    });
+    expect(await snapshots.save(1, PAGE, [answer('又一次第二版')], from('doc-a', 2))).toMatchObject(
+      {
+        stored: false,
+      },
+    );
+
+    expect(await snapshots.get(1, PAGE)).toMatchObject({ messages: [answer('第二版')] });
+  });
+
+  it('takes any save from another panel document: the page was reloaded or the panel mounted again', async () => {
+    const { snapshots } = withStore();
+    await snapshots.save(1, PAGE, [answer('旧面板')], from('doc-a', 9));
+
+    expect(await snapshots.save(1, PAGE, [answer('新面板')], from('doc-b', 1))).toMatchObject({
+      stored: true,
+    });
+
+    expect(await snapshots.get(1, PAGE)).toMatchObject({ messages: [answer('新面板')] });
+  });
+
+  it('reads an emptied conversation as nothing saved, and a late older save cannot bring it back', async () => {
+    const { snapshots } = withStore();
+    await snapshots.save(1, PAGE, [answer('总结')], from('doc-a', 1));
+    await snapshots.save(1, PAGE, [], from('doc-a', 3));
+
+    expect(await snapshots.get(1, PAGE)).toEqual({ status: 'none' });
+    expect(
+      await snapshots.save(1, PAGE, [answer('总结'), question('问')], from('doc-a', 2)),
+    ).toMatchObject({ stored: false });
+    expect(await snapshots.get(1, PAGE)).toEqual({ status: 'none' });
+  });
+
+  it('keeps the order of saves for different pages and tabs apart', async () => {
+    const { snapshots } = withStore();
+    await snapshots.save(1, PAGE, [answer('甲')], from('doc-a', 5));
+
+    expect(await snapshots.save(1, `${PAGE}#/b`, [answer('乙')], from('doc-a', 1))).toMatchObject({
+      stored: true,
+    });
+    expect(await snapshots.save(2, PAGE, [answer('丙')], from('doc-c', 1))).toMatchObject({
+      stored: true,
+    });
   });
 });

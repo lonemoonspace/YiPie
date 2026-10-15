@@ -52,15 +52,16 @@ type Script =
 /** The panel's conversation over fakes of the background and the model service. */
 function harness(options: {
   scripts?: Script[];
-  saved?: SnapshotView | Error;
+  saved?: SnapshotView | Error | (() => Promise<SnapshotView>);
   setup?: Partial<RunSetup>;
   page?: PageContext;
-  save?: (messages: SnapshotMessage[]) => Promise<{ truncated: boolean }>;
+  save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   choose?: (id: string) => Promise<unknown>;
 }) {
   const scripts = [...(options.scripts ?? [])];
   const requests: StreamRequest[] = [];
   const saves: SnapshotMessage[][] = [];
+  const revisions: number[] = [];
   const events: PanelEvent[] = [];
   let state = INITIAL_PANEL_STATE;
   const extract = vi.fn(() => Promise.resolve(options.page ?? page));
@@ -79,9 +80,11 @@ function harness(options: {
         ...options.setup,
       }),
     restore: () =>
-      options.saved instanceof Error
-        ? Promise.reject(options.saved)
-        : Promise.resolve(options.saved ?? { status: 'none' }),
+      typeof options.saved === 'function'
+        ? options.saved()
+        : options.saved instanceof Error
+          ? Promise.reject(options.saved)
+          : Promise.resolve(options.saved ?? { status: 'none' }),
     extract,
     stream: async (request) => {
       requests.push(request);
@@ -95,9 +98,10 @@ function harness(options: {
         request.signal.addEventListener('abort', () => resolve({ kind: 'stopped' }));
       });
     },
-    save: async (messages) => {
+    save: async (messages, revision) => {
       saves.push(messages);
-      return options.save ? options.save(messages) : { truncated: false };
+      revisions.push(revision);
+      return options.save ? options.save(messages, revision) : { truncated: false };
     },
     choose,
     dispatch: (event) => {
@@ -115,6 +119,7 @@ function harness(options: {
     conversation,
     requests,
     saves,
+    revisions,
     events,
     extract,
     choose,
@@ -276,7 +281,10 @@ describe('conversation: summary and follow-ups', () => {
 
     expect(h.sent(2)).toHaveLength(2);
     expect(h.state().turns.map((turn) => turn.text)).toEqual(['新总结']);
-    expect(h.saves.at(-1)?.map((message) => message.content)).toEqual(['新总结']);
+    expect(h.saves.slice(2).map((saved) => saved.map((message) => message.content))).toEqual([
+      [],
+      ['新总结'],
+    ]);
   });
 });
 
@@ -622,5 +630,180 @@ describe('saved messages and turns', () => {
     expect(
       toExchanges([{ role: 'assistant', content: '答', stopped: false, usage: null }]),
     ).toEqual([{ question: null, answer: '答', stopped: false, usage: null }]);
+  });
+});
+
+describe('conversation: what goes on after the user moved on (PR #4 review)', () => {
+  const oldSummary: SnapshotView = {
+    status: 'found',
+    messages: [{ role: 'assistant', content: '旧总结', stopped: false, usage: null }],
+    truncated: false,
+  };
+
+  it('shows nothing about a save answered after the panel went away', async () => {
+    let answerSave: (result: { truncated: boolean }) => void = () => {};
+    const h = harness({
+      scripts: [answer('总结')],
+      save: () => new Promise((resolve) => (answerSave = resolve)),
+    });
+    await h.conversation.open();
+    await settle();
+    const seen = h.events.length;
+
+    h.conversation.dispose();
+    answerSave({ truncated: true });
+    await settle();
+
+    expect(h.saves).toHaveLength(1);
+    expect(h.events).toHaveLength(seen);
+  });
+
+  it('shows nothing about a save that fails after the panel went away', async () => {
+    let failSave: (error: Error) => void = () => {};
+    const h = harness({
+      scripts: [answer('总结')],
+      save: () => new Promise((_, reject) => (failSave = reject)),
+    });
+    await h.conversation.open();
+    await settle();
+    const seen = h.events.length;
+
+    h.conversation.dispose();
+    failSave(new Error('quota'));
+    await settle();
+
+    expect(h.events).toHaveLength(seen);
+  });
+
+  it('goes no further with a model pick stored after the panel went away', async () => {
+    let stored: () => void = () => {};
+    const h = harness({
+      scripts: [answer('总结'), answer('不该出现')],
+      choose: () => new Promise((resolve) => (stored = () => resolve({}))),
+    });
+    await h.conversation.open();
+    await settle();
+    h.conversation.switchModel('m2');
+    await settle();
+    const seen = h.events.length;
+
+    h.conversation.dispose();
+    stored();
+    await settle();
+
+    expect(h.requests).toHaveLength(1);
+    expect(h.events).toHaveLength(seen);
+  });
+
+  it('reports nothing about a model pick that failed after the panel went away', async () => {
+    let refuse: (error: Error) => void = () => {};
+    const h = harness({
+      scripts: [answer('总结')],
+      choose: () => new Promise((_, reject) => (refuse = reject)),
+    });
+    await h.conversation.open();
+    await settle();
+    h.conversation.switchModel('m2');
+    await settle();
+    const seen = h.events.length;
+
+    h.conversation.dispose();
+    refuse(new Error('read-only'));
+    await settle();
+
+    expect(h.events).toHaveLength(seen);
+  });
+
+  it('does not let a restore that was still waiting replace a summary started meanwhile', async () => {
+    let restore: (view: SnapshotView) => void = () => {};
+    const h = harness({
+      saved: () => new Promise((resolve) => (restore = resolve)),
+      scripts: [answer('新总结')],
+    });
+    const opening = h.conversation.open();
+
+    h.conversation.summarize();
+    await settle();
+    restore(oldSummary);
+    await opening;
+    await settle();
+
+    expect(h.events.some((event) => event.type === 'restored')).toBe(false);
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['新总结']);
+    expect(h.saves).toEqual([[expect.objectContaining({ content: '新总结' })]]);
+  });
+
+  it('lets a second open replace the first', async () => {
+    const restores: ((view: SnapshotView) => void)[] = [];
+    const h = harness({
+      saved: () => new Promise((resolve) => restores.push(resolve)),
+      scripts: [answer('总结')],
+    });
+    const first = h.conversation.open();
+    const second = h.conversation.open();
+
+    restores[1]?.({ status: 'none' });
+    await second;
+    await settle();
+    restores[0]?.(oldSummary);
+    await first;
+    await settle();
+
+    expect(h.events.some((event) => event.type === 'restored')).toBe(false);
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
+  });
+
+  it('saves the emptied conversation as soon as the user starts over, newer than every save before', async () => {
+    const h = harness({ scripts: [answer('总结'), answer('回答'), { texts: ['新'], hang: true }] });
+    await h.conversation.open();
+    await settle();
+    h.conversation.ask('问');
+    await settle();
+    expect(h.revisions).toEqual([1, 2]);
+
+    h.conversation.summarize();
+    await settle();
+
+    // The new summary is still coming; the old conversation is no longer what is saved.
+    expect(h.saves.at(-1)).toEqual([]);
+    expect(h.revisions).toEqual([1, 2, 3]);
+  });
+
+  it('saves the conversation without the turn it answers again, as soon as it starts', async () => {
+    const h = harness({ scripts: [answer('总结'), answer('回答'), { texts: [], hang: true }] });
+    await h.conversation.open();
+    await settle();
+    h.conversation.ask('问');
+    await settle();
+
+    h.conversation.retry();
+    await settle();
+
+    expect(h.saves.at(-1)?.map((message) => message.content)).toEqual(['总结']);
+    expect(h.revisions).toEqual([1, 2, 3]);
+  });
+
+  it('shows only what the newest save reports, whatever order the answers come in', async () => {
+    const answers: {
+      resolve: (result: { truncated: boolean }) => void;
+      reject: (error: Error) => void;
+    }[] = [];
+    const h = harness({
+      scripts: [answer('总结'), answer('回答')],
+      save: () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
+    });
+    await h.conversation.open();
+    await settle();
+    h.conversation.ask('问');
+    await settle();
+
+    answers[1]?.resolve({ truncated: false });
+    await settle();
+    answers[0]?.reject(new Error('quota'));
+    await settle();
+
+    expect(h.state().snapshot).toBeNull();
   });
 });

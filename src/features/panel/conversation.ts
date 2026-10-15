@@ -21,7 +21,6 @@ import {
 import { countVariable } from '@/domain/prompt/render';
 import { estimateTokens } from '@/domain/token-estimate';
 import type { ChatOutcome } from '@/platform/llm/client';
-import { createLatestOnly } from './latest-only';
 import { createModelSwitcher } from './model-switcher';
 import type { BudgetWindow, CutNote, Exchange, PanelEvent, PanelProblem } from './state';
 
@@ -51,8 +50,12 @@ export interface ConversationDeps {
   extract: () => Promise<PageContext>;
   /** Streams one answer; never throws (`streamChat`). */
   stream: (request: StreamRequest) => Promise<ChatOutcome>;
-  /** Saves the whole conversation (`snapshot.save`). */
-  save: (messages: SnapshotMessage[]) => Promise<{ truncated: boolean }>;
+  /**
+   * Saves the whole conversation (`snapshot.save`). The background keeps the
+   * save with the highest revision this panel sent, whatever order they
+   * arrive in.
+   */
+  save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   /** Makes a model the default (`models.choose`). */
   choose: (id: string) => Promise<unknown>;
   dispatch: (event: PanelEvent) => void;
@@ -78,7 +81,11 @@ export interface Conversation {
   stop: () => void;
   /** Makes `id` the default model, then runs the latest turn again with it. */
   switchModel: (id: string) => void;
-  /** The panel is going away: the request in flight ends, and nothing it reports is shown. */
+  /**
+   * The panel is going away: the request in flight ends, and nothing still
+   * on its way is shown or acted on (a save's result, a model pick, a
+   * restore). A save already sent is still stored: it is the conversation.
+   */
   dispose: () => void;
 }
 
@@ -89,9 +96,14 @@ export const CUT_RETRY_STRATEGY: CutStrategy = 'back';
  * The panel's conversation with the model about one page
  * (docs/development-plan.md §4.4). It keeps the finished turns, builds each
  * request from them and the page as it is now, fits the page into the
- * model's context window, and saves the conversation after every answer.
- * There is never more than one request in flight: a new one ends the old
- * one, and nothing the old one reports is shown (§4.4, decision 6).
+ * model's context window, and saves the conversation whenever its finished
+ * turns change. There is never more than one request in flight: a new one
+ * ends the old one, and nothing the old one reports is shown (§4.4,
+ * decision 6).
+ *
+ * Every step that waits (a restore, a model pick) belongs to the action that
+ * started it, and goes no further once the user has done something else or
+ * the panel has gone away.
  */
 export function createConversation(deps: ConversationDeps): Conversation {
   /** Finished turns: what follow-ups carry and what is saved. */
@@ -99,33 +111,55 @@ export function createConversation(deps: ConversationDeps): Conversation {
   /** The turn in flight, or the latest one if it failed or stopped empty. Not in `history`. */
   let pending: { question: string | null } | null = null;
   let run: AbortController | null = null;
-  /** Bumped by `dispose`, so an `open` that was waiting does nothing more. */
+  /** Counts actions (open, a request, a model pick, dispose): a waiting step checks it is still the latest. */
+  let action = 0;
+  /** The action of the newest model pick. */
+  let picked = 0;
+  /** Bumped by `dispose`: a save answered after it is not shown. */
   let generation = 0;
-
-  // Each save holds the whole conversation, so only the newest counts; one at
-  // a time, so an older one cannot land last.
-  const save = createLatestOnly({
-    send: deps.save,
-    settled: ({ truncated }: { truncated: boolean }) =>
-      deps.dispatch(
-        truncated ? { type: 'snapshot', note: { kind: 'save-truncated' } } : { type: 'saved' },
-      ),
-    failed: (error) =>
-      deps.dispatch({ type: 'snapshot', note: { kind: 'save-failed', detail: messageOf(error) } }),
-  });
+  /** Counts saves: the background keeps the newest, and only the newest one's result is shown. */
+  let revision = 0;
 
   const drop = () => {
     run?.abort();
     run = null;
   };
 
+  /**
+   * Saves the finished turns as they are now. It goes out at once, carrying
+   * its revision: whatever order saves arrive in, the background keeps the
+   * newest (PR #4 review). An empty conversation means the user started
+   * over, so nothing older can be restored once it is stored.
+   */
+  function persist() {
+    const sent = ++revision;
+    const life = generation;
+    const shown = () => sent === revision && life === generation;
+    deps.save(toSnapshotMessages(history), sent).then(
+      ({ truncated }) => {
+        if (!shown()) return;
+        deps.dispatch(
+          truncated ? { type: 'snapshot', note: { kind: 'save-truncated' } } : { type: 'saved' },
+        );
+      },
+      (error: unknown) => {
+        if (!shown()) return;
+        deps.dispatch({
+          type: 'snapshot',
+          note: { kind: 'save-failed', detail: messageOf(error) },
+        });
+      },
+    );
+  }
+
   function commit(exchange: Exchange) {
     history = [...history, exchange];
     pending = null;
-    save(toSnapshotMessages(history));
+    persist();
   }
 
   async function start(question: string | null, options: { cut?: boolean } = {}) {
+    action += 1;
     drop();
     const controller = new AbortController();
     run = controller;
@@ -246,15 +280,25 @@ export function createConversation(deps: ConversationDeps): Conversation {
       void start(pending.question, options);
       return;
     }
+    // The latest finished turn is answered again: the saved conversation
+    // loses it now, as the panel does.
     const last = history.at(-1);
-    history = history.slice(0, -1);
+    if (last !== undefined) {
+      history = history.slice(0, -1);
+      persist();
+    }
     void start(last?.question ?? null, options);
   }
 
+  // Only the newest pick reports (createModelSwitcher), and only while the
+  // user has done nothing else since and the panel is still there.
   const pick = createModelSwitcher({
     choose: deps.choose,
-    chosen: () => retry(),
+    chosen: () => {
+      if (picked === action) retry();
+    },
     failed: (error) => {
+      if (picked !== action) return;
       drop();
       deps.dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } });
     },
@@ -262,18 +306,21 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
   return {
     async open() {
-      const opened = generation;
+      const opened = ++action;
+      const current = () => opened === action;
       let saved: SnapshotView = { status: 'none' };
       try {
         saved = await deps.restore();
       } catch (error) {
-        if (opened !== generation) return;
+        if (!current()) return;
         deps.dispatch({
           type: 'snapshot',
           note: { kind: 'restore-failed', detail: messageOf(error) },
         });
       }
-      if (opened !== generation) return;
+      // The user started something meanwhile (or the panel went away): the
+      // saved conversation must not replace it.
+      if (!current()) return;
 
       // Triggered again on a page with a conversation: restore it instead of
       // summarizing anew (docs/development-plan.md §4.4, decision 3).
@@ -284,7 +331,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
         deps.dispatch({ type: 'restored', exchanges, truncated: saved.truncated });
         try {
           const setup = await deps.setup();
-          if (opened === generation) {
+          if (current()) {
             const modelId = setup.config?.id ?? null;
             deps.dispatch({ type: 'models', models: setup.choices, modelId });
           }
@@ -300,8 +347,12 @@ export function createConversation(deps: ConversationDeps): Conversation {
     },
 
     summarize() {
+      // Starting over clears the saved conversation now, as the panel does,
+      // rather than when the new summary is done.
+      const cleared = history.length > 0;
       history = [];
       pending = null;
+      if (cleared) persist();
       void start(null);
     },
 
@@ -318,12 +369,14 @@ export function createConversation(deps: ConversationDeps): Conversation {
     },
 
     switchModel(id) {
+      picked = ++action;
       drop();
       deps.dispatch({ type: 'select', modelId: id });
       pick(id);
     },
 
     dispose() {
+      action += 1;
       generation += 1;
       drop();
     },

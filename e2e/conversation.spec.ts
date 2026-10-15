@@ -4,6 +4,7 @@ import {
   E2E_KEY,
   expect,
   session,
+  storeDefaults,
   storeModels,
   storeSettings,
   tabIdOf,
@@ -291,4 +292,58 @@ test('the send button asks too, and Shift+Enter starts a new line instead', asyn
   await expect(frame.locator('.question')).toHaveText('第一行\n第二行');
   await expect(box).toHaveValue('');
   expect(messagesOf(server.requests.at(-1)).at(-1)?.content).toBe('第一行\n第二行');
+});
+
+test('answering a turn again or starting over saves the conversation as the panel shows it, at once', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await storeModels(serviceWorker, server, [
+    { id: 'chat', name: '对话', model: 'scenario:chat' },
+    { id: 'slow', name: '慢', model: 'scenario:slow' },
+  ]);
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html`,
+    openPanel,
+    panelFrame,
+  );
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await ask(frame, '问一句');
+  await expect(frame.locator('article.answer')).toHaveCount(2);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const saved = async () => {
+    const { index, conversation } = await snapshots(serviceWorker);
+    return conversation(index[0]?.id ?? '')?.messages.map((message) => message.content);
+  };
+  await expect
+    .poll(saved)
+    .toEqual([expect.stringContaining('这篇文章介绍了'), '问一句', '回答：问一句']);
+
+  // Answered again with the slow model: while that answer is coming, the
+  // saved conversation has already lost the turn, as the panel has.
+  await frame.getByRole('combobox', { name: '模型' }).selectOption({ label: '慢' });
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'streaming');
+  await expect.poll(saved).toEqual([expect.stringContaining('这篇文章介绍了')]);
+  await frame.getByRole('button', { name: '停止' }).click();
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'stopped');
+
+  // Starting over empties it at once, before the new summary is done; a
+  // reload then restores nothing and summarizes anew.
+  await storeDefaults(serviceWorker, { defaultModelId: 'slow' });
+  await frame.getByRole('button', { name: '重新总结' }).click();
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'streaming');
+  await expect.poll(saved).toEqual([]);
+
+  await page.reload();
+  await openPanel(page);
+  const reopened = await panelFrame(page);
+  await expect(reopened.locator('main')).toHaveAttribute(
+    'data-phase',
+    /extracting|requesting|streaming/,
+  );
+  await expect(reopened.locator('.question')).toHaveCount(0);
 });

@@ -534,7 +534,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     ['prompts.list', {}],
     ['page.getContext', {}],
     ['snapshot.get', {}],
-    ['snapshot.save', { messages: [{ role: 'user', content: 'q' }] }],
+    ['snapshot.save', { messages: [{ role: 'user', content: 'q' }], revision: 1 }],
   ] as const;
 
   it.each(PANEL_METHODS)(
@@ -631,15 +631,18 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
 
   it('lets only the attached panel read and save its conversation', async () => {
     const get = vi.fn(() => Promise.resolve({ status: 'none' as const }));
-    const save = vi.fn(() => Promise.resolve({ truncated: false }));
+    const save = vi.fn(() => Promise.resolve({ stored: true, truncated: false }));
     const { dispatch } = setup({ 'snapshot.get': get, 'snapshot.save': save });
-    const saving = request('snapshot.save', { messages: [answer] });
+    const saving = request('snapshot.save', { messages: [answer], revision: 1 });
 
     expect(await dispatch(request('snapshot.get'), PANEL)).toEqual({
       ok: true,
       value: { status: 'none' },
     });
-    expect(await dispatch(saving, PANEL)).toEqual({ ok: true, value: { truncated: false } });
+    expect(await dispatch(saving, PANEL)).toEqual({
+      ok: true,
+      value: { stored: true, truncated: false },
+    });
     for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
       for (const call of [request('snapshot.get'), saving]) {
         expect(await dispatch(call, sender)).toMatchObject({
@@ -652,26 +655,41 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
     expect(save).toHaveBeenCalledOnce();
   });
 
-  it('keeps only the known fields of each message, and refuses an empty conversation', async () => {
-    const save = vi.fn(() => Promise.resolve({ truncated: false }));
+  it('keeps only the known fields of each message, and passes the panel and its revision', async () => {
+    const save = vi.fn(() => Promise.resolve({ stored: true, truncated: false }));
     const { dispatch } = setup({ 'snapshot.save': save });
 
     await dispatch(
-      request('snapshot.save', { messages: [{ ...answer, apiKey: 'sk-should-not-be-kept' }] }),
+      request('snapshot.save', {
+        messages: [{ ...answer, apiKey: 'sk-should-not-be-kept' }],
+        revision: 3,
+      }),
       PANEL,
     );
-    expect(save).toHaveBeenCalledWith({ messages: [answer] }, expect.anything());
+    expect(save).toHaveBeenCalledWith(
+      { messages: [answer], revision: 3 },
+      expect.objectContaining({ tabId: 1, documentId: 'DOC' }),
+    );
+  });
 
-    expect(await dispatch(request('snapshot.save', { messages: [] }), PANEL)).toMatchObject({
-      ok: false,
-      error: { code: 'bad-request' },
-    });
+  it('takes an empty conversation (the user started over), but not a malformed one', async () => {
+    const save = vi.fn(() => Promise.resolve({ stored: true, truncated: false }));
+    const { dispatch } = setup({ 'snapshot.save': save });
+
     expect(
-      await dispatch(
-        request('snapshot.save', { messages: [{ role: 'system', content: '页面' }] }),
-        PANEL,
-      ),
-    ).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+      await dispatch(request('snapshot.save', { messages: [], revision: 2 }), PANEL),
+    ).toMatchObject({ ok: true });
+    for (const input of [
+      { messages: [answer] },
+      { messages: [answer], revision: -1 },
+      { messages: [answer], revision: 1.5 },
+      { messages: [{ role: 'system', content: '页面' }], revision: 1 },
+    ]) {
+      expect(await dispatch(request('snapshot.save', input), PANEL)).toMatchObject({
+        ok: false,
+        error: { code: 'bad-request' },
+      });
+    }
     expect(save).toHaveBeenCalledOnce();
   });
 });

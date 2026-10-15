@@ -40,7 +40,7 @@ export default defineBackground(() => {
   const panelPage = async ({ tabId, documentId }: HandlerContext) => {
     if (tabId !== undefined && documentId !== undefined) {
       const pageKey = await panels.pageKeyOf(tabId, documentId);
-      if (pageKey !== null) return { tabId, pageKey };
+      if (pageKey !== null) return { tabId, pageKey, documentId };
     }
     throw new RpcRefusal('forbidden', 'This panel is not the one attached in its tab.');
   };
@@ -100,9 +100,9 @@ export default defineBackground(() => {
         const { tabId, pageKey } = await panelPage(context);
         return snapshots.get(tabId, pageKey);
       },
-      'snapshot.save': async ({ messages }, context) => {
-        const { tabId, pageKey } = await panelPage(context);
-        return snapshots.save(tabId, pageKey, messages);
+      'snapshot.save': async ({ messages, revision }, context) => {
+        const { tabId, pageKey, documentId } = await panelPage(context);
+        return snapshots.save(tabId, pageKey, messages, { documentId, revision });
       },
     },
     {

@@ -37,7 +37,7 @@ export function usePanel(): PanelControls {
       restore: () => callRpc('snapshot.get', {}),
       extract: () => callRpc('page.getContext', {}),
       stream: (request) => streamChat(request),
-      save: (messages) => callRpc('snapshot.save', { messages }),
+      save: (messages, revision) => callRpc('snapshot.save', { messages, revision }),
       choose: (id) => callRpc('models.choose', { id }),
       dispatch,
       language: t('prompt.answerLanguage'),

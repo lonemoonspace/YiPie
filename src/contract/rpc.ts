@@ -290,10 +290,16 @@ export const RPC_METHODS = {
     callers: ['panel'],
   },
   // Saves the panel's whole conversation (answers and follow-up questions,
-  // never the page or a credential) in session storage.
+  // never the page or a credential) in session storage. `revision` counts
+  // this panel's saves: one older than the last one stored arrived late and
+  // is ignored (`stored: false`). An empty conversation means the user
+  // started over, so nothing is restored for the page any more.
   'snapshot.save': {
-    input: z.strictObject({ messages: z.array(SnapshotMessage).min(1).max(1_000) }),
-    output: z.object({ truncated: z.boolean() }),
+    input: z.strictObject({
+      messages: z.array(SnapshotMessage).max(1_000),
+      revision: z.number().int().nonnegative(),
+    }),
+    output: z.object({ stored: z.boolean(), truncated: z.boolean() }),
     callers: ['panel'],
   },
 } as const satisfies Record<string, MethodDefinition>;
