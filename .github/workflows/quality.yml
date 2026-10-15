@@ -51,6 +51,20 @@ jobs:
       - name: End-to-end tests
         run: npm run test:e2e
 
+      # The production build as a test package, kept only when every check
+      # above passed: download it from the run's page, unzip it, and load the
+      # folder in chrome://extensions ("Load unpacked"). The E2E build went to
+      # its own folder and is not in it.
+      - name: Upload the test package
+        uses: actions/upload-artifact@v6
+        with:
+          name: yipie-chrome-${{ github.sha }}
+          path: .output/chrome-mv3/
+          # The build sits under .output, which the action skips by default.
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v6
