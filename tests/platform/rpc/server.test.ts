@@ -476,6 +476,49 @@ describe('RPC dispatcher: prompts', () => {
   });
 });
 
+describe('RPC dispatcher: import', () => {
+  const input = {
+    models: [{ baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'sk-x' }],
+    prompts: [{ name: '要点', user: '{{content}}' }],
+  };
+  const imported = { models, prompts: { ...models, items: [] } };
+
+  it('takes an import from the settings page only', async () => {
+    const handler = vi.fn(() => Promise.resolve(imported));
+    const { dispatch } = setup({ 'config.import': handler });
+
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request('config.import', input), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(await dispatch(request('config.import', input), OPTIONS)).toEqual({
+      ok: true,
+      value: imported,
+    });
+  });
+
+  it.each([
+    ['nothing to add', { models: [], prompts: [] }],
+    ['an id from the file', { models: [{ ...input.models[0], id: 'a' }], prompts: [] }],
+    [
+      'a reserved body field',
+      { models: [{ ...input.models[0], extraBody: { stream: false } }], prompts: [] },
+    ],
+    ['a prompt without a name', { models: [], prompts: [{ name: ' ', user: '{{content}}' }] }],
+  ])('refuses an import with %s', async (_name, bad) => {
+    const { dispatch, handlers } = setup();
+
+    expect(await dispatch(request('config.import', bad), OPTIONS)).toMatchObject({
+      ok: false,
+      error: { code: 'bad-request' },
+    });
+    expect(handlers['config.import']).not.toHaveBeenCalled();
+  });
+});
+
 describe('RPC dispatcher: backups', () => {
   const backups = { backups: [] };
 

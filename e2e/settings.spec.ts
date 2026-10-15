@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { Download, Page } from '@playwright/test';
 import {
+  E2E_KEY,
   expect,
   storeModels,
   stored,
@@ -442,3 +443,74 @@ test('prompts: unknown variables are flagged in red, and the preview renders a s
   await form.getByText('可用的变量').click();
   await expect(form.getByText('{{selection}}', { exact: true })).toBeVisible();
 });
+
+test('transfer: export without keys unless asked, then import appends with new ids', async ({
+  context,
+  extensionId,
+  serviceWorker,
+  server,
+}) => {
+  await storeModels(serviceWorker, server, [MAIN, SPARE]);
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const transfer = section(page, '导入与导出');
+  await expect(modelRow(page, '备用')).toHaveCount(1);
+
+  const exportFile = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      transfer.getByRole('button', { name: '导出模型与 Prompt' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^yipie-config-\d{4}-\d{2}-\d{2}\.json$/);
+    return { path: await download.path(), file: (await readDownload(download)) as ExportFile };
+  };
+
+  const plain = await exportFile();
+  await expect(transfer.getByRole('status')).toHaveText('已导出 2 个模型、1 个 Prompt（不含凭据）');
+  expect(JSON.stringify(plain.file)).not.toContain(E2E_KEY);
+  expect(plain.file.models.map((model) => model.name)).toEqual(['主力', '备用']);
+  expect(plain.file.prompts.map((prompt) => prompt.name)).toEqual(['网页总结']);
+
+  await transfer.getByLabel('文件里带上凭据').check();
+  const full = await exportFile();
+  expect(full.file.models.map((model) => model.apiKey)).toEqual([E2E_KEY, E2E_KEY]);
+
+  // Something that is not an export: refused, nothing written.
+  await transfer.getByLabel('选择要导入的文件').setInputFiles({
+    name: 'other.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ format: 'yipie-config', version: 1, models: [{}] })),
+  });
+  await expect(transfer.getByRole('alert')).toContainText('没有一条能识别');
+  await expect(transfer.getByRole('button', { name: '导入', exact: true })).toHaveCount(0);
+
+  await transfer.getByLabel('选择要导入的文件').setInputFiles(full.path);
+  await expect(transfer.locator('[data-import-preview]')).toContainText(
+    '将新增 2 个模型、1 个 Prompt；跳过 0 条无法识别的条目。',
+  );
+  await transfer.getByRole('button', { name: '导入', exact: true }).click();
+  await expect(transfer.getByRole('status')).toHaveText('已导入 2 个模型、1 个 Prompt');
+
+  // The models section reads the list again without a reload.
+  await expect(modelRow(page, '备用')).toHaveCount(2);
+  const models = (await stored(serviceWorker, 'model-configs')) as {
+    data: { id: string; name: string; apiKey: string; model: string }[];
+  };
+  expect(models.data.map((model) => model.name)).toEqual(['主力', '备用', '主力', '备用']);
+  expect(models.data.slice(0, 2).map((model) => model.id)).toEqual(['main', 'spare']);
+  expect(new Set(models.data.map((model) => model.id)).size).toBe(4);
+  expect(models.data.slice(2).map((model) => [model.model, model.apiKey])).toEqual([
+    ['scenario:normal', E2E_KEY],
+    ['scenario:slow', E2E_KEY],
+  ]);
+  const prompts = (await stored(serviceWorker, 'prompt-configs')) as StoredList;
+  expect(prompts.data.map((prompt) => prompt.name)).toEqual(['网页总结', '网页总结']);
+  // The default stays where it was: the first model.
+  await page.reload();
+  await expect(modelRow(page, '主力').first()).toContainText('默认');
+});
+
+interface ExportFile {
+  models: { name: string; apiKey?: string }[];
+  prompts: { name: string }[];
+}

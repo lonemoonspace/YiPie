@@ -1,4 +1,4 @@
-import { displayName, type ModelConfig } from '@/contract/model-config';
+import { MODEL_CONFIGS_KEY, displayName, type ModelConfig } from '@/contract/model-config';
 import { t } from '@/domain/i18n';
 import { changedFields } from '@/domain/patch';
 import { originPattern } from '@/domain/url';
@@ -19,7 +19,7 @@ const calls: ListCalls<ModelConfig> = {
 
 /** Model configurations: a list with a default (docs/development-plan.md §4.3). */
 export function ModelSection() {
-  const list = useConfigList(loadModels);
+  const list = useConfigList(loadModels, MODEL_CONFIGS_KEY);
   const { view, change } = list;
   const busy = list.status.kind === 'busy';
   const access = useOriginAccess(view?.items.map((config) => originPattern(config.baseURL)) ?? []);

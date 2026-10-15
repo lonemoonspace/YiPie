@@ -32,6 +32,22 @@ export function requestOriginAccess(
   });
 }
 
+/**
+ * `requestOriginAccess` for several base URLs at once (an import): one prompt
+ * for all their origins, since the browser shows one per user gesture.
+ */
+export function requestOriginsAccess(
+  baseURLs: readonly string[],
+  permissions: PermissionsLike = browser.permissions,
+): Promise<boolean> {
+  const origins = [...new Set(baseURLs.map(originPattern))];
+  if (origins.length === 0) return Promise.resolve(true);
+  return permissions.request({ origins }).catch((error: unknown) => {
+    logger.warn('Could not request access to', origins.join(', '), error);
+    return false;
+  });
+}
+
 export function hasOriginAccess(
   baseURL: string,
   permissions: PermissionsLike = browser.permissions,

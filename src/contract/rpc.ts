@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BackedUpKey, BackupsView } from './backups';
+import { ConfigImport } from './config-transfer';
 import {
   AnswerLanguage,
   FontSize,
@@ -268,6 +269,13 @@ export const RPC_METHODS = {
   'prompts.setDefault': {
     input: SetDefaultInput,
     output: PromptConfigsView,
+    callers: ['options'],
+  },
+  // An import file the settings page read and the user confirmed: each list
+  // gets its items appended with fresh ids (docs/development-plan.md §4.6).
+  'config.import': {
+    input: ConfigImport,
+    output: z.object({ models: ModelConfigsView, prompts: PromptConfigsView }),
     callers: ['options'],
   },
   // Backups hold everything that was stored, keys included: settings page only.

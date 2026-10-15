@@ -174,6 +174,28 @@ export const pages = {
   'prompt.sample.selection': '（这里是选中的文字）',
   'prompt.warning.noContent': '两个模板里都没有 {placeholder}：页面正文不会发送给模型。',
 
+  'transfer.section': '导入与导出',
+  'transfer.intro':
+    '把模型与 Prompt 存成 JSON 文件，或从这样的文件里导入。导入的条目追加在列表末尾，不覆盖已有的条目，也不改变已有的默认项。',
+  'transfer.withCredentials': '文件里带上凭据（API Key、请求头与 Base URL 的查询参数）',
+  'transfer.export': '导出模型与 Prompt',
+  'transfer.exported': '已导出 {models} 个模型、{prompts} 个 Prompt',
+  'transfer.exportedWithout': '已导出 {models} 个模型、{prompts} 个 Prompt（不含凭据）',
+  'transfer.file': '选择要导入的文件',
+  'transfer.preview':
+    '将新增 {models} 个模型、{prompts} 个 Prompt；跳过 {skipped} 条无法识别的条目。',
+  'transfer.preview.credentials': '文件里带有凭据，会和模型一起保存。',
+  'transfer.preview.noCredentials': '文件里没有凭据，导入后需要给模型补上 API Key。',
+  'transfer.preview.access': '导入时会请求访问这些模型服务的地址。',
+  'transfer.import': '导入',
+  'transfer.cancel': '取消导入',
+  'transfer.imported': '已导入 {models} 个模型、{prompts} 个 Prompt',
+  'transfer.problem.not-json': '无法导入：这个文件不是 JSON。',
+  'transfer.problem.not-config': '无法导入：这不是一瞥导出的配置文件。',
+  'transfer.problem.newer': '无法导入：这个文件来自更新版本的一瞥，请先更新扩展。',
+  'transfer.problem.too-many': '无法导入：文件里的条目太多（每类最多 {max} 条）。',
+  'transfer.problem.nothing': '无法导入：文件里没有一条能识别的模型或 Prompt，什么都没有导入。',
+  'transfer.problem.read': '无法读取这个文件：{detail}',
   'backup.section': '备份',
   'backup.intro':
     '已保存的数据无法识别时，扩展会在下一次保存覆盖它之前，先把原来的数据备份到这里（每项最多保留 3 份）。可以导出成文件，确认不再需要后删除。',

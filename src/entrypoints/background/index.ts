@@ -75,6 +75,13 @@ export default defineBackground(() => {
       'prompts.remove': ({ id }) => prompts.remove(id),
       'prompts.move': ({ id, direction }) => prompts.move(id, direction),
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
+      // One list after the other: each is appended in one change, and a list
+      // with nothing to add is left unwritten.
+      'config.import': async (input) => ({
+        models: input.models.length > 0 ? await models.addAll(input.models) : await models.list(),
+        prompts:
+          input.prompts.length > 0 ? await prompts.addAll(input.prompts) : await prompts.list(),
+      }),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),
       // The page the panel is about to be mounted on, as the browser reports
