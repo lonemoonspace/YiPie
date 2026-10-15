@@ -38,6 +38,7 @@ const page: PageContext = {
   url: 'https://example.com/post',
   lang: 'zh-CN',
   text: '页面正文。',
+  selection: '',
   truncated: false,
 };
 
@@ -328,6 +329,58 @@ describe('conversation: summary and follow-ups', () => {
       [],
       ['新总结'],
     ]);
+  });
+});
+
+describe('conversation: the selection (§4.6)', () => {
+  const selected = { ...page, selection: '选中的这一句。' };
+  const savedPage: SnapshotView = {
+    status: 'found',
+    messages: [{ role: 'assistant', content: '整页的总结', stopped: false, usage: null }],
+    truncated: false,
+  };
+
+  it('summarizes the selection in place of the page, follows up on it, and saves nothing', async () => {
+    const h = harness({
+      page: selected,
+      saved: savedPage,
+      scripts: [answer('选区总结'), answer('追问回答')],
+    });
+
+    await h.conversation.open('selection');
+    await settle();
+    h.conversation.ask('为什么？');
+    await settle();
+
+    expect(h.state().mode).toBe('selection');
+    expect(h.sent(0).at(-1)).toEqual({ role: 'user', content: '正文：选中的这一句。' });
+    expect(h.sent(1).at(1)).toEqual({ role: 'user', content: '正文：选中的这一句。' });
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['选区总结', '追问回答']);
+    // The page's own conversation is neither shown nor replaced.
+    expect(h.saves).toEqual([]);
+  });
+
+  it('says so when nothing was selected', async () => {
+    const h = harness({ page, scripts: [answer('不该请求')] });
+
+    await h.conversation.open('selection');
+    await settle();
+
+    expect(h.requests).toEqual([]);
+    expect(h.state().problem).toEqual({ kind: 'empty-selection' });
+  });
+
+  it('gives a page summary the selection as {{selection}}', async () => {
+    const h = harness({
+      page: selected,
+      setup: { prompt: { system: '', user: '{{content}}|{{selection}}' } },
+      scripts: [answer('总结')],
+    });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.sent(0)).toEqual([{ role: 'user', content: '页面正文。|选中的这一句。' }]);
   });
 });
 

@@ -16,16 +16,23 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('openPanelInTab', () => {
   it('injects into an ordinary page once storage.local is isolated', async () => {
     const d = deps();
-    await openPanelInTab(page, d);
-    expect(d.injectInto).toHaveBeenCalledWith(7);
+    await openPanelInTab(page, undefined, d);
+    expect(d.injectInto).toHaveBeenCalledWith(7, { mode: 'page', selectionText: '' });
     expect(d.markUnavailable).not.toHaveBeenCalled();
+  });
+
+  it('passes on a selection trigger, with what the menu reported as selected', async () => {
+    const d = deps();
+    const trigger = { mode: 'selection' as const, selectionText: '选中的话' };
+    await openPanelInTab(page, trigger, d);
+    expect(d.injectInto).toHaveBeenCalledWith(7, trigger);
   });
 
   it('waits for the isolation gate before injecting', async () => {
     let confirm = () => {};
     const d = deps({ storageIsolated: () => new Promise<void>((resolve) => (confirm = resolve)) });
 
-    const opening = openPanelInTab(page, d);
+    const opening = openPanelInTab(page, undefined, d);
     await settle();
     expect(d.injectInto).not.toHaveBeenCalled();
 
@@ -37,7 +44,7 @@ describe('openPanelInTab', () => {
   it('injects nothing when the gate fails, and says so on the icon', async () => {
     const d = deps({ storageIsolated: () => Promise.reject(new Error('not supported')) });
 
-    await openPanelInTab(page, d);
+    await openPanelInTab(page, undefined, d);
 
     expect(d.injectInto).not.toHaveBeenCalled();
     expect(d.markUnavailable).toHaveBeenCalledWith(7);
@@ -46,7 +53,7 @@ describe('openPanelInTab', () => {
   it('marks pages it may not script without touching them', async () => {
     for (const url of ['chrome://settings', 'https://chromewebstore.google.com/x', undefined]) {
       const d = deps();
-      await openPanelInTab({ id: 3, url }, d);
+      await openPanelInTab({ id: 3, url }, undefined, d);
       expect(d.injectInto).not.toHaveBeenCalled();
       expect(d.markUnavailable).toHaveBeenCalledWith(3);
     }
@@ -54,13 +61,13 @@ describe('openPanelInTab', () => {
 
   it('marks the page when the browser refuses the injection', async () => {
     const d = deps({ injectInto: () => Promise.reject(new Error('Cannot access contents')) });
-    await openPanelInTab(page, d);
+    await openPanelInTab(page, undefined, d);
     expect(d.markUnavailable).toHaveBeenCalledWith(7);
   });
 
   it('ignores a tab without an id', async () => {
     const d = deps();
-    await openPanelInTab({ url: page.url }, d);
+    await openPanelInTab({ url: page.url }, undefined, d);
     expect(d.injectInto).not.toHaveBeenCalled();
     expect(d.markUnavailable).not.toHaveBeenCalled();
   });

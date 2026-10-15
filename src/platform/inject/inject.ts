@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { TRIGGER_SLOT, type TriggerWire } from '@/contract/rpc-wire';
 import { t } from '@/domain/i18n/background';
 import { isInjectableURL } from '@/domain/url';
 import { createLogger } from '@/platform/logger';
@@ -17,24 +18,43 @@ export interface TabLike {
 export interface InjectDeps {
   /** Resolves once storage.local is closed to content scripts (the fail-closed gate). */
   storageIsolated: () => Promise<void>;
-  injectInto: (tabId: number) => Promise<unknown>;
+  /** Injects the content script, after leaving word of the trigger for it. */
+  injectInto: (tabId: number, trigger: TriggerWire) => Promise<unknown>;
   markUnavailable: (tabId: number) => Promise<void>;
 }
 
 const browserDeps: InjectDeps = {
   storageIsolated: ensureLocalStorageIsolated,
-  injectInto: (tabId) =>
-    browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] }),
+  injectInto: async (tabId, trigger) => {
+    // Runs in the content script's isolated world, just before it: the page
+    // cannot see or forge it.
+    await browser.scripting.executeScript({
+      target: { tabId },
+      func: (slot: string, value: TriggerWire) => {
+        (globalThis as unknown as Record<symbol, TriggerWire>)[Symbol.for(slot)] = value;
+      },
+      args: [TRIGGER_SLOT, trigger],
+    });
+    return browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
+  },
   markUnavailable,
 };
+
+/** A trigger that summarizes the page. */
+export const PAGE_TRIGGER: TriggerWire = { mode: 'page', selectionText: '' };
 
 /**
  * Opens the panel in `tab`: what every trigger does (toolbar icon, shortcut,
  * context menu). The gesture granted `activeTab`, which is what lets us
  * inject; nothing runs in a page the user did not ask about (D3 in
- * docs/development-plan.md).
+ * docs/development-plan.md). `trigger` says whether the panel works on the
+ * page or on the selection (§4.6).
  */
-export async function openPanelInTab(tab: TabLike, deps: InjectDeps = browserDeps): Promise<void> {
+export async function openPanelInTab(
+  tab: TabLike,
+  trigger: TriggerWire = PAGE_TRIGGER,
+  deps: InjectDeps = browserDeps,
+): Promise<void> {
   const tabId = tab.id;
   if (tabId === undefined) return;
 
@@ -54,7 +74,7 @@ export async function openPanelInTab(tab: TabLike, deps: InjectDeps = browserDep
   }
 
   try {
-    await deps.injectInto(tabId);
+    await deps.injectInto(tabId, trigger);
   } catch (error) {
     // The URL looked fine but the browser said no: an error page, the PDF viewer…
     logger.warn('Could not inject into tab', tabId, error);

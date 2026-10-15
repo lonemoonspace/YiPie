@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { contentPageKey } from '@/domain/page-key';
+import type { TriggerWire } from '@/contract/rpc-wire';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
@@ -79,13 +80,13 @@ export default defineBackground(() => {
       // The page the panel is about to be mounted on, as the browser reports
       // it: the content script's tab URL, which follows a single-page app's
       // `pushState` (§4.4, detail 12).
-      'content.hello': async (_input, { tabId, url, tabUrl }) => {
+      'content.hello': async ({ mode }, { tabId, url, tabUrl }) => {
         const pageKey = contentPageKey(tabUrl, url);
         if (tabId === undefined || pageKey === null) {
           throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         }
         const [nonce, { theme }] = await Promise.all([
-          panels.issue(tabId, pageKey),
+          panels.issue(tabId, pageKey, mode),
           settings.current(),
         ]);
         return { nonce, pageKey, theme };
@@ -98,7 +99,7 @@ export default defineBackground(() => {
         ) {
           throw new RpcRefusal('forbidden', 'This panel was not mounted by YiPie in this tab.');
         }
-        return { tabId };
+        return { tabId, mode: (await panels.modeOf(tabId, documentId)) ?? 'page' };
       },
       // The dispatcher has checked that the caller is the panel attached in this tab.
       'page.getContext': async (_input, { tabId }) => {
@@ -120,8 +121,8 @@ export default defineBackground(() => {
     },
   );
 
-  const open = (tab: TabLike) => {
-    openPanelInTab(tab).catch((error: unknown) => {
+  const open = (tab: TabLike, trigger?: TriggerWire) => {
+    openPanelInTab(tab, trigger).catch((error: unknown) => {
       logger.error('Could not open the panel:', error);
     });
   };
@@ -156,7 +157,8 @@ export default defineBackground(() => {
   if (import.meta.env.MODE === 'e2e') {
     Object.assign(globalThis, {
       __yipieE2E: {
-        openPanel: async (tabId: number) => openPanelInTab(await browser.tabs.get(tabId)),
+        openPanel: async (tabId: number, trigger?: TriggerWire) =>
+          openPanelInTab(await browser.tabs.get(tabId), trigger),
       },
     });
   }

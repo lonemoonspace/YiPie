@@ -64,6 +64,12 @@ export function PanelApp() {
         ) : null}
       </div>
 
+      {state.mode === 'selection' ? (
+        <p className="note" data-mode="selection">
+          {t('panel.selectionMode')}
+        </p>
+      ) : null}
+
       {state.snapshot !== null ? (
         <p className="note" data-snapshot={state.snapshot.kind}>
           {describeSnapshot(state.snapshot)}
@@ -358,6 +364,9 @@ function Problem({ problem, origin, retry }: ProblemProps) {
       break;
     case 'empty-page':
       lines.push(t('panel.emptyPage'));
+      break;
+    case 'empty-selection':
+      lines.push(t('panel.emptySelection'));
       break;
     case 'too-long':
       lines.push(

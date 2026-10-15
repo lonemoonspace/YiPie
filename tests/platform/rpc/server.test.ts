@@ -541,12 +541,12 @@ describe('RPC dispatcher: panel handshake', () => {
   });
 
   it('lets only a panel attach, before it is attached, and passes its tab and document', async () => {
-    const attach = vi.fn(() => Promise.resolve({ tabId: 1 }));
+    const attach = vi.fn(() => Promise.resolve({ tabId: 1, mode: 'page' as const }));
     const { dispatch } = setup({ 'panel.attach': attach });
 
     expect(await dispatch(request('panel.attach', { nonce: 'n' }), STRAY_PANEL)).toEqual({
       ok: true,
-      value: { tabId: 1 },
+      value: { tabId: 1, mode: 'page' },
     });
     expect(attach).toHaveBeenCalledWith(
       { nonce: 'n' },

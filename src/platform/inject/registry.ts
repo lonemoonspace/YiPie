@@ -4,14 +4,15 @@ import {
   PANEL_REGISTRY_VERSION,
   PanelRegistry,
 } from '@/contract/panel-registry';
+import type { PanelMode } from '@/contract/rpc-wire';
 import { createRepo, type Queue, type StorageLike } from '@/platform/storage';
 
 export interface PanelRegistryService {
   /**
    * A fresh nonce for the panel frame about to be mounted in `tabId`, on the
-   * page `pageKey`; replaces any earlier one.
+   * page `pageKey`, to work on `mode`; replaces any earlier one.
    */
-  issue(tabId: number, pageKey: string): Promise<string>;
+  issue(tabId: number, pageKey: string, mode?: PanelMode): Promise<string>;
   /**
    * Binds the tab's current nonce to the document presenting it. False when
    * the nonce does not match or another document already presented it.
@@ -21,6 +22,8 @@ export interface PanelRegistryService {
   isAttached(tabId: number, documentId: string): Promise<boolean>;
   /** The page of the panel `documentId` attached in `tabId`; null when it is not the one attached. */
   pageKeyOf(tabId: number, documentId: string): Promise<string | null>;
+  /** What the panel `documentId` attached in `tabId` works on; null when it is not the one attached. */
+  modeOf(tabId: number, documentId: string): Promise<PanelMode | null>;
   /** Forgets a tab that was closed. */
   remove(tabId: number): Promise<void>;
 }
@@ -40,12 +43,12 @@ export function createPanelRegistry(
   });
 
   return {
-    async issue(tabId, pageKey) {
+    async issue(tabId, pageKey, mode = 'page') {
       const nonce = newNonce();
       await repo.update((registry) =>
         keepNewest({
           ...registry,
-          [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null, pageKey },
+          [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null, pageKey, mode },
         }),
       );
       return nonce;
@@ -75,6 +78,11 @@ export function createPanelRegistry(
     async pageKeyOf(tabId, documentId) {
       const entry = (await repo.read()).value[String(tabId)];
       return entry?.attachedDocument === documentId ? entry.pageKey : null;
+    },
+
+    async modeOf(tabId, documentId) {
+      const entry = (await repo.read()).value[String(tabId)];
+      return entry?.attachedDocument === documentId ? entry.mode : null;
     },
 
     async remove(tabId) {

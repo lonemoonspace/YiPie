@@ -1,5 +1,7 @@
 import { defineUnlistedScript } from 'wxt/utils/define-unlisted-script';
+import { TRIGGER_SLOT, type TriggerWire } from '@/contract/rpc-wire';
 import { listenForPageRequests } from '@/platform/extract/listener';
+import { rememberSelection } from '@/platform/extract/selection';
 import { openPanelHost } from '@/platform/panel-host/host';
 
 /**
@@ -12,6 +14,14 @@ import { openPanelHost } from '@/platform/panel-host/host';
  * manifest-declared content script.
  */
 export default defineUnlistedScript(() => {
+  // Word of the trigger, left by the background just before this injection
+  // (platform/inject); taken, so a later injection does not read it again.
+  const scope = globalThis as unknown as Record<symbol, TriggerWire | undefined>;
+  const slot = Symbol.for(TRIGGER_SLOT);
+  const trigger = scope[slot];
+  scope[slot] = undefined;
+
+  rememberSelection(trigger?.selectionText ?? '');
   listenForPageRequests();
-  openPanelHost();
+  openPanelHost(trigger?.mode ?? 'page');
 });

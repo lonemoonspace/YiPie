@@ -2,6 +2,7 @@ import type { AnswerLanguage, TrimmingStrategy } from '@/contract/general-settin
 import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { ModelChoice, PanelModelConfig, SnapshotView } from '@/contract/rpc';
+import type { PanelMode } from '@/contract/rpc-wire';
 import type { SnapshotMessage } from '@/contract/snapshot';
 import { resolveAnswerLanguage, type ResolvedLanguage } from '@/domain/answer-language';
 import {
@@ -73,8 +74,13 @@ export interface ConversationDeps {
 }
 
 export interface Conversation {
-  /** Once attached: restores this page's conversation, or summarizes the page. */
-  open: () => Promise<void>;
+  /**
+   * Once attached: restores this page's conversation, or summarizes the
+   * page. A panel opened on the selection summarizes that instead, and keeps
+   * its conversation to itself: nothing is restored or saved, so the page's
+   * own conversation stays as it was (docs/development-plan.md §4.6).
+   */
+  open: (mode?: PanelMode) => Promise<void>;
   /** Starts over with a new summary of the page. */
   summarize: () => void;
   /** Asks a follow-up question about the page. */
@@ -126,6 +132,8 @@ export function createConversation(deps: ConversationDeps): Conversation {
   let generation = 0;
   /** Counts saves: the background keeps the newest, and only the newest one's result is shown. */
   let revision = 0;
+  /** What the panel works on; a selection conversation is never saved. */
+  let mode: PanelMode = 'page';
 
   const drop = () => {
     run?.abort();
@@ -139,6 +147,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
    * over, so nothing older can be restored once it is stored.
    */
   function persist() {
+    if (mode === 'selection') return;
     const sent = ++revision;
     const life = generation;
     const shown = () => sent === revision && life === generation;
@@ -200,7 +209,9 @@ export function createConversation(deps: ConversationDeps): Conversation {
       return;
     }
     if (!current()) return;
-    if (page.text.trim() === '') return fail({ kind: 'empty-page' });
+    const onSelection = mode === 'selection';
+    if (onSelection && page.selection.trim() === '') return fail({ kind: 'empty-selection' });
+    if (!onSelection && page.text.trim() === '') return fail({ kind: 'empty-page' });
 
     const strategy =
       options.cut === true && setup.trimming === 'nothing' ? CUT_RETRY_STRATEGY : setup.trimming;
@@ -209,7 +220,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
     const build = (content: string) =>
       conversationMessages(prompt, promptValues(page, content, language), past, question);
     const plan = planContent({
-      content: pageContent(page),
+      content: onSelection ? page.selection : pageContent(page),
       strategy,
       contextWindow: config.contextWindow,
       measure: (content) => estimateMessages(build(content)),
@@ -231,7 +242,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
     deps.dispatch({
       type: 'requesting',
       origin: new URL(config.baseURL).origin,
-      cut: cutNote(plan, page.truncated),
+      cut: cutNote(plan, !onSelection && page.truncated),
     });
 
     // One render per frame, however fast the tokens come.
@@ -340,9 +351,15 @@ export function createConversation(deps: ConversationDeps): Conversation {
   });
 
   return {
-    async open() {
+    async open(opening = 'page') {
       const opened = ++action;
       const current = () => opened === action;
+      mode = opening;
+      if (mode === 'selection') {
+        deps.dispatch({ type: 'mode', mode });
+        void start(null);
+        return;
+      }
       let saved: SnapshotView = { status: 'none' };
       try {
         saved = await deps.restore();

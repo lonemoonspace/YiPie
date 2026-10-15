@@ -74,11 +74,11 @@ export function usePanel(): PanelControls {
     };
     const nonce = window.location.hash.slice(1);
     callRpc('panel.attach', { nonce }).then(
-      () => {
+      ({ mode }) => {
         if (!active) return;
         appearance();
         unwatch = onStoredChange([GENERAL_SETTINGS_KEY], appearance);
-        void conversation.open();
+        void conversation.open(mode);
       },
       () => {
         if (active) dispatch({ type: 'failed', problem: { kind: 'attach' } });

@@ -1,6 +1,6 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import { SHADOW_TEXT } from './fake-llm/pages';
-import { expect, stored, test, useModel } from './fixtures';
+import { expect, openPanelOnSelection, session, stored, test, useModel } from './fixtures';
 
 async function open(
   context: BrowserContext,
@@ -88,4 +88,76 @@ test('text that only an open shadow root holds is read and sent', async ({
   const sent = JSON.stringify(server.requests.at(-1)?.body);
   expect(sent).toContain(SHADOW_TEXT);
   expect(sent).not.toContain('首页');
+});
+
+interface Message {
+  role: string;
+  content: string;
+}
+
+const lastUserMessage = (body: unknown) =>
+  ((body as { messages?: Message[] } | undefined)?.messages ?? []).at(-1)?.content ?? '';
+
+/** Selects the text of the paragraph that contains `text`. */
+async function select(page: Page, text: string) {
+  await page.evaluate((needle) => {
+    const paragraph = [...document.querySelectorAll('p')].find((p) =>
+      p.textContent?.includes(needle),
+    );
+    if (!paragraph) throw new Error(`No paragraph with ${needle}`);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    getSelection()?.removeAllRanges();
+    getSelection()?.addRange(range);
+  }, text);
+}
+
+test('the selection is summarized on its own, and the page keeps its conversation', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html`,
+    openPanel,
+    panelFrame,
+  );
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const savedBefore = await session(serviceWorker);
+
+  await select(page, '浮动面板');
+  await openPanelOnSelection(serviceWorker, page);
+  const selection = await panelFrame(page);
+  await expect(selection.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  const sent = lastUserMessage(server.requests.at(-1)?.body);
+  expect(sent).toContain('它在页面里打开一个浮动面板');
+  expect(sent).not.toContain('一瞥是一个浏览器扩展');
+  await expect(selection.locator('[data-mode="selection"]')).toContainText('选中的内容');
+  // Nothing was saved for the selection: the page's conversation is as it was.
+  const savedAfter = await session(serviceWorker);
+  const snapshots = (all: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(all).filter(([key]) => key.startsWith('snapshot')));
+  expect(snapshots(savedAfter)).toEqual(snapshots(savedBefore));
+});
+
+test('the menu-reported selection stands in when the page reads none', async ({
+  context,
+  server,
+  serviceWorker,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+
+  await openPanelOnSelection(serviceWorker, page, '菜单报告的选中文字');
+  const frame = await panelFrame(page);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  expect(lastUserMessage(server.requests.at(-1)?.body)).toContain('菜单报告的选中文字');
 });

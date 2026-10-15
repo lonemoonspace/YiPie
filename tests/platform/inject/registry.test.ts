@@ -62,7 +62,15 @@ describe('panel registry', () => {
     expect(PANEL_REGISTRY_KEY.startsWith('session:')).toBe(true);
     expect(store.dump()[PANEL_REGISTRY_KEY]).toEqual({
       version: 1,
-      data: { '7': { nonce: 'nonce-1', issuedAt: 1000, attachedDocument: null, pageKey: PAGE } },
+      data: {
+        '7': {
+          nonce: 'nonce-1',
+          issuedAt: 1000,
+          attachedDocument: null,
+          pageKey: PAGE,
+          mode: 'page',
+        },
+      },
     });
   });
 
@@ -118,5 +126,18 @@ describe('panel registry pages', () => {
 
     expect(await registry.isAttached(7, 'doc-7')).toBe(false);
     expect(await registry.isAttached(8, 'doc-8')).toBe(true);
+  });
+
+  it('remembers what the panel works on, for the panel attached with that nonce only', async () => {
+    const { registry } = setup();
+    const nonce = await registry.issue(7, PAGE, 'selection');
+    await registry.attach(7, nonce, 'doc-a');
+
+    expect(await registry.modeOf(7, 'doc-a')).toBe('selection');
+    expect(await registry.modeOf(7, 'doc-b')).toBeNull();
+
+    const next = await registry.issue(7, PAGE);
+    await registry.attach(7, next, 'doc-b');
+    expect(await registry.modeOf(7, 'doc-b')).toBe('page');
   });
 });

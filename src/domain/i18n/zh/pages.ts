@@ -114,7 +114,7 @@ export const pages = {
 
   'prompt.section': 'Prompt',
   'prompt.intro':
-    '面板总结时使用默认 Prompt。模板里可以写 {{title}}（标题）、{{url}}（地址）、{{content}}（正文）、{{selection}}（选中的文字，目前总是空的）、{{language}}（回答用的语言）。',
+    '面板总结时使用默认 Prompt；从右键菜单「总结选中内容」打开时，{{content}} 是选中的内容。模板里可以写 {{title}}（标题）、{{url}}（地址）、{{content}}（正文）、{{selection}}（打开面板时选中的文字）、{{language}}（回答用的语言）。',
   'prompt.add': '添加 Prompt',
   'prompt.addHeading': '添加 Prompt',
   'prompt.editHeading': '编辑「{name}」',
@@ -227,6 +227,9 @@ export const pages = {
   'panel.switchFailed': '切换模型失败：{detail}',
   'panel.extractFailed': '读取正文失败：{detail}',
   'panel.emptyPage': '这个页面没有可总结的正文。',
+  'panel.emptySelection': '没有读到选中的文字。请重新选中要总结的内容，再从右键菜单打开。',
+  'panel.selectionMode':
+    '这里总结的是你选中的内容。这段对话不会保存：刷新后再点图标，回到这一页原来的对话。',
 
   'error.auth': '鉴权失败：请检查 API Key 是否正确、是否有权使用这个模型。',
   'error.unauthorized-access':

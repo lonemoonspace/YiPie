@@ -132,6 +132,26 @@ export async function reloadExtension(context: BrowserContext, worker: Worker): 
   return next as Worker;
 }
 
+/**
+ * Does what the right-click menu's 「总结选中内容」 does for the tab showing
+ * `page`; `selectionText` is what the menu would report.
+ */
+export async function openPanelOnSelection(
+  serviceWorker: Worker,
+  page: Page,
+  selectionText = '',
+): Promise<void> {
+  const tabId = await tabIdOf(serviceWorker, page);
+  await serviceWorker.evaluate(
+    ([id, text]) =>
+      (globalThis as unknown as E2EGlobal).__yipieE2E.openPanel(id, {
+        mode: 'selection',
+        selectionText: text,
+      }),
+    [tabId, selectionText] as const,
+  );
+}
+
 /** Does what a click on the toolbar icon does, with the given service worker. */
 export async function openPanelWith(worker: Worker, tabId: number): Promise<void> {
   await worker.evaluate(
@@ -268,7 +288,12 @@ interface ChromeRuntimeGlobal {
 }
 
 interface E2EGlobal {
-  __yipieE2E: { openPanel(tabId: number): Promise<void> };
+  __yipieE2E: {
+    openPanel(
+      tabId: number,
+      trigger?: { mode: 'page' | 'selection'; selectionText: string },
+    ): Promise<void>;
+  };
 }
 
 interface ChromeTabsGlobal {

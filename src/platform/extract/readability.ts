@@ -81,8 +81,15 @@ function copyOf(doc: Document): Document {
   return clone;
 }
 
-/** The page as the panel gets it: the extracted text, cut at `limit`. */
-export function extractPage(doc: Document, limit = MAX_PAGE_TEXT_LENGTH): PageContext {
+/**
+ * The page as the panel gets it: the extracted text, cut at `limit`, and the
+ * text selected when the panel was opened.
+ */
+export function extractPage(
+  doc: Document,
+  limit = MAX_PAGE_TEXT_LENGTH,
+  selection = '',
+): PageContext {
   const { title, lang, text } = extractText(doc);
   const truncated = text.length > limit;
   return {
@@ -90,6 +97,7 @@ export function extractPage(doc: Document, limit = MAX_PAGE_TEXT_LENGTH): PageCo
     url: doc.URL,
     lang,
     text: truncated ? text.slice(0, limit) : text,
+    selection: selection.slice(0, limit),
     truncated,
   };
 }

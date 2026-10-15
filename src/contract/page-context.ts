@@ -13,6 +13,11 @@ export const PageContext = z.strictObject({
   /** The document's language tag, or empty when the page declares none. */
   lang: z.string().max(100),
   text: z.string().max(200_000),
+  /**
+   * The text selected when the panel was opened, for `{{selection}}` and
+   * selection summaries (docs/development-plan.md §4.6); empty when none.
+   */
+  selection: z.string().max(200_000),
   /** The text was cut short (see `MAX_PAGE_TEXT_LENGTH` in platform/extract). */
   truncated: z.boolean(),
 });

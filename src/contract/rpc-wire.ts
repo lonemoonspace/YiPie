@@ -43,3 +43,23 @@ export const PAGE_CHANNEL = 'yipie.page/1';
 export type PageRequestWire = { channel: typeof PAGE_CHANNEL; type: 'extract' };
 
 export type PageReplyWire = { ok: true; value: unknown } | { ok: false; message: string };
+
+/**
+ * What the panel works on (docs/development-plan.md §4.6): the page, or the
+ * text the user selected and asked about from the right-click menu.
+ */
+export const PANEL_MODES = ['page', 'selection'] as const;
+export type PanelMode = (typeof PANEL_MODES)[number];
+
+/**
+ * Where the background leaves word of the trigger, in the content script's
+ * isolated world, just before it injects the script (platform/inject): the
+ * mode, and the selection as the right-click menu reported it.
+ */
+export const TRIGGER_SLOT = 'yipie.trigger';
+
+export interface TriggerWire {
+  mode: PanelMode;
+  /** The menu's `selectionText`: a stand-in when the page's own selection reads empty. */
+  selectionText: string;
+}

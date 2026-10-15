@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { PAGE_CHANNEL, type PageReplyWire, type PageRequestWire } from '@/contract/rpc-wire';
-import { extractPage } from './readability';
+import { MAX_PAGE_TEXT_LENGTH, extractPage } from './readability';
+import { rememberedSelection } from './selection';
 
 const INSTALLED = Symbol.for('yipie.page-requests');
 
@@ -20,7 +21,10 @@ export function listenForPageRequests(): void {
     if (sender.id !== browser.runtime.id || !isPageRequest(message)) return false;
     let reply: PageReplyWire;
     try {
-      reply = { ok: true, value: extractPage(document) };
+      reply = {
+        ok: true,
+        value: extractPage(document, MAX_PAGE_TEXT_LENGTH, rememberedSelection()),
+      };
     } catch (error) {
       reply = { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
