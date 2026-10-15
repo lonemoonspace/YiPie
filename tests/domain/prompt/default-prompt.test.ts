@@ -6,6 +6,7 @@ import {
   SUMMARY_USER_TEMPLATE,
   builtinPrompt,
 } from '@/domain/prompt/default-prompt';
+import { CITATION } from '@/domain/citation';
 import { unknownPlaceholders, usesVariable } from '@/domain/prompt/render';
 
 describe('the built-in prompt', () => {
@@ -31,6 +32,11 @@ describe('the built-in prompt', () => {
   it('tells the model to answer follow-up questions from the page, without summarizing again', () => {
     expect(SUMMARY_SYSTEM_TEMPLATE).toContain('继续追问');
     expect(SUMMARY_SYSTEM_TEMPLATE).toContain('不必再写一遍总结');
+  });
+
+  it('asks for quotes in the form the panel turns into markers, copied word for word', () => {
+    expect(CITATION.exec(SUMMARY_SYSTEM_TEMPLATE)?.[1]).toBe('原文片段');
+    expect(SUMMARY_SYSTEM_TEMPLATE).toContain('逐字照抄');
   });
 
   it('returns a fresh object each time', () => {

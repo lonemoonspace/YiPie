@@ -307,6 +307,13 @@ export const RPC_METHODS = {
     output: PageContext,
     callers: ['panel'],
   },
+  // Finds a quote of an answer in the panel's page, scrolls to it and
+  // highlights it (docs/development-plan.md §4.6).
+  'page.locate': {
+    input: z.strictObject({ quote: z.string().trim().min(1).max(1_000) }),
+    output: z.object({ found: z.boolean() }),
+    callers: ['panel'],
+  },
   // The conversation of the page the panel was mounted on, in its own tab: a
   // panel names neither, so it cannot reach another tab's or page's.
   'snapshot.get': {

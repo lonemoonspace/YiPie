@@ -1,5 +1,6 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { TurnUsage } from '@/contract/snapshot';
+import { plainCitations } from '@/domain/citation';
 import { t } from '@/domain/i18n';
 import { adviceFor, isLocalOriginRefusal, type LlmError } from '@/domain/llm/errors';
 import { renderMarkdown } from '@/features/markdown/render';
@@ -20,9 +21,11 @@ import {
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, stop, summarize, ask, retry, switchModel, pageText } = usePanel();
+  const { state, stop, summarize, ask, retry, switchModel, pageText, locate } = usePanel();
   const busy = isBusy(state);
   const attached = state.phase !== 'attaching' && state.problem?.kind !== 'attach';
+  const conversation = useRef<HTMLDivElement>(null);
+  const located = useQuoteLocator(conversation, locate);
 
   useFollowConversation(state);
 
@@ -76,7 +79,13 @@ export function PanelApp() {
         </p>
       ) : null}
 
-      <div className="conversation">
+      {located !== null ? (
+        <p className="note" role="status" data-located={located.found ? 'found' : 'missing'}>
+          {located.message}
+        </p>
+      ) : null}
+
+      <div className="conversation" ref={conversation}>
         {state.turns.map((turn, index) => (
           <TurnView key={index} turn={turn} streaming={busy && index === state.turns.length - 1} />
         ))}
@@ -89,6 +98,57 @@ export function PanelApp() {
       {attached ? <AskForm enabled={canAsk(state)} ask={ask} /> : null}
     </main>
   );
+}
+
+interface Located {
+  found: boolean;
+  message: string;
+}
+
+/**
+ * Quote markers in answers (features/markdown) find their passage in the
+ * page when pressed, by click or keyboard: one listener on the conversation
+ * catches them all. What came of it shows for a few seconds; nothing when
+ * the quote was found, since the page shows it.
+ */
+function useQuoteLocator(
+  container: RefObject<HTMLElement | null>,
+  locate: (quote: string) => Promise<boolean>,
+): Located | null {
+  const [located, setLocated] = useState<Located | null>(null);
+
+  useEffect(() => {
+    const element = container.current;
+    if (element === null) return;
+    let latest = 0;
+    const onClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest('button.cite') : null;
+      const quote = target instanceof HTMLElement ? target.dataset.quote : undefined;
+      if (quote === undefined) return;
+      const asked = ++latest;
+      locate(quote).then(
+        (found) => {
+          if (asked !== latest) return;
+          setLocated(found ? null : { found, message: t('panel.cite.notFound', { quote }) });
+        },
+        (error: unknown) => {
+          if (asked !== latest) return;
+          const detail = error instanceof Error ? error.message : String(error);
+          setLocated({ found: false, message: t('panel.cite.failed', { detail }) });
+        },
+      );
+    };
+    element.addEventListener('click', onClick);
+    return () => element.removeEventListener('click', onClick);
+  }, [container, locate]);
+
+  useEffect(() => {
+    if (located === null) return;
+    const timer = setTimeout(() => setLocated(null), 5_000);
+    return () => clearTimeout(timer);
+  }, [located]);
+
+  return located;
 }
 
 /**
@@ -156,7 +216,7 @@ const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
           <CopyButton
-            text={() => turn.text}
+            text={() => plainCitations(turn.text)}
             label={t('panel.copy')}
             title={t('panel.copy.title')}
           />

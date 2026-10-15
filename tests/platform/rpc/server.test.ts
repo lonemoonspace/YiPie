@@ -584,6 +584,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     ['models.disableStreamUsage', { id: 'a' }],
     ['prompts.list', {}],
     ['page.getContext', {}],
+    ['page.locate', { quote: '原文' }],
     ['snapshot.get', {}],
     ['snapshot.save', { messages: [{ role: 'user', content: 'q' }], revision: 1 }],
   ] as const;
@@ -655,6 +656,31 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
       .filter(([, definition]) => (definition as MethodDefinition).beforeAttach === true)
       .map(([method]) => method);
     expect(early).toEqual(['panel.attach']);
+  });
+});
+
+describe('RPC dispatcher: locating a quote', () => {
+  it('lets the attached panel search its page, and no one else, with a sane quote', async () => {
+    const locate = vi.fn(() => Promise.resolve({ found: true }));
+    const { dispatch } = setup({ 'page.locate': locate });
+
+    expect(await dispatch(request('page.locate', { quote: '原文' }), PANEL)).toEqual({
+      ok: true,
+      value: { found: true },
+    });
+    for (const sender of [OPTIONS, CONTENT]) {
+      expect(await dispatch(request('page.locate', { quote: '原文' }), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    for (const quote of ['   ', 'x'.repeat(1_001)]) {
+      expect(await dispatch(request('page.locate', { quote }), PANEL)).toMatchObject({
+        ok: false,
+        error: { code: 'bad-request' },
+      });
+    }
+    expect(locate).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,4 +1,6 @@
-import { Marked } from 'marked';
+import { Marked, type Tokens } from 'marked';
+import { CITATION } from '@/domain/citation';
+import { t } from '@/domain/i18n';
 
 /**
  * Markdown → HTML for model output, which the panel inserts with
@@ -13,7 +15,13 @@ import { Marked } from 'marked';
  *   panel fetch a URL of its choosing (and a relative one would hit the site
  *   being summarized). Only the escaped alt text remains;
  * - GFM task-list checkboxes become plain characters, keeping the tag set
- *   small.
+ *   small;
+ * - a quote of the page, `[[passage]]` (domain/citation), becomes a numbered
+ *   button that finds the passage in the page. It is recognised only where
+ *   inline text is parsed: in code, in raw HTML (escaped) and in link targets
+ *   it stays the characters it was, and inside a link's text it is plain
+ *   text, since a button cannot sit inside a link. The passage is escaped
+ *   into its attributes.
  *
  * The extension pages' CSP (`img-src 'self' data:`, `frame-src 'none'`,
  * `form-action 'none'`) is the second line of defence if this ever slips.
@@ -47,16 +55,50 @@ export function isSafeHref(href: string): boolean {
   return SAFE_TARGET.test(target);
 }
 
+/** A quote of the page in model output. */
+interface CitationToken extends Tokens.Generic {
+  type: 'citation';
+  raw: string;
+  passage: string;
+}
+
+const LEADING_CITATION = new RegExp(`^${CITATION.source}`);
+
+/** Numbers the quotes of one answer, in order; reset for every render. */
+let quotes = 0;
+
 const markdown = new Marked({
   async: false,
   gfm: true,
   breaks: false,
+  extensions: [
+    {
+      name: 'citation',
+      level: 'inline',
+      start: (source: string) => {
+        const at = source.indexOf('[[');
+        return at === -1 ? undefined : at;
+      },
+      tokenizer: (source: string): CitationToken | undefined => {
+        const match = LEADING_CITATION.exec(source);
+        const passage = match?.[1]?.trim();
+        if (match === null || !passage) return undefined;
+        return { type: 'citation', raw: match[0], passage };
+      },
+      renderer: (token) => {
+        quotes += 1;
+        const passage = escapeHtml((token as CitationToken).passage);
+        const label = escapeHtml(t('panel.cite.label', { number: quotes }));
+        return `<button type="button" class="cite" data-quote="${passage}" title="${passage}" aria-label="${label}">${quotes}</button>`;
+      },
+    },
+  ],
   renderer: {
     html({ text }) {
       return escapeHtml(text);
     },
     link({ href, tokens }) {
-      const label = this.parser.parseInline(tokens);
+      const label = this.parser.parseInline(tokens.map(plainQuote));
       if (!isSafeHref(href)) return label;
       const target = escapeHtml(href.trim());
       return `<a href="${target}" title="${target}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`;
@@ -70,6 +112,12 @@ const markdown = new Marked({
   },
 });
 
+/** A quote inside a link's text, as the plain text it was. */
+function plainQuote(token: Tokens.Generic): Tokens.Generic {
+  return token.type === 'citation' ? { type: 'text', raw: token.raw, text: token.raw } : token;
+}
+
 export function renderMarkdown(source: string): string {
+  quotes = 0;
   return markdown.parse(source, { async: false });
 }

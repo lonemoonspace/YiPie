@@ -3,7 +3,7 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { contentPageKey } from '@/domain/page-key';
 import type { TriggerWire } from '@/contract/rpc-wire';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
-import { requestPageContext } from '@/platform/inject/page-context';
+import { requestLocate, requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { releaseOriginAccess } from '@/platform/permissions/origin-access';
@@ -105,6 +105,10 @@ export default defineBackground(() => {
       'page.getContext': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to read.');
         return requestPageContext(tabId);
+      },
+      'page.locate': async ({ quote }, { tabId }) => {
+        if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to search.');
+        return { found: await requestLocate(tabId, quote) };
       },
       'snapshot.get': async (_input, context) => {
         const { tabId, pageKey } = await panelPage(context);

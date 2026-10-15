@@ -194,7 +194,7 @@ export const pages = {
   'panel.ask.placeholder': '就这一页继续提问（Enter 发送，Shift+Enter 换行）',
   'panel.send': '发送',
   'panel.copy': '复制',
-  'panel.copy.title': '复制这条回答（Markdown 原文）',
+  'panel.copy.title': '复制这条回答（Markdown 原文，引用写成「原文」）',
   'panel.copied': '已复制',
   'panel.copyFailed': '复制失败',
   'panel.copyPage': '复制正文',
@@ -226,6 +226,9 @@ export const pages = {
   'panel.model': '模型',
   'panel.switchFailed': '切换模型失败：{detail}',
   'panel.extractFailed': '读取正文失败：{detail}',
+  'panel.cite.label': '在网页中定位引用 {number}',
+  'panel.cite.notFound': '在网页里没找到这段原文：{quote}',
+  'panel.cite.failed': '没能在网页里定位：{detail}',
   'panel.emptyPage': '这个页面没有可总结的正文。',
   'panel.emptySelection': '没有读到选中的文字。请重新选中要总结的内容，再从右键菜单打开。',
   'panel.selectionMode':

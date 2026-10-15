@@ -12,9 +12,12 @@ export interface PanelControls extends Omit<Conversation, 'open' | 'dispose'> {
   state: PanelState;
   /** The page text as the extension reads it, for the copy button. */
   pageText: () => Promise<string>;
+  /** Finds a quote in the page and shows it there; resolves to whether it was found. */
+  locate: (quote: string) => Promise<boolean>;
 }
 
 const pageText = async () => (await callRpc('page.getContext', {})).text;
+const locate = async (quote: string) => (await callRpc('page.locate', { quote })).found;
 
 /**
  * The panel's whole life: attach with the nonce in our URL, then restore this
@@ -92,5 +95,5 @@ export function usePanel(): PanelControls {
   }, [conversation]);
 
   const { summarize, ask, retry, stop, switchModel } = conversation;
-  return { state, summarize, ask, retry, stop, switchModel, pageText };
+  return { state, summarize, ask, retry, stop, switchModel, pageText, locate };
 }

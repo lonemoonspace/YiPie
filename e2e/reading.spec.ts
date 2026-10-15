@@ -1,6 +1,6 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import { SHADOW_TEXT } from './fake-llm/pages';
-import { expect, openPanelOnSelection, session, stored, test, useModel } from './fixtures';
+import { expect, openPanelOnSelection, session, stored, tabIdOf, test, useModel } from './fixtures';
 
 async function open(
   context: BrowserContext,
@@ -160,4 +160,53 @@ test('the menu-reported selection stands in when the page reads none', async ({
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
 
   expect(lastUserMessage(server.requests.at(-1)?.body)).toContain('菜单报告的选中文字');
+});
+
+test('a quote in the answer finds its passage in the page, without changing the page', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:cite');
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html`,
+    openPanel,
+    panelFrame,
+  );
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const before = await page.evaluate(() => document.body.innerHTML);
+
+  await frame.getByRole('button', { name: '在网页中定位引用 1' }).click();
+
+  const tabId = await tabIdOf(serviceWorker, page);
+  // The highlight lives in the content script's world, where it was made.
+  const highlighted = () =>
+    serviceWorker.evaluate(async (id) => {
+      const { chrome } = globalThis as unknown as {
+        chrome: {
+          scripting: {
+            executeScript(options: object): Promise<{ result?: unknown }[]>;
+          };
+        };
+      };
+      const [frameResult] = await chrome.scripting.executeScript({
+        target: { tabId: id },
+        func: () => {
+          const highlight = CSS.highlights.get('yipie-quote');
+          return highlight ? [...highlight].map((range) => (range as Range).toString()) : [];
+        },
+      });
+      return frameResult?.result;
+    }, tabId);
+  await expect.poll(highlighted).toEqual(['它在页面里打开一个浮动面板']);
+  expect(await page.evaluate(() => document.body.innerHTML)).toBe(before);
+
+  await frame.getByRole('button', { name: '在网页中定位引用 2' }).click();
+  await expect(frame.locator('[data-located]')).toContainText(
+    '在网页里没找到这段原文：这句话页面上没有',
+  );
+  await expect.poll(highlighted).toEqual([]);
 });

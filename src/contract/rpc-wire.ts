@@ -40,7 +40,10 @@ export type RpcReplyWire =
  */
 export const PAGE_CHANNEL = 'yipie.page/1';
 
-export type PageRequestWire = { channel: typeof PAGE_CHANNEL; type: 'extract' };
+export type PageRequestWire =
+  | { channel: typeof PAGE_CHANNEL; type: 'extract' }
+  /** Find a quote in the page, scroll to it and highlight it; the reply's value is whether it was found. */
+  | { channel: typeof PAGE_CHANNEL; type: 'locate'; quote: string };
 
 export type PageReplyWire = { ok: true; value: unknown } | { ok: false; message: string };
 
