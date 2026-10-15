@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>组件里的文章</title>
+  </head>
+  <body>
+    <nav><a href="/">首页</a></nav>
+    <!-- The test attaches each template as the open shadow root of its parent. -->
+    <app-shell>
+      <template data-shadow-root>
+        <header-bar><template data-shadow-root><nav>站点导航</nav></template></header-bar>
+        <article-view>
+          <template data-shadow-root>
+            <h1>组件里的文章</h1>
+            <p>这段正文写在 open shadow root 里。普通的 cloneNode 带不走它，提取需要把影子树展开，才能读到页面真正显示的内容。</p>
+            <p>展开时，slot 的位置换成分配给它的节点：<slot name="note"></slot></p>
+            <p>影子树里的文字和普通正文一样会交给模型，只是要多走一步，并且有深度上限，防止层层嵌套的组件拖慢提取。</p>
+          </template>
+          <span slot="note">这句话来自宿主的子节点。</span>
+        </article-view>
+      </template>
+    </app-shell>
+  </body>
+</html>

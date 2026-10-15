@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { extractPage, textOf, tidy } from '@/platform/extract/readability';
+import { extractPage } from '@/platform/extract/readability';
+import { textOf, tidy } from '@/platform/extract/text';
 
 function pageWith(body: string, title = '一篇文章', lang = 'zh-CN'): Document {
   const doc = document.implementation.createHTMLDocument(title);

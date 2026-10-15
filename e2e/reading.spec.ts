@@ -1,4 +1,5 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
+import { SHADOW_TEXT } from './fake-llm/pages';
 import { expect, stored, test, useModel } from './fixtures';
 
 async function open(
@@ -71,4 +72,20 @@ test('the page text the extension read can be copied from the panel', async ({
   await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain('一瞥是一个浏览器扩展');
+});
+
+test('text that only an open shadow root holds is read and sent', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const { frame } = await open(context, `${server.origin}/shadow.html`, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  const sent = JSON.stringify(server.requests.at(-1)?.body);
+  expect(sent).toContain(SHADOW_TEXT);
+  expect(sent).not.toContain('首页');
 });
