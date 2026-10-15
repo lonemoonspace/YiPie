@@ -13,8 +13,8 @@ describe('t', () => {
   });
 
   it('fills named parameters', () => {
-    expect(t('error.auth', { status: 401 })).toBe(
-      '鉴权失败（HTTP 401）：请检查 API Key 是否正确、是否有权使用这个模型。',
+    expect(t('error.statusDetail', { status: 401, detail: 'Invalid API key' })).toBe(
+      '服务返回 HTTP 401：Invalid API key',
     );
   });
 

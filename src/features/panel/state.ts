@@ -86,6 +86,11 @@ export interface PanelState {
   modelId: string | null;
   /** Origin of the model service, for error messages. */
   origin: string | null;
+  /**
+   * The request failed before anything arrived and goes once more after this
+   * many seconds (§4.5, decision 1); null otherwise.
+   */
+  retrying: number | null;
   turns: Turn[];
   /** Why the latest run did not finish; it belongs to the last turn, if there is one. */
   problem: PanelProblem | null;
@@ -109,6 +114,8 @@ export type PanelEvent =
   /** A model picked from the menu: the latest turn runs again with it. */
   | { type: 'select'; modelId: string }
   | { type: 'requesting'; origin: string; cut: CutNote | null }
+  /** The request is sent once more after `seconds`. */
+  | { type: 'retrying'; seconds: number }
   | { type: 'text'; text: string }
   | { type: 'finished'; usage: TurnUsage }
   | { type: 'stopped'; usage: TurnUsage | null }
@@ -122,6 +129,7 @@ export const INITIAL_PANEL_STATE: PanelState = {
   models: [],
   modelId: null,
   origin: null,
+  retrying: null,
   turns: [],
   problem: null,
   snapshot: null,
@@ -169,6 +177,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         ...state,
         phase: 'extracting',
         origin: null,
+        retrying: null,
         turns: [
           ...state.turns.slice(0, event.keep),
           { question: event.question, text: '', status: 'pending', usage: null, cut: null },
@@ -179,20 +188,30 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       return { ...state, models: event.models, modelId: event.modelId };
     case 'select':
       // The run in flight is dropped; the turn starts again once the pick is stored.
-      return { ...state, phase: 'extracting', modelId: event.modelId, problem: null };
+      return {
+        ...state,
+        phase: 'extracting',
+        modelId: event.modelId,
+        retrying: null,
+        problem: null,
+      };
     case 'requesting':
       return {
         ...state,
         phase: 'requesting',
         origin: event.origin,
+        retrying: null,
         turns: updateLast(state.turns, (turn) => ({ ...turn, cut: event.cut })),
       };
+    case 'retrying':
+      return state.phase === 'requesting' ? { ...state, retrying: event.seconds } : state;
     case 'text':
       // A late chunk after a stop or an error changes nothing.
       if (state.phase !== 'requesting' && state.phase !== 'streaming') return state;
       return {
         ...state,
         phase: 'streaming',
+        retrying: null,
         turns: updateLast(state.turns, (turn) => ({ ...turn, text: turn.text + event.text })),
       };
     case 'finished':
@@ -200,6 +219,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       return {
         ...state,
         phase: 'done',
+        retrying: null,
         turns: updateLast(state.turns, (turn) => ({ ...turn, status: 'done', usage: event.usage })),
       };
     case 'stopped':
@@ -207,6 +227,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       return {
         ...state,
         phase: 'stopped',
+        retrying: null,
         turns: updateLast(state.turns, (turn) => ({
           ...turn,
           status: 'stopped',
@@ -217,6 +238,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       return {
         ...state,
         phase: 'error',
+        retrying: null,
         problem: event.problem,
         turns: updateLast(state.turns, (turn) =>
           turn.status === 'pending' ? { ...turn, status: 'failed' } : turn,

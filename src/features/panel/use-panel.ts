@@ -39,6 +39,7 @@ export function usePanel(): PanelControls {
       stream: (request) => streamChat(request),
       save: (messages, revision) => callRpc('snapshot.save', { messages, revision }),
       choose: (id) => callRpc('models.choose', { id }),
+      disableStreamUsage: (id) => callRpc('models.disableStreamUsage', { id }),
       dispatch,
       language: t('prompt.answerLanguage'),
       frame: (flush) => {

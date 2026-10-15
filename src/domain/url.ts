@@ -72,3 +72,19 @@ export function isInjectableURL(url: string | undefined): boolean {
   }
   return true;
 }
+
+/**
+ * Whether `origin` is this machine, where a local model server such as Ollama
+ * runs: `localhost` (and its subdomains), 127.0.0.0/8 or `[::1]`.
+ */
+export function isLocalOrigin(origin: string): boolean {
+  let host: string;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  return (
+    host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127\./.test(host)
+  );
+}

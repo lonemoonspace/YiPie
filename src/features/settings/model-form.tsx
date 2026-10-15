@@ -131,8 +131,12 @@ export function ModelForm(props: ModelFormProps) {
             type="checkbox"
             checked={fields.streamUsage}
             onChange={(event) => set('streamUsage', event.target.checked)}
+            aria-describedby={`${headingId}-stream-usage-hint`}
           />
           <label htmlFor={`${headingId}-stream-usage`}>{t('model.streamUsage')}</label>
+          <p id={`${headingId}-stream-usage-hint`} className="hint">
+            {t('model.streamUsage.hint')}
+          </p>
         </div>
       </details>
 

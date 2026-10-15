@@ -106,11 +106,37 @@ describe('reducePanel: one run', () => {
       { type: 'text', text: '部分' },
       {
         type: 'failed',
-        problem: { kind: 'llm', error: { kind: 'stream', detail: 'boom' }, window: null },
+        problem: { kind: 'llm', error: { kind: 'server', detail: 'boom' }, window: null },
       },
     ]);
     expect(state).toMatchObject({ phase: 'error', problem: { kind: 'llm' } });
     expect(state.turns).toMatchObject([{ text: '部分', status: 'failed' }]);
+  });
+
+  it('shows the automatic retry while the request waits, and forgets it once text comes', () => {
+    const waiting = play([summary, requesting, { type: 'retrying', seconds: 3 }]);
+    expect(waiting).toMatchObject({ phase: 'requesting', retrying: 3 });
+
+    expect(play([{ type: 'text', text: '好' }], waiting)).toMatchObject({
+      phase: 'streaming',
+      retrying: null,
+    });
+    expect(
+      play(
+        [
+          {
+            type: 'failed',
+            problem: { kind: 'llm', error: { kind: 'server', detail: '' }, window: null },
+          },
+        ],
+        waiting,
+      ),
+    ).toMatchObject({ phase: 'error', retrying: null });
+  });
+
+  it('ignores a retry reported when no request is waiting', () => {
+    const finished = play(answered('答'));
+    expect(play([{ type: 'retrying', seconds: 2 }], finished)).toBe(finished);
   });
 
   it('keeps the model menu across runs, so it does not flicker', () => {

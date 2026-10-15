@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { chatCompletionsURL, isInjectableURL, normalizeBaseURL, originPattern } from '@/domain/url';
+import {
+  chatCompletionsURL,
+  isInjectableURL,
+  isLocalOrigin,
+  normalizeBaseURL,
+  originPattern,
+} from '@/domain/url';
 
 describe('normalizeBaseURL', () => {
   it.each([
@@ -86,5 +92,28 @@ describe('isInjectableURL', () => {
     'https://microsoftedge.microsoft.com/addons/detail/xyz',
   ])('refuses %s', (url) => {
     expect(isInjectableURL(url)).toBe(false);
+  });
+});
+
+describe('isLocalOrigin', () => {
+  it.each([
+    'http://localhost:11434',
+    'http://127.0.0.1:8080',
+    'http://127.1.2.3',
+    'http://[::1]:11434',
+    'http://ollama.localhost',
+  ])('takes %s for this machine', (origin) => {
+    expect(isLocalOrigin(origin)).toBe(true);
+  });
+
+  it.each(['https://api.openai.com', 'http://192.168.1.10:11434', 'http://localhost.example.com'])(
+    'does not take %s for this machine',
+    (origin) => {
+      expect(isLocalOrigin(origin)).toBe(false);
+    },
+  );
+
+  it('takes nothing it cannot parse for this machine', () => {
+    expect(isLocalOrigin('not an origin')).toBe(false);
   });
 });

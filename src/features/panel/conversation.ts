@@ -40,6 +40,8 @@ export interface StreamRequest {
   messages: ChatMessage[];
   signal: AbortSignal;
   onText: (text: string) => void;
+  onRetry: (retry: { seconds: number }) => void;
+  onStreamOptionsRejected: () => void;
 }
 
 export interface ConversationDeps {
@@ -58,6 +60,8 @@ export interface ConversationDeps {
   save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   /** Makes a model the default (`models.choose`). */
   choose: (id: string) => Promise<unknown>;
+  /** The service of a model refused `stream_options` (`models.disableStreamUsage`). */
+  disableStreamUsage: (id: string) => Promise<unknown>;
   dispatch: (event: PanelEvent) => void;
   /** The language to answer in, for `{{language}}`. */
   language: string;
@@ -246,6 +250,15 @@ export function createConversation(deps: ConversationDeps): Conversation {
         if (scheduled) return;
         scheduled = true;
         cancel = deps.frame(flush);
+      },
+      onRetry: ({ seconds }) => {
+        if (current()) deps.dispatch({ type: 'retrying', seconds });
+      },
+      // Remembered for the next request, whoever makes it (§4.5, decision 2).
+      // Should this fail, the next request is refused once more and the
+      // client asks again without the field.
+      onStreamOptionsRejected: () => {
+        deps.disableStreamUsage(config.id).catch(() => undefined);
       },
     });
     if (scheduled) cancel();

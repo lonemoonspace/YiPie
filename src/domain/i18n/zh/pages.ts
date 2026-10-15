@@ -89,6 +89,8 @@ export const pages = {
   'model.contextWindow.hint':
     '可留空，留空时按 {window} tokens 估算。用来决定发送多少正文，不会发送给服务；本地服务（如 Ollama）请如实填写，否则过长的正文可能被服务静默截断',
   'model.streamUsage': '在流式响应里请求用量（stream_options.include_usage）',
+  'model.streamUsage.hint':
+    '服务不认识这个字段（返回 400）时，面板会自动关掉这一项，并重新发送一次请求。',
   'model.save': '保存',
   'model.saving': '保存中…',
   'model.error.baseURL.empty': '请填写 Base URL',
@@ -161,6 +163,7 @@ export const pages = {
   'panel.status.done': '完成',
   'panel.status.stopped': '已停止',
   'panel.status.error': '没有完成',
+  'panel.status.retrying': '请求没有成功，{seconds} 秒后自动重试一次…',
   'panel.truncated': '正文过长，只发送了开头部分。',
   'panel.cut.budget': '正文约 {total} tokens，超出了预算：已按「{strategy}」保留约 {kept} tokens。',
   'panel.cut.assumed': '这个模型没有填写上下文窗口，按 {window} tokens 估算。',
@@ -203,15 +206,25 @@ export const pages = {
   'panel.extractFailed': '读取正文失败：{detail}',
   'panel.emptyPage': '这个页面没有可总结的正文。',
 
-  'error.auth': '鉴权失败（HTTP {status}）：请检查 API Key 是否正确、是否有权使用这个模型。',
-  'error.context-length': '请求超出了模型的上下文窗口，服务拒绝处理。',
+  'error.auth': '鉴权失败：请检查 API Key 是否正确、是否有权使用这个模型。',
   'error.unauthorized-access':
     '浏览器拦截了请求：还没有授权访问 {origin}。请在设置页重新保存这个模型，并在弹出的提示中允许。',
-  'error.network': '无法连接到 {origin}：请检查服务是否在运行、地址是否正确。',
+  'error.rate-limit': '请求太频繁，服务暂时不接受新的请求。请稍后再试。',
+  'error.quota': '账户的余额或额度不足，服务拒绝了请求。请到服务商那里查看余额与用量上限。',
+  'error.context-length': '请求超出了模型的上下文窗口，服务拒绝处理。',
+  'error.bad-request': '服务认为请求无效。请检查模型名，以及设置里的额外请求头、额外请求体字段。',
+  'error.not-found':
+    '服务找不到这个模型或接口。请检查模型名，以及 Base URL 是否完整（很多服务的地址以 /v1 结尾）。',
+  'error.server': '服务出错了，可能是暂时的，请稍后重试。',
   'error.timeout': '{origin} 长时间没有返回数据，已停止等待。',
-  'error.http': '服务返回错误（HTTP {status}）。',
-  'error.stream': '服务在输出过程中报告了错误。',
+  'error.network': '无法连接到 {origin}：请检查服务是否在运行、地址是否正确。',
   'error.aborted': '已停止。',
   'error.unknown': '发生了未知错误。',
   'error.detail': '服务返回：{detail}',
+  'error.status': '服务返回 HTTP {status}。',
+  'error.statusDetail': '服务返回 HTTP {status}：{detail}',
+  'error.browserDetail': '浏览器报告：{detail}',
+  'error.hint.localOrigin':
+    '如果这是本地的 Ollama：它默认拒绝来自浏览器扩展的请求。请设置环境变量 OLLAMA_ORIGINS=chrome-extension://* 后重启 Ollama。',
+  'error.hint.retryAfter': '服务建议 {seconds} 秒后再试。',
 } as const satisfies Record<string, string>;

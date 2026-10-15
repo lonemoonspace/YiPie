@@ -156,8 +156,8 @@ test('an authentication error is explained, and the key is never shown', async (
   const { frame } = await openOn(context, server, openPanel, panelFrame);
 
   const alert = frame.getByRole('alert');
-  await expect(alert).toContainText('鉴权失败（HTTP 401）');
-  await expect(alert).toContainText('服务返回：Incorrect API key provided: ***');
+  await expect(alert).toContainText('鉴权失败：请检查 API Key');
+  await expect(alert).toContainText('服务返回 HTTP 401：Incorrect API key provided: ***');
   await expect(alert).not.toContainText(KEY);
   await expect(frame.getByRole('button', { name: '打开设置' })).toBeVisible();
 });
@@ -174,7 +174,7 @@ test('an error inside the stream keeps the text that came before it', async ({
 
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'error');
   await expect(frame.locator('article.answer')).toHaveText('先输出一点');
-  await expect(frame.getByRole('alert')).toContainText('服务在输出过程中报告了错误。');
+  await expect(frame.getByRole('alert')).toContainText('服务出错了，可能是暂时的');
   await expect(frame.getByRole('alert')).toContainText('Upstream overloaded');
 });
 

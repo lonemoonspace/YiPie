@@ -67,6 +67,7 @@ export default defineBackground(() => {
       'models.setDefault': ({ id }) => models.setDefault(id),
       'models.current': () => models.current(),
       'models.choose': ({ id }) => models.choose(id),
+      'models.disableStreamUsage': ({ id }) => models.disableStreamUsage(id),
       'prompts.list': () => prompts.list(),
       'prompts.add': (draft) => prompts.add(draft),
       'prompts.update': ({ id, patch }) => prompts.update(id, patch),

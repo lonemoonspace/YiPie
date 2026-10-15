@@ -39,6 +39,7 @@ export const CONTEXT_LIMIT_CHARS = 2_000;
 interface ChatBody {
   model?: unknown;
   messages?: { role: string; content: string }[];
+  stream_options?: unknown;
 }
 
 /**
@@ -94,6 +95,30 @@ export function handleChat(
     };
 
     const messages = Array.isArray(body.messages) ? body.messages : [];
+    const refuse = (status: number, error: object, headers: Record<string, string> = {}) => {
+      finished = true;
+      response.writeHead(status, { 'Content-Type': 'application/json', ...headers });
+      response.end(JSON.stringify({ error }));
+    };
+
+    // Busy for the first request with this exact model name, then fine: give
+    // each test its own name (`scenario:busy-once:<anything>`).
+    if (typeof body.model === 'string' && body.model.startsWith('scenario:busy-once')) {
+      const seen = log.filter((logged) => (logged.body as ChatBody).model === body.model).length;
+      if (seen === 1) {
+        refuse(
+          429,
+          { message: 'Rate limit reached for requests', type: 'requests' },
+          {
+            'Retry-After': '1',
+          },
+        );
+        return;
+      }
+      stream([...NORMAL_ANSWER.map(delta), usageChunk, 'data: [DONE]\n\n'], 10);
+      return;
+    }
+
     switch (body.model) {
       case 'scenario:normal':
         stream(
@@ -131,6 +156,17 @@ export function handleChat(
         stream([...NORMAL_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
         return;
       }
+      // An old gateway that does not know `stream_options` (appendix D).
+      case 'scenario:no-stream-options':
+        if (body.stream_options !== undefined) {
+          refuse(400, {
+            message: 'Unrecognized request argument supplied: stream_options',
+            type: 'invalid_request_error',
+          });
+          return;
+        }
+        stream([...NORMAL_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
+        return;
       case 'scenario:slow':
         stream(
           [...Array.from({ length: 40 }, (_, i) => delta(`片段${i + 1} `)), 'data: [DONE]\n\n'],

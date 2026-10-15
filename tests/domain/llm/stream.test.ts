@@ -61,21 +61,48 @@ describe('interpretEventData', () => {
     expect(interpretEventData(chunk)).toEqual([]);
   });
 
-  it('reports an error sent inside the stream', () => {
+  it('reports an error sent inside the stream, with its code and type', () => {
     expect(
       interpretEventData(
         JSON.stringify({ error: { message: 'Upstream overloaded', type: 'server_error' } }),
       ),
-    ).toEqual([{ type: 'error', message: 'Upstream overloaded' }]);
+    ).toEqual([
+      { type: 'error', failure: { message: 'Upstream overloaded', type: 'server_error' } },
+    ]);
     expect(interpretEventData(JSON.stringify({ error: 'boom' }))).toEqual([
-      { type: 'error', message: 'boom' },
+      { type: 'error', failure: { message: 'boom' } },
+    ]);
+    // OpenRouter sends the upstream status as a number, others as a string.
+    expect(
+      interpretEventData(
+        JSON.stringify({ error: { code: 502, message: 'Provider returned error' } }),
+      ),
+    ).toEqual([{ type: 'error', failure: { message: 'Provider returned error', status: 502 } }]);
+    expect(
+      interpretEventData(
+        JSON.stringify({ error: { code: 'insufficient_quota', status: '429', message: 'quota' } }),
+      ),
+    ).toEqual([
+      { type: 'error', failure: { message: 'quota', status: 429, type: 'insufficient_quota' } },
     ]);
   });
 
-  it('reports data that is not a JSON object', () => {
-    expect(interpretEventData('not json')).toEqual([
-      { type: 'error', message: 'The service sent data that is not JSON: not json' },
+  it('reports an event named error, whatever its data', () => {
+    expect(
+      interpretEventData(
+        JSON.stringify({ type: 'overloaded_error', message: 'Overloaded' }),
+        'error',
+      ),
+    ).toEqual([{ type: 'error', failure: { message: 'Overloaded', type: 'overloaded_error' } }]);
+    expect(interpretEventData('upstream went away', 'error')).toEqual([
+      { type: 'error', failure: { message: 'upstream went away' } },
     ]);
-    expect(interpretEventData('[1,2]')[0]?.type).toBe('error');
+  });
+
+  it('reports data that is not a JSON object as breaking the protocol', () => {
+    expect(interpretEventData('not json')).toEqual([
+      { type: 'invalid', message: 'The service sent data that is not JSON: not json' },
+    ]);
+    expect(interpretEventData('[1,2]')[0]?.type).toBe('invalid');
   });
 });

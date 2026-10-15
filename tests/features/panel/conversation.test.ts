@@ -44,10 +44,16 @@ const page: PageContext = {
 const reported: Usage = { promptTokens: 321, completionTokens: 45, totalTokens: 366 };
 
 /** How the fake service answers one request. */
-type Script =
+type Script = (
   | { texts: string[]; outcome: ChatOutcome }
   /** Streams `texts`, then waits until the request is stopped. */
-  | { texts: string[]; hang: true };
+  | { texts: string[]; hang: true }
+) & {
+  /** The client says it retries after this many seconds, before any text. */
+  retry?: number;
+  /** The client says the service refused `stream_options` and took the request without it. */
+  streamOptionsRejected?: true;
+};
 
 /** The panel's conversation over fakes of the background and the model service. */
 function harness(options: {
@@ -57,6 +63,7 @@ function harness(options: {
   page?: PageContext;
   save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   choose?: (id: string) => Promise<unknown>;
+  disableStreamUsage?: (id: string) => Promise<unknown>;
 }) {
   const scripts = [...(options.scripts ?? [])];
   const requests: StreamRequest[] = [];
@@ -66,6 +73,7 @@ function harness(options: {
   let state = INITIAL_PANEL_STATE;
   const extract = vi.fn(() => Promise.resolve(options.page ?? page));
   const choose = vi.fn(options.choose ?? (() => Promise.resolve({})));
+  const disableStreamUsage = vi.fn(options.disableStreamUsage ?? (() => Promise.resolve({})));
 
   const conversation = createConversation({
     setup: () =>
@@ -92,6 +100,8 @@ function harness(options: {
         texts: [],
         outcome: { kind: 'error', error: { kind: 'unknown', detail: 'unscripted' } },
       };
+      if (script.retry !== undefined) request.onRetry({ seconds: script.retry });
+      if (script.streamOptionsRejected === true) request.onStreamOptionsRejected();
       for (const text of script.texts) request.onText(text);
       if ('outcome' in script) return script.outcome;
       return new Promise<ChatOutcome>((resolve) => {
@@ -104,6 +114,7 @@ function harness(options: {
       return options.save ? options.save(messages, revision) : { truncated: false };
     },
     choose,
+    disableStreamUsage,
     dispatch: (event) => {
       events.push(event);
       state = reducePanel(state, event);
@@ -123,6 +134,7 @@ function harness(options: {
     events,
     extract,
     choose,
+    disableStreamUsage,
     state: () => state,
     /** The messages of request `index`, as sent. */
     sent: (index: number): ChatMessage[] => requests[index]?.messages ?? [],
@@ -805,5 +817,52 @@ describe('conversation: what goes on after the user moved on (PR #4 review)', ()
     await settle();
 
     expect(h.state().snapshot).toBeNull();
+  });
+});
+
+describe('conversation: what the client does on its own (§4.5)', () => {
+  it('shows that it tries once more while it waits, then shows the answer', async () => {
+    const h = harness({ scripts: [{ ...answer('总结'), retry: 3 }] });
+    await h.conversation.open();
+    await settle();
+
+    const retrying = h.events.findIndex((event) => event.type === 'retrying');
+    expect(h.events[retrying]).toEqual({ type: 'retrying', seconds: 3 });
+    const waiting = h.events.slice(0, retrying + 1).reduce(reducePanel, INITIAL_PANEL_STATE);
+    expect(waiting).toMatchObject({ phase: 'requesting', retrying: 3 });
+    expect(h.state()).toMatchObject({ phase: 'done', retrying: null });
+  });
+
+  it('says nothing of a retry for a request the user has replaced', async () => {
+    const h = harness({ scripts: [{ texts: [], hang: true }, answer('新总结')] });
+    await h.conversation.open();
+    await settle();
+    h.conversation.summarize();
+    await settle();
+
+    h.requests[0]?.onRetry({ seconds: 2 });
+
+    expect(h.events.some((event) => event.type === 'retrying')).toBe(false);
+    expect(h.state()).toMatchObject({ phase: 'done', retrying: null });
+  });
+
+  it('remembers for the model that its service refused stream_options', async () => {
+    const h = harness({ scripts: [{ ...answer('总结'), streamOptionsRejected: true }] });
+    await h.conversation.open();
+    await settle();
+
+    expect(h.disableStreamUsage).toHaveBeenCalledExactlyOnceWith('m1');
+    expect(h.state().phase).toBe('done');
+  });
+
+  it('shows nothing when remembering that fails: the next request finds out again', async () => {
+    const h = harness({
+      scripts: [{ ...answer('总结'), streamOptionsRejected: true }],
+      disableStreamUsage: () => Promise.reject(new Error('read-only')),
+    });
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state()).toMatchObject({ phase: 'done', problem: null, snapshot: null });
   });
 });
