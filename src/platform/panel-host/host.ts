@@ -83,7 +83,11 @@ function createPanelHost(): PanelHost {
       // Lets the panel load in pages that send Cross-Origin-Embedder-Policy;
       // set before `src` (docs/development-plan.md appendix F).
       iframe.setAttribute('credentialless', '');
-      iframe.setAttribute('allow', 'clipboard-write');
+      // The copy button needs clipboard-write. Name the extension's own
+      // origin: the default allowlist is the origin of `src`, the per-session
+      // dynamic URL, while the panel document commits with the extension's
+      // fixed origin, so a bare `clipboard-write` delegates nothing.
+      iframe.setAttribute('allow', `clipboard-write chrome-extension://${browser.runtime.id}`);
       iframe.title = t('app.name');
       iframe.src = `${browser.runtime.getURL(PANEL_PAGE)}#${nonce}`;
       body.replaceChildren(iframe);

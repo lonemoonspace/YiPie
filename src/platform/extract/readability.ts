@@ -2,11 +2,13 @@ import { Readability } from '@mozilla/readability';
 import type { PageContext } from '@/contract/page-context';
 
 /**
- * Upper bound on the page text sent to a model in phase 1, in characters.
- * Phase 3 replaces it with a budget derived from the model's context window
- * (docs/development-plan.md §4.4).
+ * Upper bound on the page text extracted, in characters: a sanity limit
+ * (the contract allows no more). How much of it a request carries is decided
+ * in the panel, from the model's context window and the trimming strategy
+ * (docs/development-plan.md §4.4), which needs the whole text to keep its
+ * end or its middle.
  */
-export const MAX_PAGE_TEXT_LENGTH = 60_000;
+export const MAX_PAGE_TEXT_LENGTH = 200_000;
 
 /** Prefix of our host element's tag name (platform/panel-host). */
 const HOST_TAG_PREFIX = 'yipie-panel-';

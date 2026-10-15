@@ -31,6 +31,16 @@ const UNSAFE_ANSWER = [
 const delta = (content: string) =>
   `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`;
 
+const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 321, completion_tokens: 45, total_tokens: 366 } })}\n\n`;
+
+/** Characters of message text `scenario:context-limit` accepts, as a small local model would. */
+export const CONTEXT_LIMIT_CHARS = 2_000;
+
+interface ChatBody {
+  model?: unknown;
+  messages?: { role: string; content: string }[];
+}
+
 /**
  * POST /v1/chat/completions, scripted by the request's `model`
  * (docs/development-plan.md §6). No CORS headers: the panel's requests rely
@@ -45,9 +55,9 @@ export function handleChat(
   request.setEncoding('utf8');
   request.on('data', (part: string) => (raw += part));
   request.on('end', () => {
-    let body: { model?: unknown } = {};
+    let body: ChatBody = {};
     try {
-      body = JSON.parse(raw) as { model?: unknown };
+      body = JSON.parse(raw) as ChatBody;
     } catch {
       // Recorded as received.
     }
@@ -83,18 +93,44 @@ export function handleChat(
       }, gap);
     };
 
+    const messages = Array.isArray(body.messages) ? body.messages : [];
     switch (body.model) {
       case 'scenario:normal':
         stream(
-          [
-            ': warming up\n\n',
-            ...NORMAL_ANSWER.map(delta),
-            `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 321, completion_tokens: 45, total_tokens: 366 } })}\n\n`,
-            'data: [DONE]\n\n',
-          ],
+          [': warming up\n\n', ...NORMAL_ANSWER.map(delta), usageChunk, 'data: [DONE]\n\n'],
           20,
         );
         return;
+      case 'scenario:no-usage':
+        stream([...NORMAL_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
+        return;
+      // A summary, then an answer to each follow-up that names the question.
+      case 'scenario:chat': {
+        const followUp = messages.some((message) => message.role === 'assistant');
+        const answer = followUp ? [`回答：${messages.at(-1)?.content ?? ''}`] : NORMAL_ANSWER;
+        stream([...answer.map(delta), usageChunk, 'data: [DONE]\n\n'], 10);
+        return;
+      }
+      // Refuses requests longer than a small context window, the way OpenAI does.
+      case 'scenario:context-limit': {
+        const length = messages.reduce((sum, message) => sum + message.content.length, 0);
+        if (length > CONTEXT_LIMIT_CHARS) {
+          finished = true;
+          response.writeHead(400, { 'Content-Type': 'application/json' });
+          response.end(
+            JSON.stringify({
+              error: {
+                message: `This model's maximum context length is 2048 tokens. However, your messages resulted in ${length} tokens.`,
+                type: 'invalid_request_error',
+                code: 'context_length_exceeded',
+              },
+            }),
+          );
+          return;
+        }
+        stream([...NORMAL_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
+        return;
+      }
       case 'scenario:slow':
         stream(
           [...Array.from({ length: 40 }, (_, i) => delta(`片段${i + 1} `)), 'data: [DONE]\n\n'],

@@ -28,7 +28,7 @@ test('a setting saved through the background RPC survives a reload', async ({
     (globalThis as unknown as ChromeStorageGlobal).chrome.storage.local.get('general-settings'),
   );
   expect(stored).toEqual({
-    'general-settings': { version: 1, data: { theme: 'dark', logLevel: 'info' } },
+    'general-settings': { version: 1, data: { theme: 'dark', logLevel: 'info', trimming: 'back' } },
   });
 
   // After a reload the page is rebuilt from storage, not from React state.

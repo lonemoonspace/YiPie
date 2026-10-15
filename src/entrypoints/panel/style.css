@@ -3,7 +3,8 @@
 }
 
 html,
-body {
+body,
+#root {
   height: 100%;
 }
 
@@ -17,7 +18,16 @@ body {
 }
 
 .panel {
-  padding: 10px 14px 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 10px 14px 0;
+}
+
+/* Takes the room left, so the follow-up box sits at the bottom of the panel. */
+.conversation {
+  flex: 1 0 auto;
+  padding-bottom: 14px;
 }
 
 .toolbar {
@@ -53,6 +63,19 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.quiet {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
 button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -77,8 +100,68 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.problem button {
+.problem .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 4px;
+}
+
+/* One question and its answer. */
+.turn + .turn {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.question {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+/* The follow-up box stays at the bottom of the panel. */
+.ask {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 -14px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.ask textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 30vh;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.ask textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 /* Model output. */
