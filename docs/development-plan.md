@@ -144,7 +144,7 @@
 | 3    | 对话与恢复             | 追问；快照与恢复；右键菜单；预算与裁剪；用量显示                                                                                       | M    | 是（触发路径冒烟）                     | 已完成，待手工冒烟 |
 | 4    | 兼容与健壮性           | 完整错误分类与重试策略；兼容差异矩阵（附录 D）与语料；推理内容；受限页面；扩展更新后的接管                                              | M    | 是（几个真实服务各一次）               | 自动化部分已完成，待真实服务验证与手工冒烟 |
 | 5    | 阅读体验与设置完整化   | 引用定位原文；选区总结；提取降级；主题与字号；测试连接；导入导出；通用设置                                                             | L    | 部分                                   | 自动化部分已完成，待手工冒烟 |
-| 6    | 硬化与分发             | 无障碍；英文界面与语言切换；权限与体积终审；发版流程；GitHub Release                                                                   | M    | 是（发布前冒烟）                       | 未开始 |
+| 6    | 硬化与分发             | 无障碍；英文界面与语言切换；权限与体积终审；发版流程；GitHub Release                                                                   | M    | 是（发布前冒烟）                       | 自动化部分已完成，待发布前冒烟；Release 待你决定 |
 
 依赖顺序是线性的：0 → 1 → 2 → 3 → 4 → 5 → 6。从阶段 1 起，每个阶段结束时产品都能日常使用。
 
@@ -244,7 +244,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | `src/domain/llm/errors.ts` | 错误分类 v0：鉴权 / 未授权访问 / 网络 / HTTP / 已取消 / 未知 |
 | `src/domain/url.ts` | base URL 规范化（去尾斜杠、去掉误贴的 `/chat/completions`）；origin → 权限匹配模式；可注入 URL 判定 |
 | `src/domain/prompt/default-prompt.ts` | 内置的一套总结 Prompt（阶段 2 前不可配置） |
-| `src/domain/i18n/**` | 取词函数与中文消息表（纯数据 + 纯函数，各上下文都能用；英文在阶段 6） |
+| `src/domain/i18n/**` | 取词函数与中文消息表（纯数据 + 纯函数，各上下文都能用；英文在阶段 6 加入） |
 | `src/platform/llm/client.ts` | `fetch` + `eventsource-parser` + `AbortSignal`；空闲看门狗（首字节与流中各一个阈值） |
 | `src/platform/permissions/origin-access.ts` | 按 origin 申请与查询；必须在点击回调里、任何 `await` 之前调用 |
 | `src/platform/triggers/{action,commands}.ts` | SW 侧：图标与快捷键的回调 |
@@ -620,7 +620,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 1. `npm version <version> --no-git-tag-version`：同时改 `package.json` 与 `package-lock.json` 里的所有版本字段，不要手改
 2. `CHANGELOG.md` 增加对应版本条目
-3. 跑完整闸门：`npm run gate` && `npm run build` && `npm run test:e2e`
+3. 跑完整闸门：`npm run gate` && `npm run build` && `npm run check:manifest` && `npm run check:bundle` && `npm run build:e2e` && `npm run test:e2e`（E2E 跑的是 E2E 构建，先 `build:e2e`）
 4. 清掉 `.output/*-chrome.zip`，避免旧包被误拷进新版本目录
 5. `npm run zip`
 6. `scripts/verify-release.ts` 校验产物：
@@ -633,9 +633,33 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 **验收标准**
 
-- [ ] 体积闸门与 manifest 比对在本地和 CI 中都能失败、也能通过（各用一次故意违规的改动验证它真的会拦）
-- [ ] 从零克隆 → `npm ci` → `npm run build` → 在干净的 Chrome 里加载 → 完成一次真实总结（发布前的手工冒烟）
-- [ ] 发布产物里不含源码映射、`.env*`、测试残留和 E2E 钩子
+- [x] 体积闸门与 manifest 比对在本地和 CI 中都能失败、也能通过（各用一次故意违规的改动验证它真的会拦）：见下方阶段小结
+- [ ] 从零克隆 → `npm ci` → `npm run build` → 在干净的 Chrome 里加载 → 完成一次真实总结（发布前的手工冒烟，你来做）
+- [x] 发布产物里不含源码映射、`.env*`、测试残留和 E2E 钩子：`npm run verify:release`，CI 每次都跑
+
+**阶段小结（2026-10-15，自动化部分）**
+
+*这阶段证明了什么*
+
+- **英文界面**：通用设置新增 `interfaceLanguage`（`auto` / `zh-Hans` / `en`，默认 `auto`；加字段不升版本）。`auto` 只在后台解析一次（`i18n.getUILanguage()`，任何 `zh` 为中文，其余为英文，`domain/i18n/locale.ts`），设置页、面板、内容脚本拿到的都是解析后的 `locale`。三张消息表各有英文版，键由 `satisfies` 对齐、参数由单测逐条核对；每个上下文的 `t` 有自己的当前语言（`translator` 返回 `t` / `setLocale` / `locale`）。SW 在第一次读完设置之前不运行 RPC handler（与隔离闸门一起等），设置变了（不论谁写的，`storage.onChanged`）就换语言并改右键菜单标题；内容脚本从注入槽（`TriggerSlotWire.locale`）和 `content.hello` 得知语言。设置页在语言确定后才渲染，换语言时整页重渲；面板跟着设置变化即时切换。
+- **内置 Prompt 的英文版**：列表还没写入前随界面语言（`builtinPrompt(locale)`），写入后就是用户的数据，换语言不改它；新建 Prompt 从当前界面语言的模板开始。英文界面复制回答时引用写成 “…”。
+- **浏览器自己的文字**：manifest 的名称、描述、图标标题与快捷键说明走 `_locales`（`default_locale: zh_CN`），跟随浏览器语言；`check:manifest` 核对每个 `__MSG_*__` 在每种语言里都有（附录 C 新增一行）。
+- **无障碍**：
+  - `jsx-a11y` 全绿（一直在 `npm run lint` 里，`--max-warnings 0`）。
+  - 对比度：`tests/features/theme/contrast.test.ts` 逐对核对 `tokens.css`（文字 4.5:1，控件边框 3:1；浅色、深色、跟随系统的深色）。查出两处：浅色强调色在卡片底色上 4.40:1（改 `#2f6fdb` → `#2b6ad6`），输入框边框约 1.3:1（新增 `--color-control-border`，浅色 `#878e99`、深色 `#6b7280`）。
+  - 页面扫描：`e2e/accessibility.spec.ts` 用 axe-core（`@axe-core/playwright` 4.13.0，开发依赖）按 WCAG 2.1 A/AA 扫设置页（浅 / 深 × 中 / 英，展开表单）与面板（浅 / 深，含引用、用量）。面板在 closed shadow root 里，AxeBuilder 进不去，改为把 axe 注入 iframe 直接运行。修之前它抓到的正是上面那个强调色；修之后零违规。
+  - 键盘走查：同一文件里用 Tab 走完设置页与面板，断言每个可用控件都能到达、到达时 `:focus-visible` 且焦点框可见，再只用键盘完成编辑保存、定位引用、追问与重新总结。
+- **发版流程**：`scripts/verify-release.ts`（判定在 `scripts/lib/release-check.ts`，读 zip 用自写的 `scripts/lib/zip.ts`，都有单测）做第 6 步的全部检查，另外核对 `.output` 里只有一个当前版本的包、zip 里的文件与 `.output/chrome-mv3` 逐个相同。CI 在两项检查之后跑 `zip` + `verify:release`。固定步骤写进 `AGENTS.md` 的「发版」。
+- **闸门真的会拦**：本地分别加 `tabs` 权限、往 `background.js` 塞约 80 kB，`check:manifest`、`check:bundle` 都以非零退出并指出原因，撤销后通过；CI 上用两个故意违规的提交各跑一次（PR #7 的提交历史里，随后各自撤销），对应的步骤失败、撤销后变绿。
+- **权限与体积终审**：见附录 C 末尾与 §9 阶段 6 的结果。
+
+*怎么复现*：`npm ci && npm run gate && npm run build && npm run check:manifest && npm run check:bundle && npm run zip && npm run verify:release && npm run build:e2e && npm run test:e2e`。
+
+*还剩什么没做*
+
+- 发布前的手工冒烟（附录 H，Chrome 与 Edge 各一次）与「从零克隆到一次真实总结」，需要你来做；阶段 3–5 遗留的手工项一并跑
+- 版本号与 Release：本阶段没有改版本（仍是 `0.0.0`），也没有发 Release；第一次发版按上面的固定步骤做，版本号由你定
+- 已知限制：正文被裁剪时插进正文、给模型看的截断说明仍是中文（`domain/prompt/messages.ts`），模型读得懂，不影响回答语言；扩展没有图标，浏览器显示默认的字母图标
 
 ## 5. 通用完成定义（DoD）
 
@@ -660,7 +684,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | 领域单测 | Vitest（node 环境）                                  | 估算、预算、裁剪、URL、SSE 归一、错误分类、Prompt 渲染           | 关键分支全覆盖，边界值优先                          |
 | 平台单测 | Vitest + 内存 store / 假 fetch                       | 服务层（读改写、队列、三态、隔离备份、快照驱逐）、模型客户端     | 不加载任何浏览器 API，保证能在 node 里跑            |
 | 组件测试 | Vitest + jsdom（逐文件 `@vitest-environment jsdom`） | Markdown 安全管线、面板状态机                                    | 每个安全分支一个用例                                |
-| E2E      | Playwright + 真实 Chromium + 构建产物 + 本地假服务   | 注入、面板、流式、停止、快照恢复、凭据隔离、调用方策略、权限面   | 不依赖真实 API Key                                  |
+| E2E      | Playwright + 真实 Chromium + 构建产物 + 本地假服务   | 注入、面板、流式、停止、快照恢复、凭据隔离、调用方策略、权限面；界面语言；axe-core 的 WCAG AA 扫描与键盘走查（阶段 6） | 不依赖真实 API Key                                  |
 | 手工     | 你 + 真实 Key                                        | 触发路径与 Edge（附录 H）、真实服务的连通性、错误提示是否人话    | 阶段 1、3、4、6 各一轮，结论写进 CHANGELOG          |
 
 **本地假服务（`e2e/fake-llm/`）**：一个 Node HTTP 服务，监听 `127.0.0.1` 的随机端口，每个 Playwright worker 一个。响应**不带** CORS 头：面板的请求靠主机权限的跨域豁免，和生产环境一样。
@@ -743,16 +767,16 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 | 指标                                 | 预算                       | 依据 / 当前                                                                                         | 由什么看守          |
 | ------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------- |
-| `background.js`                      | < 150 kB                   | 阶段 5 实测 131.47 kB，预算的 88%（阶段 4 为 128.71 kB，阶段 3 为 140.27 kB，阶段 2 为 128.84 kB，阶段 1 为 116.72 kB，阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码，消息表只带自己的 3 条（见下） | CI（阶段 0 起）     |
-| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 5 实测 47.10 kB（阶段 4 为 42.07 kB，阶段 3 为 53.16 kB，阶段 2 为 49.68 kB，阶段 1 为 45.48 kB）：Readability、外壳、提取与降级（启发式、展开 shadow root 与 iframe）、引用定位、换页检查、旧宿主的接管；不含 React 与 zod；消息表只带自己的 3 条（见下） | CI                  |
-| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 5 实测 356.84 kB（阶段 4 为 335.58 kB，阶段 3 为 334.19 kB，阶段 2 为 325.63 kB，阶段 1 为 318.91 kB）：react-dom、react、scheduler、zod 与共用代码，阶段 5 起还有模型客户端（设置页的测试连接也用它）（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
-| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 5 实测 64.87 kB（阶段 4 为 75.59 kB，阶段 3 为 70.48 kB，阶段 2 为 61.98 kB）：marked、Markdown 管线、面板与对话控制器（eventsource-parser 与客户端阶段 5 起在共享 chunk） | CI                  |
-| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 5 实测 644.19 kB（阶段 4 为 614.26 kB，阶段 3 为 629.98 kB，阶段 2 为 596.14 kB；其中设置页入口 32.48 kB，阶段 4 为 22.14 kB）；按各项估算，完成后约 700–800 kB | CI                  |
+| `background.js`                      | < 150 kB                   | 阶段 6 实测 134.24 kB，预算的 89%（阶段 5 为 131.47 kB，阶段 4 为 128.71 kB，阶段 3 为 140.27 kB，阶段 2 为 128.84 kB，阶段 1 为 116.72 kB，阶段 0 为 100.88 kB，其中 zod 84.66 kB）；SW 不含 UI 与模型请求代码，消息表只带自己的 3 条（见下） | CI（阶段 0 起）     |
+| 内容脚本 `injected.js`               | < 100 kB                   | 阶段 6 实测 47.45 kB（阶段 5 为 47.10 kB，阶段 4 为 42.07 kB，阶段 3 为 53.16 kB，阶段 2 为 49.68 kB，阶段 1 为 45.48 kB）：Readability、外壳、提取与降级（启发式、展开 shadow root 与 iframe）、引用定位、换页检查、旧宿主的接管；不含 React 与 zod；消息表只带自己的 3 条（见下） | CI                  |
+| 扩展页面的共享 chunk                 | < 450 kB                   | 阶段 6 实测 377.17 kB，预算的 84%（阶段 5 为 356.84 kB，阶段 4 为 335.58 kB，阶段 3 为 334.19 kB，阶段 2 为 325.63 kB，阶段 1 为 318.91 kB）：react-dom、react、scheduler、zod 与共用代码，阶段 5 起还有模型客户端（设置页的测试连接也用它）（阶段 0 实测 react-dom 207.00 kB、zod 79.88 kB） | CI                  |
+| `panel` 入口（不含共享 chunk）       | < 150 kB                   | 阶段 6 实测 65.07 kB（阶段 5 为 64.87 kB，阶段 4 为 75.59 kB，阶段 3 为 70.48 kB，阶段 2 为 61.98 kB）：marked、Markdown 管线、面板与对话控制器（eventsource-parser 与客户端阶段 5 起在共享 chunk） | CI                  |
+| 整包 `.output/chrome-mv3`            | < 900 kB                   | 阶段 6 实测 671.22 kB（设置页入口 35.19 kB；阶段 5 为 644.19 kB，阶段 4 为 614.26 kB，阶段 3 为 629.98 kB，阶段 2 为 596.14 kB；其中设置页入口 32.48 kB，阶段 4 为 22.14 kB）；按各项估算，完成后约 700–800 kB | CI                  |
 | SW 冷启动引入的静态资源              | 不得出现 > 100 kB 的新资源 | 无词表                                                                                              | review + 体积报告   |
 | 外壳可见（注入 → 外壳出现）          | < 50 ms                    | 阶段 1：脚本里约 4 ms；E2E 里约 18–22 ms（含 Playwright 往返）                                      | 阶段 1 基准；E2E 只设宽松上限 |
 | 面板可交互（注入 → 面板就绪）        | < 300 ms                   | 阶段 1：E2E 里约 150–175 ms（接上并读完模型配置，含 Playwright 往返）；阶段 3：热启动 139–152 ms（先读快照，再读模型、Prompt 与设置）。浏览器里第一次打开面板约 350–400 ms，阶段 2 的 `main` 上同样如此，只是此前没有单独记录                               | 阶段 1 基准，记录不卡 CI |
-| 单测总时长                           | < 10 s                     | 阶段 5 实测约 7.8–9.6 s（57 文件 / 829 用例；阶段 4 为 6.3 s、748 用例），已接近预算：大半是每个文件单独起 worker 与 jsdom 的开销，超出时先评估 Vitest 的 `isolate: false` | CI 时长             |
-| E2E 单场景                           | < 60 s                     | 阶段 5 实测每条约 0.7–4 s（68 条共约 96 s；阶段 4 为 57 条约 72 s）                               | Playwright timeout  |
+| 单测总时长                           | < 10 s                     | 阶段 6 实测约 8.0–8.1 s（61 文件 / 869 用例；阶段 5 为 7.8–9.6 s、829 用例；阶段 4 为 6.3 s、748 用例），已接近预算：大半是每个文件单独起 worker 与 jsdom 的开销，超出时先评估 Vitest 的 `isolate: false` | CI 时长             |
+| E2E 单场景                           | < 60 s                     | 阶段 6 实测每条约 0.7–6 s（79 条共约 108 s；阶段 5 为 68 条约 96 s；阶段 4 为 57 条约 72 s）                               | Playwright timeout  |
 
 阶段 1 结束时用实测值校准过一次：各入口都远低于预算，预算不变；「面板可交互」定为 300 ms。之后要上调必须在附录 F 写明理由。
 
@@ -765,6 +789,8 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 阶段 4 的结果：消息表按上下文拆分后，SW 与内容脚本各小约 11.8 kB，SW 回到预算的 86%，暂不需要 `zod/mini`；`check:bundle` 另查这两个入口里有没有扩展页面的消息。
 
 阶段 5 的结果：设置页的测试连接用到模型客户端，eventsource-parser、客户端与错误分类从面板入口移进扩展页面的共享 chunk（面板入口 −10.7 kB，共享 chunk +21.3 kB，其余是设置页与面板的新功能），共享 chunk 到了预算的 79%；内容脚本 +5 kB（提取降级与引用定位）；SW +2.8 kB（选区菜单、`page.locate`、`config.import` 的 schema）。预算不变。
+
+阶段 6 的结果：英文消息表让共享 chunk +20.3 kB（扩展页面带两种语言的全部文案），SW +2.8 kB（自己那几条的英文、读设置换语言、改菜单标题），内容脚本 +0.35 kB；整包 +27.0 kB，到预算的 75%。每个入口仍有余量，预算不变。**终审**：逐项看过，没有可以去掉的大块——SW 里 zod 仍占大头，`zod/mini` 的评估条件（逼近预算）没有触发；共享 chunk 里 react-dom 与 zod 是必需的，两种语言的文案约 24 kB，按语言拆包要么让切换语言变成异步加载（扩展页面可以，但换来的只是约 12 kB），要么在 SW 里不可行，不值得；内容脚本里 Readability 是主体。
 
 超预算时的处理顺序：先看是不是引入了大的静态数据（词表、图标集、全量语言包）；其次看是不是把只有某个入口需要的依赖打进了别的入口；**最后**才考虑换实现。注意 SW 不能使用动态 `import()`，「改成懒加载」这条路对 SW 不存在。
 
@@ -836,7 +862,7 @@ src/
   platform/      唯一允许调用浏览器 API 的层；括号内是允许运行的上下文
     storage/{types,tx,repo,list-repo,quarantine,wxt-store,access-level,index}.ts
                                                              （写：SW；读：SW 与扩展页面）
-    storage/watch.ts                                         （扩展页面：变化的信号，值仍经 RPC 读）
+    storage/watch.ts                                         （扩展页面与 SW：变化的信号，值仍经 RPC 读）
     rpc/{messaging,server,errors,caller-policy}.ts           （SW）
     rpc/client.ts                                            （扩展页面）
     rpc/lite-client.ts                                       （内容脚本，不带 zod）
@@ -853,13 +879,14 @@ src/
     runtime/settings-page.ts                                 （扩展页面）
     logger/index.ts                                          （各上下文）
   features/      与界面绑定的逻辑（React 组件、状态、渲染管线），只在扩展页面里运行
-    panel/** · markdown/** · settings/** · theme/**
+    panel/** · markdown/** · settings/** · theme/** · i18n/locale.ts
   entrypoints/   薄壳，只做装配
     background/index.ts · injected.ts（内容脚本）· panel/** · options/**
 tests/           Vitest（node 为主，组件测试逐文件 opt-in jsdom）；fixtures/sse/** 为兼容语料
 e2e/             Playwright（真实 Chromium + 构建产物）；fake-llm/ 为本地假服务
 scripts/         check-manifest.ts · check-bundle-budget.ts · verify-release.ts · lib/（判定逻辑，有单测）
 docs/            development-plan.md（本文）
+public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名称等，阶段 6）
 ```
 
 分层方向由 ESLint 强制：`contract → domain → platform → features → entrypoints`。运行上下文边界同样由 ESLint 强制（§2.2）。
@@ -900,6 +927,8 @@ docs/            development-plan.md（本文）
 - `declarativeNetRequest*`（有 host 权限时，扩展页面的请求本来就不受 CORS 限制）；
 - `externally_connectable`；
 - `unlimitedStorage`。
+
+**阶段 6 终审**（2026-10-15）：上表每一行都能回答「去掉它会怎样」，没有可以去掉的项。逐条复核：`storage` 存一切数据；`activeTab` 是唯一的页面访问来源（没有 `host_permissions`）；`scripting` 用于按需注入与高亮样式，`tabs` 不需要（标签页 URL 由 activeTab 授予后从 `sender.tab` 读）；`contextMenus` 两个菜单项；`optional_host_permissions` 只按用户配置的 origin 申请、无用即回收（§4.3）；`panel.html` 是唯一的 web 可访问资源并用动态 URL；`commands` 一条；CSP 不变；`default_locale` 与 `_locales` 只是文字。「明确不要的」一项都没有出现，`check:manifest` 与 `verify:release` 都在 CI 里看守。
 
 E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, http://localhost/*`，只给测试用；生产构建里出现它，check-manifest 就会失败（§6）。
 
@@ -963,6 +992,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-10-15 | v4.4，阶段 3 自动化部分完成（待手工冒烟）：<br>· **与交付物表的出入**（§4.4）：快照每段对话一个键，另有小索引记字节数、最近使用时间与「已驱逐」标记；页面键由后台从 `content.hello` 时浏览器报告的标签页 URL 算出，记在面板登记表里，`snapshot.get` / `snapshot.save` 不带标签页和页面参数；对话控制器从 hook 里独立出来（`features/panel/conversation.ts`），串行只认最新的发送抽成 `latest-only.ts`，保存也用它；新增 `settings.current`（面板只拿裁剪策略）；repo 加 `removeUnqueued`；右键菜单标题为「用一瞥总结此页」；提取上限从 6 万字放宽到 20 万字，由面板按预算裁剪<br>· **定下的细节**（§4.4）：回答预留为窗口的四分之一（1,024–8,192 tokens），没填窗口按 64,000 估算并写明；只裁正文，Prompt 与历史放不下时不发送；策略名表示截掉哪一部分，默认 `back`；「裁剪后重试」只给被拒的「不裁剪」请求，超长按 400 / 413 / 422 加措辞识别（429 不算）；回答完成或停止时已有内容才算数；换模型改为用新模型重做最近一轮；全局 6 MB、单页 512 kB，被驱逐的对话留下记号；关标签页删除快照与登记；视图跟随追问的回答<br>· **修了阶段 1 留下的问题**：面板 iframe 的 `allow="clipboard-write"` 默认只授予动态 URL 的 origin，而面板文档以扩展的固定 origin 提交，一直没生效；改为写明扩展的 origin<br>· **E2E 环境的已知问题**：Playwright 的视口模拟下，离视口底部约 100 px 以内对跨站 iframe 的鼠标点击会丢，普通跨站 iframe 同样如此；追问用键盘发送，点按钮的那条把视口调高，附录 H 加一项鼠标点击的手工确认<br>· **范围调整**：拆分消息表从阶段 6 提前到阶段 4 开头（SW 已到预算的 93%，见 §9），写进 §4.5<br>· **PR #4 审阅意见**（3 项，已修复）：1）面板离开后，在途保存与换模型的结果仍会派发到面板，换模型还会再发起一次请求；2）恢复还在等待时，用户新发起的总结会被恢复出的旧对话覆盖，重复打开同理；3）重新总结或重做后，旧对话的保存仍可能先于新状态落库，刷新会恢复已经清掉的内容。改为：等待中的步骤只属于发起它的那次操作；保存带本面板的序号立即发出，后台按面板文档与序号只留最新的；重新总结与重做立即保存新状态（§4.4 细节 7、8）<br>· **PR #4 补充审阅**（3 项，已修复）：1）保存时先删掉被驱逐的对话、再写新对话，新对话没写成就丢了别人的；2）替换已有对话时先改索引、再覆盖同一个键，中途失败或 SW 停下会用新的索引条目读出旧内容；3）单页应用换页后，面板仍属于原来的页面，追问读的是新正文，对话却存进原来那页。改为：每次保存写新键，写好后一次索引写入切换过去，并把旧键与被驱逐的键记为待删，再删除；新键在写入前就记进索引；面板在页面键变化时关闭（§4.4 细节 9、12）。修第 3 项时发现 `sender.url` 不随 `pushState` 变化，「关掉面板再触发一次就按新页面处理」并不成立，页面键改由 `sender.tab.url` 算出<br>· **PR #4 第三次审阅**（1 项，已修复）：调度器核对面板已接上之后、保存进入写队列之前，新面板可能已经接上；来自另一个面板文档的保存一律接受，旧面板的保存就能盖掉新面板的快照（关掉的标签页同理）。改为保存在写队列里轮到时再核对一次发送方仍是接上的面板（§4.4 细节 7）<br>· §2.1、§3、§6、§7、§8、§9、§10 风险 8、附录 A、C、H 同步更新 |
 | 2026-10-15 | v4.5，阶段 4 自动化部分完成（待真实服务验证与手工冒烟）：<br>· **与交付物表的出入**（§4.5）：错误类别多了「模型或接口不存在」（404）；消息表按上下文拆成 `domain/i18n/zh/{background,content,pages}.ts`，每张表有只认自己键名的 `t`，ESLint 与 `check:bundle` 防止整张表进入 SW 与内容脚本；新增 RPC `models.disableStreamUsage`（面板的第二个例外，只能关掉）；语料在 `tests/fixtures/sse`；E2E 的浏览器配置改成开发者模式（`runtime.reload()` 需要）<br>· **定下的细节**（§4.5）：错误分 12 类，各给下一步，状态码与原话另起一行，本地 403 提示 `OLLAMA_ORIGINS`；自动重试只在没收到内容时、只一次，`Retry-After` 超过 10 秒交给用户，没给就等 2 秒；`stream_options` 被 400 / 422 拒绝时去掉重发，服务接受后记进配置；推理内容三种形态归一，`<think>` 只认回答开头的，折叠显示，不进快照、复制与追问，估算用量时算作输出；日志不记请求详情；`.pdf` 路径不注入；扩展更新后新宿主移除旧宿主（每分钟至多 10 次），旧实例在页面重新可见、获得焦点或被点到时自己退出<br>· **语料发现的问题**：首字节超时原来只管到响应头，很多服务立刻回响应头、第一个 token 要等很久，会被 60 秒的空闲超时打断；改为管到正文的第一个字节<br>· **E2E 发现的情况**：Playwright 默认带 `--disable-extensions`，全新配置也不在开发者模式，`runtime.reload()` 之后扩展直接消失；重新注入的内容脚本在新的隔离世界里，旧宿主还在页面里，会被新宿主叠住<br>· **体积**：`background.js` 140.27 → 128.71 kB，`injected.js` 53.16 → 41.39 kB（之后加了接管，42.07 kB），整包 614.26 kB；D2 的推翻条件按实测没有触发（客户端代码 622 行，含注释 898 行）<br>· **测试包**：不再只靠会话里发送的文件（你一度下载不到最新的），CI 在全部检查通过后把生产构建作为 artifact 上传（保留 14 天），写进 §12<br>· §1.3 D2、§3、§4.4 阶段小结、§9、§10 风险 4、§12、附录 D、H 同步更新 |
 | 2026-10-15 | v4.6，阶段 5 自动化部分完成（待手工冒烟）：<br>· **与交付物表的出入**（§4.6）：引用不用占位符替换，而是 Markdown 渲染器的行内扩展，只在文本上下文里识别；新增 RPC `page.locate`（面板）与 `config.import`（设置页）；定位代码 `platform/locate` 属内容脚本，受同样的 ESLint 规则；触发信息经 `executeScript` 的 `func` 写进隔离世界；通用设置新增面板字号与回答语言<br>· **定下的细节**（§4.6）：Readability 不足 200 字就改用启发式结果，仍不足再展开 shadow root 与同源 iframe（3 层、10 万节点）；选区对话不保存、不恢复，`{{selection}}` 是触发时的选区；引用照抄原文、最多 500 字，查找对空白、全半角、大小写不敏感，可跨元素、可用省略号；测试连接先读 `/models`，404 / 405 / 501 才提供真实请求；导入只追加、分配新 id，一条都认不出时整体拒绝；回答语言可跟随网页<br>· **E2E 发现的问题**：设置页列表加上「存储变了就重读」之后，正在编辑的表单会拿新读到的数据算改动，把别的标签页刚改的 Key 改回去（已有的 E2E 抓到）；改为编辑器保留打开时的那一版。再次触发换掉已开的面板时，Playwright 可能还列着旧的 iframe，测试先等它分离<br>· **体积**：测试连接让模型客户端进了扩展页面的共享 chunk（面板入口 75.59 → 64.87 kB，共享 chunk 335.58 → 356.84 kB），`background.js` 131.47 kB、`injected.js` 47.10 kB，整包 644.19 kB，预算不变；单测时长接近 10 秒的预算，记下 `isolate: false` 作为第一个办法<br>· §3、§4.6、§9、附录 H 同步更新 |
+| 2026-10-15 | v4.7，阶段 6 自动化部分完成（待发布前冒烟；Release 待你决定）：<br>· **与交付物表的出入**（§4.7）：界面语言的设置值多了 `auto`（跟随浏览器，默认），由后台解析，其它上下文只拿解析后的 `locale`；内置 Prompt 也有英文版；manifest 的名称等走 `_locales`（附录 C 新增 `default_locale`）；无障碍除 jsx-a11y、对比度与键盘走查外，另用 axe-core 扫描真实渲染出的页面（新增开发依赖 `@axe-core/playwright`）；`verify-release` 另核对 zip 与构建目录逐个相同，并进了 CI；发版步骤第 3 步补上 `build:e2e`（E2E 跑的是 E2E 构建）<br>· **查出并修掉的问题**：浅色强调色在卡片底色上只有 4.40:1；输入框边框约 1.3:1（WCAG 1.4.11 要求 3:1）<br>· **E2E 环境**：Playwright 的 `locale` 只管页面，SW 的 `getUILanguage()` 在 Linux 上读 `LANGUAGE`，fixture 两样都设，默认中文浏览器<br>· **闸门验证**：本地与 CI 各用故意违规的改动验证 `check:manifest` 与 `check:bundle` 会拦（CI 的那次在 PR #7 里，随后撤销）<br>· §3、§4.7、§6、§9、附录 A、C、H 同步更新 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
@@ -995,3 +1025,7 @@ Playwright 点不了工具栏图标和右键菜单，以下各项在对应阶段
 | 5      | 点引用标记                                 | 页面滚动到原文并高亮                                                 |
 | 5      | 选中一段文字，右键「用一瞥总结选中内容」   | 只总结选中的部分；面板写明总结的是选中的内容，对话不保存                                                   |
 | 5      | 在设置页对一个真实服务点「测试连接」       | 说出读到几个模型、你填的模型名在不在里面；Key 错时说鉴权失败 |
+| 6      | 设置页「通用」把界面语言改成 English，再在网页空白处右键、选中文字后右键 | 设置页立刻变成英文；右键菜单显示「Summarize this page with YiPie」「Summarize the selection with YiPie」；点图标打开的面板是英文。改回「跟随浏览器」后菜单回到中文（中文浏览器） |
+| 6      | 浏览器语言为英文时（或 Edge 设成英文）打开 `chrome://extensions` 与快捷键页 | 扩展名显示「YiPie」，快捷键说明为英文；中文浏览器显示「一瞥 YiPie」 |
+| 6      | 只用键盘：快捷键打开面板，Tab 进入面板，Tab / Shift+Tab 走一遍，Enter 点「重新总结」、引用标记；在设置页同样走一遍 | 每个按钮、输入框都能到达，焦点框始终看得见，Enter 能操作 |
+| 6      | 发版前：从零克隆 → `npm ci` → `npm run build` → 干净的 Chrome 配置里加载 `.output/chrome-mv3` → 填一个真实模型 → 总结一页 | 能完成一次真实总结（§4.7 验收） |
