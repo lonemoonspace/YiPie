@@ -123,8 +123,8 @@ test('reasoning shows folded above the answer, and is never saved or copied', as
   expect(JSON.stringify(await session(serviceWorker))).not.toContain(REASONING[0]);
 
   // Copied without it.
-  await frame.getByRole('button', { name: '复制' }).click();
-  await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();
+  await frame.getByRole('button', { name: '复制', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '已复制', exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(NORMAL_ANSWER.join(''));
 });
 

@@ -28,6 +28,7 @@ const ALLOWED_TAGS = new Set([
   'tr',
   'th',
   'td',
+  'button',
 ]);
 const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   a: new Set(['href', 'title', 'target', 'rel']),
@@ -35,6 +36,8 @@ const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   ol: new Set(['start']),
   th: new Set(['align']),
   td: new Set(['align']),
+  // A quote of the page (domain/citation): only these, never an event handler.
+  button: new Set(['type', 'class', 'data-quote', 'title', 'aria-label']),
 };
 
 /** Parses the output the way the panel would and checks it against the allowlists. */
@@ -145,6 +148,51 @@ describe('renderMarkdown', () => {
     for (const link of links) {
       expect(link.getAttributeNames()).not.toContain('onmouseover');
     }
+  });
+
+  it('turns quotes of the page into numbered buttons that carry the passage', () => {
+    const { container } = render('要点一 [[原文 片段]]。要点二 [[第二处 & "引号"]]');
+    const buttons = [...container.querySelectorAll('button')];
+
+    expect(buttons.map((button) => button.textContent)).toEqual(['1', '2']);
+    expect(buttons.map((button) => button.dataset.quote)).toEqual(['原文 片段', '第二处 & "引号"']);
+    expect(buttons[0]?.getAttribute('type')).toBe('button');
+    expect(buttons[0]?.getAttribute('aria-label')).toBe('在网页中定位引用 1');
+    // Numbering starts again with every answer.
+    expect(render('[[再一次]]').container.querySelector('button')?.textContent).toBe('1');
+  });
+
+  it('keeps a quote placeholder that is not in inline text as the characters it was', () => {
+    const cases = [
+      ['`[[代码里的]]`', 'code'],
+      ['```\n[[代码块里的]]\n```', 'pre'],
+      ['[链接里的 [[引用]]](https://example.com/)', 'a'],
+      ['<span title="[[属性里的]]">x</span>', null],
+    ] as const;
+    for (const [markdown, holder] of cases) {
+      const { container, text } = render(markdown);
+      expect(container.querySelector('button'), markdown).toBeNull();
+      expect(text, markdown).toContain('[[');
+      if (holder !== null) expect(container.querySelector(holder)?.textContent).toContain('[[');
+    }
+  });
+
+  it('keeps a quote placed in a link target or an image out of markup', () => {
+    const { container, links } = render(
+      '[x](https://example.com/[[a"onclick="alert(1)]]) ![[[alt"onerror="alert(1)]]](https://x.example/p.png)',
+    );
+    expect(container.querySelector('img')).toBeNull();
+    for (const element of container.querySelectorAll('*')) {
+      expect(element.getAttributeNames()).not.toContain('onclick');
+      expect(element.getAttributeNames()).not.toContain('onerror');
+    }
+    for (const link of links) expect(link.getAttribute('href')).toContain('[[');
+  });
+
+  it('escapes a quote that tries to leave its attribute', () => {
+    const { container } = render('[["><img src=x onerror=alert(1)>]]');
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('button')?.dataset.quote).toBe('"><img src=x onerror=alert(1)>');
   });
 
   it('turns task-list checkboxes into characters', () => {

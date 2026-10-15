@@ -1,11 +1,14 @@
 import { browser } from 'wxt/browser';
 import { PAGE_CHANNEL, type PageReplyWire, type PageRequestWire } from '@/contract/rpc-wire';
-import { extractPage } from './readability';
+import { locateQuote } from '@/platform/locate/scroll-to-text';
+import { MAX_PAGE_TEXT_LENGTH, extractPage } from './readability';
+import { rememberedSelection } from './selection';
 
 const INSTALLED = Symbol.for('yipie.page-requests');
 
 /**
- * Answers the background's requests about this page. Installed once per
+ * Answers the background's requests about this page: its text, and where a
+ * quote of it is. Installed once per
  * document and extension runtime, however many times the content script is
  * injected: after an update or a reload, the new runtime needs its own
  * listener (panel-host/orphan.ts).
@@ -20,7 +23,13 @@ export function listenForPageRequests(): void {
     if (sender.id !== browser.runtime.id || !isPageRequest(message)) return false;
     let reply: PageReplyWire;
     try {
-      reply = { ok: true, value: extractPage(document) };
+      reply = {
+        ok: true,
+        value:
+          message.type === 'locate'
+            ? locateQuote(document, message.quote)
+            : extractPage(document, MAX_PAGE_TEXT_LENGTH, rememberedSelection()),
+      };
     } catch (error) {
       reply = { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -30,10 +39,10 @@ export function listenForPageRequests(): void {
 }
 
 function isPageRequest(message: unknown): message is PageRequestWire {
+  if (typeof message !== 'object' || message === null) return false;
+  const request = message as { channel?: unknown; type?: unknown; quote?: unknown };
+  if (request.channel !== PAGE_CHANNEL) return false;
   return (
-    typeof message === 'object' &&
-    message !== null &&
-    (message as Partial<PageRequestWire>).channel === PAGE_CHANNEL &&
-    (message as Partial<PageRequestWire>).type === 'extract'
+    request.type === 'extract' || (request.type === 'locate' && typeof request.quote === 'string')
   );
 }

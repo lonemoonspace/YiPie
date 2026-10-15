@@ -296,9 +296,9 @@ test("copy puts the answer's Markdown on the clipboard", async ({
   );
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
 
-  await frame.getByRole('button', { name: '复制' }).click();
+  await frame.getByRole('button', { name: '复制', exact: true }).click();
 
-  await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();
+  await expect(frame.getByRole('button', { name: '已复制', exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(NORMAL_ANSWER.join(''));
 });
 

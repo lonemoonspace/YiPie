@@ -73,6 +73,26 @@ const HeaderMapInput = HeaderMap.superRefine((headers, context) => {
  */
 export const ExtraBody = z.record(z.string(), z.unknown());
 
+/** Body fields the protocol needs; `extraBody` cannot override them. */
+export const RESERVED_BODY_KEYS: readonly string[] = ['model', 'messages', 'stream'];
+
+/**
+ * Extra body fields as the settings page submits them: a reserved field is
+ * refused rather than saved as if it would be sent. Stored data is read with
+ * the plain `ExtraBody`; the request leaves such a field out.
+ */
+const ExtraBodyInput = ExtraBody.superRefine((body, context) => {
+  for (const key of Object.keys(body)) {
+    if (RESERVED_BODY_KEYS.includes(key)) {
+      context.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `The request sets ${key} itself; extra body fields cannot replace it.`,
+      });
+    }
+  }
+});
+
 /**
  * One OpenAI-compatible endpoint (D1): base URL, key and model name, plus the
  * three places services differ. Stored as `{ version, data: ModelConfig[] }`:
@@ -109,7 +129,7 @@ export const ModelConfigDraft = z.strictObject({
   apiKey: z.string().default(''),
   model: z.string().trim().min(1),
   headers: HeaderMapInput.default({}),
-  extraBody: ExtraBody.default({}),
+  extraBody: ExtraBodyInput.default({}),
   contextWindow: z.number().int().positive().nullable().default(null),
   streamUsage: z.boolean().default(true),
 });
@@ -125,7 +145,7 @@ export const ModelConfigPatch = z.strictObject({
   apiKey: z.string().optional(),
   model: z.string().trim().min(1).optional(),
   headers: HeaderMapInput.optional(),
-  extraBody: ExtraBody.optional(),
+  extraBody: ExtraBodyInput.optional(),
   contextWindow: z.number().int().positive().nullable().optional(),
   streamUsage: z.boolean().optional(),
 });

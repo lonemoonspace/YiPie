@@ -3,6 +3,7 @@ import { BackupsSection } from './backups-section';
 import { GeneralSection } from './general-section';
 import { ModelSection } from './model-section';
 import { PromptSection } from './prompt-section';
+import { TransferSection } from './transfer-section';
 
 export function SettingsPage() {
   return (
@@ -11,6 +12,7 @@ export function SettingsPage() {
       <ModelSection />
       <PromptSection />
       <GeneralSection />
+      <TransferSection />
       <BackupsSection />
     </main>
   );

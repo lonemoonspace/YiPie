@@ -31,7 +31,13 @@ const attachedInTab1 = (tabId: number, documentId: string) =>
   Promise.resolve(tabId === 1 && documentId === 'DOC');
 
 const view: GeneralSettingsView = {
-  settings: { theme: 'dark', logLevel: 'info', trimming: 'back' },
+  settings: {
+    theme: 'dark',
+    logLevel: 'info',
+    trimming: 'back',
+    fontSize: 'medium',
+    answerLanguage: 'interface',
+  },
   status: 'ok',
   readOnly: false,
   quarantined: false,
@@ -470,6 +476,49 @@ describe('RPC dispatcher: prompts', () => {
   });
 });
 
+describe('RPC dispatcher: import', () => {
+  const input = {
+    models: [{ baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'sk-x' }],
+    prompts: [{ name: '要点', user: '{{content}}' }],
+  };
+  const imported = { models, prompts: { ...models, items: [] } };
+
+  it('takes an import from the settings page only', async () => {
+    const handler = vi.fn(() => Promise.resolve(imported));
+    const { dispatch } = setup({ 'config.import': handler });
+
+    for (const sender of [PANEL, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(request('config.import', input), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(await dispatch(request('config.import', input), OPTIONS)).toEqual({
+      ok: true,
+      value: imported,
+    });
+  });
+
+  it.each([
+    ['nothing to add', { models: [], prompts: [] }],
+    ['an id from the file', { models: [{ ...input.models[0], id: 'a' }], prompts: [] }],
+    [
+      'a reserved body field',
+      { models: [{ ...input.models[0], extraBody: { stream: false } }], prompts: [] },
+    ],
+    ['a prompt without a name', { models: [], prompts: [{ name: ' ', user: '{{content}}' }] }],
+  ])('refuses an import with %s', async (_name, bad) => {
+    const { dispatch, handlers } = setup();
+
+    expect(await dispatch(request('config.import', bad), OPTIONS)).toMatchObject({
+      ok: false,
+      error: { code: 'bad-request' },
+    });
+    expect(handlers['config.import']).not.toHaveBeenCalled();
+  });
+});
+
 describe('RPC dispatcher: backups', () => {
   const backups = { backups: [] };
 
@@ -506,7 +555,7 @@ describe('RPC dispatcher: backups', () => {
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce, telling the handler its page', async () => {
     const hello = vi.fn(() =>
-      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2' }),
+      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' as const }),
     );
     const { dispatch } = setup({ 'content.hello': hello });
     // A single-page app moved on: the tab's URL followed, the frame's did not.
@@ -514,7 +563,7 @@ describe('RPC dispatcher: panel handshake', () => {
 
     expect(await dispatch(request('content.hello'), moved)).toEqual({
       ok: true,
-      value: { nonce: 'n', pageKey: 'https://example.com/app/2' },
+      value: { nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' },
     });
     expect(hello).toHaveBeenCalledWith(
       {},
@@ -535,12 +584,12 @@ describe('RPC dispatcher: panel handshake', () => {
   });
 
   it('lets only a panel attach, before it is attached, and passes its tab and document', async () => {
-    const attach = vi.fn(() => Promise.resolve({ tabId: 1 }));
+    const attach = vi.fn(() => Promise.resolve({ tabId: 1, mode: 'page' as const }));
     const { dispatch } = setup({ 'panel.attach': attach });
 
     expect(await dispatch(request('panel.attach', { nonce: 'n' }), STRAY_PANEL)).toEqual({
       ok: true,
-      value: { tabId: 1 },
+      value: { tabId: 1, mode: 'page' },
     });
     expect(attach).toHaveBeenCalledWith(
       { nonce: 'n' },
@@ -578,6 +627,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     ['models.disableStreamUsage', { id: 'a' }],
     ['prompts.list', {}],
     ['page.getContext', {}],
+    ['page.locate', { quote: '原文' }],
     ['snapshot.get', {}],
     ['snapshot.save', { messages: [{ role: 'user', content: 'q' }], revision: 1 }],
   ] as const;
@@ -652,18 +702,50 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
   });
 });
 
+describe('RPC dispatcher: locating a quote', () => {
+  it('lets the attached panel search its page, and no one else, with a sane quote', async () => {
+    const locate = vi.fn(() => Promise.resolve({ found: true }));
+    const { dispatch } = setup({ 'page.locate': locate });
+
+    expect(await dispatch(request('page.locate', { quote: '原文' }), PANEL)).toEqual({
+      ok: true,
+      value: { found: true },
+    });
+    for (const sender of [OPTIONS, CONTENT]) {
+      expect(await dispatch(request('page.locate', { quote: '原文' }), sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    for (const quote of ['   ', 'x'.repeat(1_001)]) {
+      expect(await dispatch(request('page.locate', { quote }), PANEL)).toMatchObject({
+        ok: false,
+        error: { code: 'bad-request' },
+      });
+    }
+    expect(locate).toHaveBeenCalledOnce();
+  });
+});
+
 describe('RPC dispatcher: what the panel reads and keeps', () => {
   const answer = { role: 'assistant', content: '总结', stopped: false, usage: null } as const;
 
   it('gives the attached panel the settings it uses, field by field, and no one else', async () => {
     const current = vi.fn(() =>
-      Promise.resolve({ trimming: 'middle' as const, theme: 'dark', anything: 'else' }),
+      Promise.resolve({
+        trimming: 'middle' as const,
+        theme: 'dark' as const,
+        fontSize: 'large' as const,
+        answerLanguage: 'en' as const,
+        logLevel: 'debug',
+        anything: 'else',
+      }),
     );
     const { dispatch } = setup({ 'settings.current': current });
 
     expect(await dispatch(request('settings.current'), PANEL)).toEqual({
       ok: true,
-      value: { trimming: 'middle' },
+      value: { trimming: 'middle', theme: 'dark', fontSize: 'large', answerLanguage: 'en' },
     });
     for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
       expect(await dispatch(request('settings.current'), sender)).toMatchObject({

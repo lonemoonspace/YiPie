@@ -1,4 +1,5 @@
 import type { ModelChoice } from '@/contract/rpc';
+import type { PanelMode } from '@/contract/rpc-wire';
 import type { TurnUsage } from '@/contract/snapshot';
 import type { CutStrategy } from '@/domain/budget';
 import type { LlmError } from '@/domain/llm/errors';
@@ -20,6 +21,8 @@ export type PanelProblem =
   | { kind: 'switch'; detail: string }
   | { kind: 'extract'; detail: string }
   | { kind: 'empty-page' }
+  /** Opened on the selection, but nothing was selected. */
+  | { kind: 'empty-selection' }
   /** The prompt and the conversation alone fill the context window. */
   | ({ kind: 'too-long'; requiredTokens: number } & BudgetWindow)
   /** The model finished without a word. */
@@ -85,6 +88,8 @@ export interface PanelState {
     | 'done'
     | 'stopped'
     | 'error';
+  /** What the panel works on: the page, or the selection (§4.6). */
+  mode: PanelMode;
   /** What the model menu offers, as last read. Kept across runs, so the menu does not flicker. */
   models: ModelChoice[];
   /** The model in use: the global default, or the one just picked from the menu. */
@@ -116,6 +121,8 @@ export type PanelEvent =
   /** A new turn begins after the first `keep` turns; the others are gone. */
   | { type: 'start'; question: string | null; keep: number }
   | { type: 'models'; models: ModelChoice[]; modelId: string | null }
+  /** The panel was opened on the selection. */
+  | { type: 'mode'; mode: PanelMode }
   /** A model picked from the menu: the latest turn runs again with it. */
   | { type: 'select'; modelId: string }
   | { type: 'requesting'; origin: string; cut: CutNote | null }
@@ -132,6 +139,7 @@ export type PanelEvent =
 
 export const INITIAL_PANEL_STATE: PanelState = {
   phase: 'attaching',
+  mode: 'page',
   models: [],
   modelId: null,
   origin: null,
@@ -200,6 +208,8 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       };
     case 'models':
       return { ...state, models: event.models, modelId: event.modelId };
+    case 'mode':
+      return { ...state, mode: event.mode };
     case 'select':
       // The run in flight is dropped; the turn starts again once the pick is stored.
       return {

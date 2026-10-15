@@ -24,15 +24,16 @@ export function pageContent(page: Pick<PageContext, 'text' | 'truncated'>): stri
 
 /**
  * The variables for one page, with `content` as it will be sent (cut to the
- * budget, notes included). `selection` stays empty until selection summaries
- * arrive (phase 5); `language` is the language to answer in.
+ * budget, notes included): the page text, or the selection when the panel
+ * summarizes that (docs/development-plan.md §4.6). `selection` is what was
+ * selected when the panel opened; `language` is the language to answer in.
  */
 export function promptValues(
-  page: Pick<PageContext, 'title' | 'url'>,
+  page: Pick<PageContext, 'title' | 'url' | 'selection'>,
   content: string,
   language: string,
 ): PromptValues {
-  return { title: page.title, url: page.url, content, selection: '', language };
+  return { title: page.title, url: page.url, content, selection: page.selection, language };
 }
 
 /** The messages for a prompt: a system message unless that template renders blank, then the user message. */

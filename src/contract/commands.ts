@@ -6,3 +6,6 @@ export const SUMMARIZE_COMMAND = 'summarize-page';
 
 /** The right-click menu item that opens the panel (platform/triggers/context-menu). */
 export const SUMMARIZE_MENU_ITEM = 'summarize-page';
+
+/** The right-click menu item that summarizes the selected text (platform/triggers/context-menu). */
+export const SUMMARIZE_SELECTION_MENU_ITEM = 'summarize-selection';

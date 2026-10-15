@@ -160,3 +160,17 @@ describe('models and prompts share the default record', () => {
     });
   });
 });
+
+describe('prompts: importing', () => {
+  it('appends after the built-in prompt, which stays the default', async () => {
+    const { prompts } = setup();
+
+    const view = await prompts.addAll([
+      draft({ name: '一句话', user: '{{content}}' }),
+      draft({ name: '要点', user: '列出要点：{{content}}' }),
+    ]);
+
+    expect(view.items.map((item) => item.id)).toEqual([BUILTIN_PROMPT_ID, 'p-1', 'p-2']);
+    expect(view.defaultId).toBe(BUILTIN_PROMPT_ID);
+  });
+});

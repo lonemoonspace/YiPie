@@ -82,6 +82,15 @@ describe('parseModelForm', () => {
     });
   });
 
+  it('rejects extra body fields the request sets itself, naming the field', () => {
+    expect(
+      parseModelForm({ ...filled, extraBody: '{"temperature": 0.2, "stream": false}' }),
+    ).toEqual({
+      ok: false,
+      errors: { extraBody: '请求自己会设置 stream，额外请求体字段不能覆盖它' },
+    });
+  });
+
   it('rejects headers that are not JSON', () => {
     expect(parseModelForm({ ...filled, headers: '{oops' })).toMatchObject({
       ok: false,

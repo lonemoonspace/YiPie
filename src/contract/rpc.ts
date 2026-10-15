@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { BackedUpKey, BackupsView } from './backups';
-import { GeneralSettings, GeneralSettingsPatch, TrimmingStrategy } from './general-settings';
+import { ConfigImport } from './config-transfer';
+import {
+  AnswerLanguage,
+  FontSize,
+  GeneralSettings,
+  GeneralSettingsPatch,
+  Theme,
+  TrimmingStrategy,
+} from './general-settings';
 import {
   BaseURL,
   ExtraBody,
@@ -12,7 +20,7 @@ import {
 import { ItemId, MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
 import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
-import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
+import { PANEL_MODES, RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 import { SnapshotMessage } from './snapshot';
 
 /**
@@ -43,7 +51,12 @@ export type ReadStatus = z.infer<typeof ReadStatus>;
  * fields it does not know (`z.looseObject`), and those have no business in
  * the panel (docs/development-plan.md §4.3, decision 8).
  */
-export const PanelSettings = z.object({ trimming: TrimmingStrategy });
+export const PanelSettings = z.object({
+  trimming: TrimmingStrategy,
+  theme: Theme,
+  fontSize: FontSize,
+  answerLanguage: AnswerLanguage,
+});
 export type PanelSettings = z.infer<typeof PanelSettings>;
 
 export const GeneralSettingsView = z.object({
@@ -258,6 +271,13 @@ export const RPC_METHODS = {
     output: PromptConfigsView,
     callers: ['options'],
   },
+  // An import file the settings page read and the user confirmed: each list
+  // gets its items appended with fresh ids (docs/development-plan.md §4.6).
+  'config.import': {
+    input: ConfigImport,
+    output: z.object({ models: ModelConfigsView, prompts: PromptConfigsView }),
+    callers: ['options'],
+  },
   // Backups hold everything that was stored, keys included: settings page only.
   'backups.list': {
     input: z.strictObject({}),
@@ -274,15 +294,18 @@ export const RPC_METHODS = {
   // to mount in its tab (docs/development-plan.md §2.1, §8), and the page the
   // panel is bound to, worked out from the URL the browser reports. The host
   // closes the panel once the document is another page (§4.4, detail 12).
+  // `mode` says what the trigger asked for: the page, or the selection.
   'content.hello': {
-    input: z.strictObject({}),
-    output: z.object({ nonce: z.string(), pageKey: z.string() }),
+    input: z.strictObject({ mode: z.enum(PANEL_MODES).optional() }),
+    // The theme lets the shell around the panel match it.
+    output: z.object({ nonce: z.string(), pageKey: z.string(), theme: Theme }),
     callers: ['content'],
   },
-  // A panel proves it was mounted by our content script in the same tab.
+  // A panel proves it was mounted by our content script in the same tab, and
+  // learns what it works on.
   'panel.attach': {
     input: z.strictObject({ nonce: z.string().min(1).max(100) }),
-    output: z.object({ tabId: z.number().int() }),
+    output: z.object({ tabId: z.number().int(), mode: z.enum(PANEL_MODES) }),
     callers: ['panel'],
     beforeAttach: true,
   },
@@ -290,6 +313,13 @@ export const RPC_METHODS = {
   'page.getContext': {
     input: z.strictObject({}),
     output: PageContext,
+    callers: ['panel'],
+  },
+  // Finds a quote of an answer in the panel's page, scrolls to it and
+  // highlights it (docs/development-plan.md §4.6).
+  'page.locate': {
+    input: z.strictObject({ quote: z.string().trim().min(1).max(1_000) }),
+    output: z.object({ found: z.boolean() }),
     callers: ['panel'],
   },
   // The conversation of the page the panel was mounted on, in its own tab: a

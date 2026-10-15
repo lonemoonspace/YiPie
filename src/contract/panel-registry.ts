@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PANEL_MODES } from './rpc-wire';
 import type { StorageKey } from './storage';
 
 /**
@@ -28,6 +29,8 @@ export const PanelEntry = z.object({
    * the panel restores and saves is this page's.
    */
   pageKey: z.string(),
+  /** What the panel works on: the page, or the selection (§4.6). */
+  mode: z.enum(PANEL_MODES).default('page'),
 });
 export type PanelEntry = z.infer<typeof PanelEntry>;
 

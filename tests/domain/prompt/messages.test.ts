@@ -14,6 +14,7 @@ const page: PageContext = {
   url: 'https://example.com/a',
   lang: 'zh-CN',
   text: '正文第一段。\n\n正文第二段。',
+  selection: '',
   truncated: false,
 };
 
@@ -38,6 +39,9 @@ describe('promptValues', () => {
       selection: '',
       language: '简体中文',
     });
+    expect(promptValues({ ...page, selection: '选中的话' }, '正文', '英语').selection).toBe(
+      '选中的话',
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { handleChat, type RecordedRequest } from './llm';
+import { handleChat, MODEL_IDS, type RecordedRequest } from './llm';
 import { embeddingPage, PAGES, type FixturePage } from './pages';
 
 export interface FakeServer {
@@ -21,8 +21,14 @@ export async function startFakeServer(): Promise<FakeServer> {
 
   const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (request.method === 'POST' && url.pathname === '/v1/chat/completions') {
+    // `/v1` is a service with a model list; `/no-models/v1` one without.
+    if (request.method === 'POST' && url.pathname.endsWith('/v1/chat/completions')) {
       handleChat(request, response, requests);
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/models') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ object: 'list', data: MODEL_IDS.map((id) => ({ id })) }));
       return;
     }
 

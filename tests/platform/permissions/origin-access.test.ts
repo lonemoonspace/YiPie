@@ -3,6 +3,7 @@ import {
   hasOriginAccess,
   releaseOriginAccess,
   requestOriginAccess,
+  requestOriginsAccess,
   type PermissionsLike,
 } from '@/platform/permissions/origin-access';
 
@@ -82,5 +83,39 @@ describe('releasing origin access', () => {
 
     expect(api.remove).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.flat().map(String).join(' ')).toContain('http://127.0.0.1/*');
+  });
+});
+
+describe('requestOriginsAccess', () => {
+  it('asks once for every origin, each named once', async () => {
+    const api = permissions();
+
+    expect(
+      await requestOriginsAccess(
+        [BASE_URL, 'https://gw.example:8443/other', 'http://localhost:11434/v1'],
+        api,
+      ),
+    ).toBe(true);
+
+    expect(api.request).toHaveBeenCalledTimes(1);
+    expect(api.request).toHaveBeenCalledWith({
+      origins: ['https://gw.example:8443/*', 'http://localhost:11434/*'],
+    });
+  });
+
+  it('asks nothing when there is nothing to ask for', async () => {
+    const api = permissions();
+
+    expect(await requestOriginsAccess([], api)).toBe(true);
+    expect(api.request).not.toHaveBeenCalled();
+  });
+
+  it('answers false when the browser fails, logging origins only', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const api = permissions({ request: () => Promise.reject(new Error('no gesture')) });
+
+    expect(await requestOriginsAccess([BASE_URL], api)).toBe(false);
+    expect(warn.mock.calls.flat().map(String).join(' ')).not.toContain('query-secret');
+    warn.mockRestore();
   });
 });

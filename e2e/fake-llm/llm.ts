@@ -10,6 +10,9 @@ export interface RecordedRequest {
   aborted: boolean;
 }
 
+/** What `GET /v1/models` lists: a few of the scenarios. */
+export const MODEL_IDS = ['scenario:normal', 'scenario:chat', 'scenario:cite'];
+
 /** The answer of `scenario:normal`, in the pieces it is streamed in. */
 export const NORMAL_ANSWER = [
   '## 概要\n\n',
@@ -19,6 +22,16 @@ export const NORMAL_ANSWER = [
   '总结网页的浏览器扩展。\n\n',
   '- 要点一：在页面里打开浮动面板\n',
   '- 要点二：回答流式显示\n',
+];
+
+/**
+ * The answer of `scenario:cite`: two quotes of `/article.html`, one split
+ * across chunks and written with other whitespace, and one the page lacks.
+ */
+export const CITED_ANSWER = [
+  '- 面板浮在页面上 [[它在页面里',
+  '打开一个 浮动面板]]\n',
+  '- 编造的说法 [[这句话页面上没有]]\n',
 ];
 
 const UNSAFE_ANSWER = [
@@ -193,6 +206,9 @@ export function handleChat(
         return;
       case 'scenario:stream-error':
         stream([delta('先输出一点'), 'data: {"error":{"message":"Upstream overloaded"}}\n\n'], 20);
+        return;
+      case 'scenario:cite':
+        stream([...CITED_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
         return;
       case 'scenario:unsafe':
         stream([...UNSAFE_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);

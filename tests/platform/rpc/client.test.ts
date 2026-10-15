@@ -8,7 +8,13 @@ const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const OPTIONS = { id: EXTENSION_ID, url: `chrome-extension://${EXTENSION_ID}/options.html` };
 
 const view: GeneralSettingsView = {
-  settings: { theme: 'light', logLevel: 'warn', trimming: 'back' },
+  settings: {
+    theme: 'light',
+    logLevel: 'warn',
+    trimming: 'back',
+    fontSize: 'medium',
+    answerLanguage: 'interface',
+  },
   status: 'ok',
   readOnly: false,
   quarantined: false,

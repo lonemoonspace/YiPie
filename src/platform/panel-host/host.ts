@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import type { PanelMode } from '@/contract/rpc-wire';
 import { t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
@@ -33,7 +34,7 @@ const LEFTOVER_LIMIT = 10;
 const INSTANCE_KEY = Symbol.for('yipie.panel-host');
 
 interface PanelHost {
-  open(): void;
+  open(mode: PanelMode): void;
 }
 
 /** The host, and the runtime of the extension that created it. */
@@ -42,8 +43,12 @@ interface Instance {
   host: PanelHost;
 }
 
-/** Shows the panel in this tab, creating the host on the first call. */
-export function openPanelHost(): void {
+/**
+ * Shows the panel in this tab, creating the host on the first call. A panel
+ * already open stays as it is, unless the trigger asks for a summary of the
+ * selection: that is new work, so a new panel replaces it.
+ */
+export function openPanelHost(mode: PanelMode = 'page'): void {
   const scope = globalThis as unknown as Record<symbol, Instance | undefined>;
   let instance = scope[INSTANCE_KEY];
   // Left by an older version of the extension, should it share this world:
@@ -52,7 +57,7 @@ export function openPanelHost(): void {
     instance = { runtime: browser.runtime, host: createPanelHost() };
     scope[INSTANCE_KEY] = instance;
   }
-  instance.host.open();
+  instance.host.open(mode);
 }
 
 function createPanelHost(): PanelHost {
@@ -99,6 +104,10 @@ function createPanelHost(): PanelHost {
   shadow.append(frame);
 
   let open = false;
+  /** What the mounted panel works on, as the latest trigger asked. */
+  let mode: PanelMode = 'page';
+  /** Counts mounts: only the latest one puts a frame in. */
+  let mounts = 0;
   let remounts: number[] = [];
   let leftovers: number[] = [];
 
@@ -129,11 +138,15 @@ function createPanelHost(): PanelHost {
 
   /** A new panel document needs a new nonce: the old one was presented already. */
   async function mountPanel(): Promise<void> {
+    const mount = ++mounts;
     body.replaceChildren();
     page = null;
     try {
-      const { nonce, pageKey } = await callRpcLite('content.hello', {});
-      if (!open) return;
+      const { nonce, pageKey, theme } = await callRpcLite('content.hello', { mode });
+      // Closed, or mounted afresh, while we asked: that mount's nonce is the one.
+      if (!open || mount !== mounts) return;
+      // The shell wears the panel's theme (shell-css.ts).
+      frame.dataset.theme = theme;
       // The document may have become another page while we asked.
       page = pageKey;
       if (closeIfAnotherPage()) return;
@@ -155,6 +168,7 @@ function createPanelHost(): PanelHost {
         hide();
         return;
       }
+      if (mount !== mounts) return;
       logger.warn('Could not mount the panel:', error);
       const message = node('p', { class: 'message', role: 'alert' });
       message.textContent = t('panel.attachFailed');
@@ -212,8 +226,10 @@ function createPanelHost(): PanelHost {
   watchForOrphaning(element, hide);
 
   return {
-    open() {
-      if (open) return;
+    open(requested) {
+      if (open && requested !== 'selection') return;
+      if (open) hide();
+      mode = requested;
       open = true;
       place();
       void mountPanel();

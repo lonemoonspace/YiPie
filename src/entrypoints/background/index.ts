@@ -1,8 +1,9 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { contentPageKey } from '@/domain/page-key';
+import type { TriggerWire } from '@/contract/rpc-wire';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
-import { requestPageContext } from '@/platform/inject/page-context';
+import { requestLocate, requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { releaseOriginAccess } from '@/platform/permissions/origin-access';
@@ -74,17 +75,28 @@ export default defineBackground(() => {
       'prompts.remove': ({ id }) => prompts.remove(id),
       'prompts.move': ({ id, direction }) => prompts.move(id, direction),
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
+      // One list after the other: each is appended in one change, and a list
+      // with nothing to add is left unwritten.
+      'config.import': async (input) => ({
+        models: input.models.length > 0 ? await models.addAll(input.models) : await models.list(),
+        prompts:
+          input.prompts.length > 0 ? await prompts.addAll(input.prompts) : await prompts.list(),
+      }),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),
       // The page the panel is about to be mounted on, as the browser reports
       // it: the content script's tab URL, which follows a single-page app's
       // `pushState` (§4.4, detail 12).
-      'content.hello': async (_input, { tabId, url, tabUrl }) => {
+      'content.hello': async ({ mode }, { tabId, url, tabUrl }) => {
         const pageKey = contentPageKey(tabUrl, url);
         if (tabId === undefined || pageKey === null) {
           throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         }
-        return { nonce: await panels.issue(tabId, pageKey), pageKey };
+        const [nonce, { theme }] = await Promise.all([
+          panels.issue(tabId, pageKey, mode),
+          settings.current(),
+        ]);
+        return { nonce, pageKey, theme };
       },
       'panel.attach': async ({ nonce }, { tabId, documentId }) => {
         if (
@@ -94,12 +106,16 @@ export default defineBackground(() => {
         ) {
           throw new RpcRefusal('forbidden', 'This panel was not mounted by YiPie in this tab.');
         }
-        return { tabId };
+        return { tabId, mode: (await panels.modeOf(tabId, documentId)) ?? 'page' };
       },
       // The dispatcher has checked that the caller is the panel attached in this tab.
       'page.getContext': async (_input, { tabId }) => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to read.');
         return requestPageContext(tabId);
+      },
+      'page.locate': async ({ quote }, { tabId }) => {
+        if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to search.');
+        return { found: await requestLocate(tabId, quote) };
       },
       'snapshot.get': async (_input, context) => {
         const { tabId, pageKey } = await panelPage(context);
@@ -116,8 +132,8 @@ export default defineBackground(() => {
     },
   );
 
-  const open = (tab: TabLike) => {
-    openPanelInTab(tab).catch((error: unknown) => {
+  const open = (tab: TabLike, trigger?: TriggerWire) => {
+    openPanelInTab(tab, trigger).catch((error: unknown) => {
       logger.error('Could not open the panel:', error);
     });
   };
@@ -152,7 +168,8 @@ export default defineBackground(() => {
   if (import.meta.env.MODE === 'e2e') {
     Object.assign(globalThis, {
       __yipieE2E: {
-        openPanel: async (tabId: number) => openPanelInTab(await browser.tabs.get(tabId)),
+        openPanel: async (tabId: number, trigger?: TriggerWire) =>
+          openPanelInTab(await browser.tabs.get(tabId), trigger),
       },
     });
   }

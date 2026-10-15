@@ -1,4 +1,4 @@
-import type { PromptConfig } from '@/contract/prompt-config';
+import { PROMPT_CONFIGS_KEY, type PromptConfig } from '@/contract/prompt-config';
 import { t } from '@/domain/i18n';
 import { changedFields } from '@/domain/patch';
 import { callRpc } from '@/platform/rpc/client';
@@ -24,7 +24,7 @@ function preview(prompt: PromptConfig): string {
 
 /** Prompts: a list with a default, edited only here (docs/development-plan.md §4.3). */
 export function PromptSection() {
-  const list = useConfigList(loadPrompts);
+  const list = useConfigList(loadPrompts, PROMPT_CONFIGS_KEY);
   const { view, change } = list;
   const busy = list.status.kind === 'busy';
 

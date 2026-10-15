@@ -106,6 +106,7 @@ const contentScriptFiles = [
   'src/entrypoints/injected.ts',
   'src/platform/panel-host/**/*.ts',
   'src/platform/extract/**/*.ts',
+  'src/platform/locate/**/*.ts',
   'src/platform/rpc/lite-client.ts',
 ];
 const contentOnly =

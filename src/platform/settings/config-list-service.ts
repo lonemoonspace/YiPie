@@ -47,6 +47,8 @@ export interface ConfigListService<T, Draft, Patch> {
   list(): Promise<ListView<T>>;
   /** Appends an item with a fresh id. */
   add(draft: Draft): Promise<ListView<T>>;
+  /** Appends every item, each with a fresh id, in one change (an import). */
+  addAll(drafts: readonly Draft[]): Promise<ListView<T>>;
   /** Changes only the fields named in `patch`. */
   update(id: string, patch: Patch): Promise<ListView<T>>;
   remove(id: string): Promise<ListView<T>>;
@@ -169,6 +171,10 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
     add(draft) {
       const item = options.create(draft, options.newId());
       return change((items) => [...items, item], null);
+    },
+    addAll(drafts) {
+      const added = drafts.map((draft) => options.create(draft, options.newId()));
+      return change((items) => [...items, ...added], null);
     },
     update: (id, patch) => change((items) => updateItem(items, id, patch), id),
     remove: (id) => change((items) => removeItem(items, id), id),

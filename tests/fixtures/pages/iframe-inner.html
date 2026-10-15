@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>阅读器</title>
+  </head>
+  <body>
+    <article>
+      <h1>框架里的文章</h1>
+      <p>这段正文在同源的 iframe 里。顶层文档的克隆里只有一个空的框架元素，提取需要进到框架的文档里才能读到它。</p>
+      <p>跨源的框架读不到，也不应该去读；同源的框架按深度上限展开，和 open shadow root 一样处理。</p>
+    </article>
+  </body>
+</html>

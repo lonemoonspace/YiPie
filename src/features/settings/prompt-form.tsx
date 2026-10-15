@@ -5,7 +5,10 @@ import {
   formFromPrompt,
   newPromptForm,
   parsePromptForm,
+  previewPrompt,
   promptFormWarnings,
+  unknownVariableFlags,
+  variableHints,
   type PromptFormErrors,
   type PromptFormFields,
 } from '@/domain/prompt-form';
@@ -36,6 +39,7 @@ export function PromptForm(props: PromptFormProps) {
   );
   const [errors, setErrors] = useState<PromptFormErrors>({});
   const warnings = promptFormWarnings(fields);
+  const flags = unknownVariableFlags(fields);
   const headingId = useId();
   const form = useRef<HTMLFormElement>(null);
 
@@ -73,6 +77,7 @@ export function PromptForm(props: PromptFormProps) {
         hint={t('prompt.system.hint')}
         error={errors.system}
         warnings={warnings.system}
+        flags={flags.system}
         value={fields.system}
         onChange={(value) => set('system', value)}
         rows={8}
@@ -82,11 +87,27 @@ export function PromptForm(props: PromptFormProps) {
         hint={t('prompt.user.hint')}
         error={errors.user}
         warnings={warnings.user}
+        flags={flags.user}
         value={fields.user}
         onChange={(value) => set('user', value)}
         rows={6}
         required
       />
+      <details className="advanced">
+        <summary>{t('prompt.variables')}</summary>
+        <dl className="variables">
+          {variableHints().map(({ placeholder, meaning }) => (
+            <div key={placeholder}>
+              <dt>
+                <code>{placeholder}</code>
+              </dt>
+              <dd>{meaning}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+      <PromptPreview fields={fields} />
+
       <div className="actions">
         <button type="submit" disabled={props.readOnly || props.saving}>
           {props.saving ? t('prompt.saving') : t('prompt.save')}
@@ -98,5 +119,26 @@ export function PromptForm(props: PromptFormProps) {
         ) : null}
       </div>
     </form>
+  );
+}
+
+/** The templates rendered for a sample page, as the model would get them. */
+function PromptPreview({ fields }: { fields: PromptFormFields }) {
+  const [open, setOpen] = useState(false);
+  const preview = open ? previewPrompt(fields) : null;
+  return (
+    <details className="advanced" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{t('prompt.preview')}</summary>
+      {preview !== null ? (
+        <>
+          <h4 className="hint">{t('prompt.preview.system')}</h4>
+          <pre className="backup-preview">
+            {preview.system.trim() === '' ? t('prompt.preview.noSystem') : preview.system}
+          </pre>
+          <h4 className="hint">{t('prompt.preview.user')}</h4>
+          <pre className="backup-preview">{preview.user}</pre>
+        </>
+      ) : null}
+    </details>
   );
 }

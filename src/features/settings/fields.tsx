@@ -6,6 +6,8 @@ interface TextFieldProps {
   error: string | undefined;
   /** Shown under the field without blocking a save. */
   warnings?: readonly string[];
+  /** Like warnings, but marked in red: worth fixing, though they do not block a save either. */
+  flags?: readonly string[];
   value: string;
   onChange: (value: string) => void;
   type?: 'text' | 'password';
@@ -21,8 +23,15 @@ export function TextField(props: TextFieldProps): ReactNode {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const warningId = `${id}-warning`;
+  const flagId = `${id}-flag`;
   const warnings = props.warnings ?? [];
-  const describedBy = [props.error ? errorId : null, warnings.length > 0 ? warningId : null, hintId]
+  const flags = props.flags ?? [];
+  const describedBy = [
+    props.error ? errorId : null,
+    flags.length > 0 ? flagId : null,
+    warnings.length > 0 ? warningId : null,
+    hintId,
+  ]
     .filter((part) => part !== null)
     .join(' ');
   const common = {
@@ -56,6 +65,13 @@ export function TextField(props: TextFieldProps): ReactNode {
         <p id={errorId} className="error">
           {props.error}
         </p>
+      ) : null}
+      {flags.length > 0 ? (
+        <div id={flagId} className="warning flagged">
+          {flags.map((flag) => (
+            <p key={flag}>{flag}</p>
+          ))}
+        </div>
       ) : null}
       {warnings.length > 0 ? (
         <div id={warningId} className="warning">

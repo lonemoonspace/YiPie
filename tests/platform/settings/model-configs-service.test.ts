@@ -388,3 +388,31 @@ describe('model configurations: host access', () => {
 });
 
 type Models = ReturnType<typeof createModelConfigsService>;
+
+describe('model configurations: importing', () => {
+  it('appends every item with a fresh id, keeping the default and the rows already here', async () => {
+    const { models, store } = setup({
+      ...list(openai, { broken: true }),
+      [SELECTION_KEY]: { version: 1, data: { defaultModelId: 'a' } },
+    });
+
+    const view = await models.addAll([
+      draft({ baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat' }),
+      draft({ baseURL: 'http://localhost:11434/v1', model: 'qwen2.5:7b' }),
+    ]);
+
+    expect(ids(view)).toEqual(['a', 'id-1', 'id-2']);
+    expect(view.defaultId).toBe('a');
+    expect(view.unrecognized).toBe(1);
+    const stored = store.dump()[MODEL_CONFIGS_KEY] as { data: { id?: string }[] };
+    expect(stored.data.map((row) => row.id)).toEqual(['a', 'id-1', 'id-2', undefined]);
+  });
+
+  it('makes the first imported item the one in use when the list was empty', async () => {
+    const { models } = setup();
+
+    const view = await models.addAll([draft({ baseURL: 'https://gw.example/v1', model: 'm' })]);
+
+    expect(view.defaultId).toBe('id-1');
+  });
+});

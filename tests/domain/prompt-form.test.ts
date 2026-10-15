@@ -4,7 +4,10 @@ import {
   formFromPrompt,
   newPromptForm,
   parsePromptForm,
+  previewPrompt,
   promptFormWarnings,
+  unknownVariableFlags,
+  variableHints,
 } from '@/domain/prompt-form';
 
 describe('parsePromptForm', () => {
@@ -26,11 +29,16 @@ describe('parsePromptForm', () => {
 describe('promptFormWarnings', () => {
   it('has nothing to say about the built-in templates', () => {
     expect(promptFormWarnings(newPromptForm())).toEqual({});
+    expect(unknownVariableFlags(newPromptForm())).toEqual({});
   });
 
-  it('points out unknown placeholders in each template', () => {
+  it('flags unknown placeholders in each template', () => {
     expect(
-      promptFormWarnings({ name: 'n', system: '{{ lang }}', user: '{{content}} {{foo}} {{bar}}' }),
+      unknownVariableFlags({
+        name: 'n',
+        system: '{{ lang }}',
+        user: '{{content}} {{foo}} {{bar}}',
+      }),
     ).toEqual({
       system: ['未知变量 {{ lang }} 会原样发送给模型。'],
       user: ['未知变量 {{foo}}、{{bar}} 会原样发送给模型。'],
@@ -42,6 +50,32 @@ describe('promptFormWarnings', () => {
       user: ['两个模板里都没有 {{content}}：页面正文不会发送给模型。'],
     });
     expect(promptFormWarnings({ name: 'n', system: '{{content}}', user: 'x' })).toEqual({});
+  });
+});
+
+describe('the editor hints', () => {
+  it('lists every variable with its meaning', () => {
+    expect(variableHints().map((hint) => hint.placeholder)).toEqual([
+      '{{title}}',
+      '{{url}}',
+      '{{content}}',
+      '{{selection}}',
+      '{{language}}',
+    ]);
+    expect(variableHints().every((hint) => hint.meaning !== '')).toBe(true);
+  });
+
+  it('previews the templates for a sample page, leaving unknown placeholders as written', () => {
+    expect(
+      previewPrompt({
+        name: 'n',
+        system: '用{{language}}',
+        user: '{{title}}\n{{content}} {{foo}}',
+      }),
+    ).toEqual({
+      system: '用简体中文',
+      user: '示例：一瞥的设计笔记\n（这里是网页正文） {{foo}}',
+    });
   });
 });
 
