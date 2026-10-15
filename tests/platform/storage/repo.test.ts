@@ -171,3 +171,23 @@ describe('repo writes', () => {
     expect(writes).toEqual(['local:sample=one', 'local:other=two', 'local:sample=three']);
   });
 });
+
+describe('repo removal', () => {
+  it('deletes the record, and a missing one is fine', async () => {
+    const { repo, store } = setup({ version: 2, data: { count: 1, label: 'one' } });
+
+    await repo.removeUnqueued();
+    await repo.removeUnqueued();
+
+    expect(store.dump()).toEqual({});
+    expect((await repo.read()).status).toBe('missing');
+  });
+
+  it('refuses to delete data written by a newer version', async () => {
+    const newer = { version: 3, data: { count: 1 } };
+    const { repo, store } = setup(newer);
+
+    await expect(repo.removeUnqueued()).rejects.toBeInstanceOf(ReadOnlyRecordError);
+    expect(store.dump()[KEY]).toEqual(newer);
+  });
+});

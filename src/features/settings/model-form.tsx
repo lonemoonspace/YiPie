@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { ModelConfig } from '@/contract/model-config';
+import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
 import { t } from '@/domain/i18n';
 import {
   EMPTY_MODEL_FORM,
@@ -116,7 +117,9 @@ export function ModelForm(props: ModelFormProps) {
         />
         <TextField
           label={t('model.contextWindow')}
-          hint={t('model.contextWindow.hint')}
+          hint={t('model.contextWindow.hint', {
+            window: DEFAULT_CONTEXT_WINDOW.toLocaleString('en-US'),
+          })}
           error={errors.contextWindow}
           value={fields.contextWindow}
           onChange={(value) => set('contextWindow', value)}

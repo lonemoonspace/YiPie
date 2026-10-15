@@ -22,8 +22,21 @@ ${extra}
 </body>
 </html>`;
 
+/** About 6,000 characters, nearly all CJK: about as many tokens. */
+const longArticle = `<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>一篇很长的文章</title></head>
+<body>
+<article>
+<h1>一篇很长的文章</h1>
+${Array.from({ length: 300 }, (_, i) => `<p>第${i + 1}段：一瞥会把正文交给你自己的模型。</p>`).join('\n')}
+</article>
+</body>
+</html>`;
+
 export const PAGES: Record<string, FixturePage> = {
   '/article.html': { body: article('一篇普通的文章') },
+  '/long.html': { body: longArticle },
   '/strict-csp.html': {
     headers: {
       'Content-Security-Policy':

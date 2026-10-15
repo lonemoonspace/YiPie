@@ -1,8 +1,16 @@
 import type { ModelChoice } from '@/contract/rpc';
+import type { TurnUsage } from '@/contract/snapshot';
+import type { CutStrategy } from '@/domain/budget';
 import type { LlmError } from '@/domain/llm/errors';
-import type { Usage } from '@/domain/llm/stream';
 
-/** Why the panel could not finish, other than the model failing. */
+/** The context window a request was budgeted for. */
+export interface BudgetWindow {
+  contextWindow: number;
+  /** The configuration leaves the window blank; the default stood in. */
+  assumedWindow: boolean;
+}
+
+/** Why a run could not finish. */
 export type PanelProblem =
   | { kind: 'attach' }
   | { kind: 'no-model' }
@@ -12,55 +20,127 @@ export type PanelProblem =
   | { kind: 'switch'; detail: string }
   | { kind: 'extract'; detail: string }
   | { kind: 'empty-page' }
-  | { kind: 'llm'; error: LlmError };
+  /** The prompt and the conversation alone fill the context window. */
+  | ({ kind: 'too-long'; requiredTokens: number } & BudgetWindow)
+  /** The model finished without a word. */
+  | { kind: 'empty-answer' }
+  /**
+   * The model failed. `window` is what the request was budgeted for, or null
+   * when the page was sent as it is (`nothing`): then a context-length
+   * refusal offers to cut and retry.
+   */
+  | { kind: 'llm'; error: LlmError; window: BudgetWindow | null };
+
+/** How the page text of a request was cut, when it was. */
+export type CutNote =
+  | ({
+      kind: 'budget';
+      strategy: CutStrategy;
+      keptTokens: number;
+      totalTokens: number;
+    } & BudgetWindow)
+  /** Only extraction's fixed limit cut it. */
+  | { kind: 'extraction' };
+
+/** One question and its answer; the summary has no question. */
+export interface Turn {
+  question: string | null;
+  /** The answer so far, as Markdown. */
+  text: string;
+  status: 'pending' | 'done' | 'stopped' | 'failed';
+  usage: TurnUsage | null;
+  cut: CutNote | null;
+}
+
+/** About the saved copy of the conversation (docs/development-plan.md §4.4, decision 2). */
+export type SnapshotNote =
+  /** Restored, but the oldest messages had been left out to fit. */
+  | { kind: 'restored-truncated' }
+  /** There was a conversation for this page; it was evicted to make room. */
+  | { kind: 'evicted' }
+  | { kind: 'restore-failed'; detail: string }
+  /** Saved without the oldest messages, which did not fit. */
+  | { kind: 'save-truncated' }
+  | { kind: 'save-failed'; detail: string };
 
 /**
- * attaching → extracting → requesting → streaming → done / stopped / error
- * (docs/development-plan.md §4.2). Text received before a stop or an error
- * stays on screen.
+ * The panel: the conversation so far, and the phase of its latest run,
+ * extracting → requesting → streaming → done / stopped / error
+ * (docs/development-plan.md §4.2). Before the first run it is attaching;
+ * after restoring a saved conversation, restored. Text received before a
+ * stop or an error stays on screen.
  */
 export interface PanelState {
-  phase: 'attaching' | 'extracting' | 'requesting' | 'streaming' | 'done' | 'stopped' | 'error';
+  phase:
+    | 'attaching'
+    | 'restored'
+    | 'extracting'
+    | 'requesting'
+    | 'streaming'
+    | 'done'
+    | 'stopped'
+    | 'error';
   /** What the model menu offers, as last read. Kept across runs, so the menu does not flicker. */
   models: ModelChoice[];
   /** The model in use: the global default, or the one just picked from the menu. */
   modelId: string | null;
   /** Origin of the model service, for error messages. */
   origin: string | null;
-  /** The page text was cut before sending. */
-  truncated: boolean;
-  /** The answer so far, as Markdown. */
-  text: string;
-  usage: Usage | null;
+  turns: Turn[];
+  /** Why the latest run did not finish; it belongs to the last turn, if there is one. */
   problem: PanelProblem | null;
+  snapshot: SnapshotNote | null;
+}
+
+/** A finished turn as the conversation keeps it. */
+export interface Exchange {
+  question: string | null;
+  answer: string;
+  stopped: boolean;
+  usage: TurnUsage | null;
 }
 
 export type PanelEvent =
-  | { type: 'start' }
+  /** A saved conversation is shown instead of a new summary. */
+  | { type: 'restored'; exchanges: Exchange[]; truncated: boolean }
+  /** A new turn begins after the first `keep` turns; the others are gone. */
+  | { type: 'start'; question: string | null; keep: number }
   | { type: 'models'; models: ModelChoice[]; modelId: string | null }
-  /** A model picked from the menu: the old run is dropped and a new one begins. */
+  /** A model picked from the menu: the latest turn runs again with it. */
   | { type: 'select'; modelId: string }
-  | { type: 'requesting'; origin: string; truncated: boolean }
+  | { type: 'requesting'; origin: string; cut: CutNote | null }
   | { type: 'text'; text: string }
-  | { type: 'finished'; usage: Usage | null }
-  | { type: 'stopped' }
-  | { type: 'failed'; problem: PanelProblem };
+  | { type: 'finished'; usage: TurnUsage }
+  | { type: 'stopped'; usage: TurnUsage | null }
+  | { type: 'failed'; problem: PanelProblem }
+  | { type: 'snapshot'; note: SnapshotNote }
+  /** The conversation was saved in full: an earlier saving problem is over. */
+  | { type: 'saved' };
 
 export const INITIAL_PANEL_STATE: PanelState = {
   phase: 'attaching',
   models: [],
   modelId: null,
   origin: null,
-  truncated: false,
-  text: '',
-  usage: null,
+  turns: [],
   problem: null,
+  snapshot: null,
 };
 
 export function isBusy(state: PanelState): boolean {
   return (
     state.phase === 'extracting' || state.phase === 'requesting' || state.phase === 'streaming'
   );
+}
+
+/** A follow-up needs an answer to follow, and nothing in flight. */
+export function canAsk(state: PanelState): boolean {
+  return !isBusy(state) && state.turns.some(isAnswered);
+}
+
+/** A turn the conversation keeps: finished or stopped, with an answer. */
+export function isAnswered(turn: Turn): boolean {
+  return (turn.status === 'done' || turn.status === 'stopped') && turn.text !== '';
 }
 
 /** Display name of the model in use, or empty while unknown. */
@@ -70,33 +150,88 @@ export function modelName(state: PanelState): string {
 
 export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
   switch (event.type) {
+    case 'restored':
+      return {
+        ...state,
+        phase: 'restored',
+        turns: event.exchanges.map((exchange) => ({
+          question: exchange.question,
+          text: exchange.answer,
+          status: exchange.stopped ? 'stopped' : 'done',
+          usage: exchange.usage,
+          cut: null,
+        })),
+        problem: null,
+        snapshot: event.truncated ? { kind: 'restored-truncated' } : state.snapshot,
+      };
     case 'start':
       return {
-        ...INITIAL_PANEL_STATE,
+        ...state,
         phase: 'extracting',
-        models: state.models,
-        modelId: state.modelId,
+        origin: null,
+        turns: [
+          ...state.turns.slice(0, event.keep),
+          { question: event.question, text: '', status: 'pending', usage: null, cut: null },
+        ],
+        problem: null,
       };
     case 'models':
       return { ...state, models: event.models, modelId: event.modelId };
     case 'select':
-      return {
-        ...INITIAL_PANEL_STATE,
-        phase: 'extracting',
-        models: state.models,
-        modelId: event.modelId,
-      };
+      // The run in flight is dropped; the turn starts again once the pick is stored.
+      return { ...state, phase: 'extracting', modelId: event.modelId, problem: null };
     case 'requesting':
-      return { ...state, phase: 'requesting', origin: event.origin, truncated: event.truncated };
+      return {
+        ...state,
+        phase: 'requesting',
+        origin: event.origin,
+        turns: updateLast(state.turns, (turn) => ({ ...turn, cut: event.cut })),
+      };
     case 'text':
       // A late chunk after a stop or an error changes nothing.
       if (state.phase !== 'requesting' && state.phase !== 'streaming') return state;
-      return { ...state, phase: 'streaming', text: state.text + event.text };
+      return {
+        ...state,
+        phase: 'streaming',
+        turns: updateLast(state.turns, (turn) => ({ ...turn, text: turn.text + event.text })),
+      };
     case 'finished':
-      return isBusy(state) ? { ...state, phase: 'done', usage: event.usage } : state;
+      if (!isBusy(state)) return state;
+      return {
+        ...state,
+        phase: 'done',
+        turns: updateLast(state.turns, (turn) => ({ ...turn, status: 'done', usage: event.usage })),
+      };
     case 'stopped':
-      return isBusy(state) ? { ...state, phase: 'stopped' } : state;
+      if (!isBusy(state)) return state;
+      return {
+        ...state,
+        phase: 'stopped',
+        turns: updateLast(state.turns, (turn) => ({
+          ...turn,
+          status: 'stopped',
+          usage: event.usage,
+        })),
+      };
     case 'failed':
-      return { ...state, phase: 'error', problem: event.problem };
+      return {
+        ...state,
+        phase: 'error',
+        problem: event.problem,
+        turns: updateLast(state.turns, (turn) =>
+          turn.status === 'pending' ? { ...turn, status: 'failed' } : turn,
+        ),
+      };
+    case 'snapshot':
+      return { ...state, snapshot: event.note };
+    case 'saved':
+      return state.snapshot?.kind === 'save-failed' || state.snapshot?.kind === 'save-truncated'
+        ? { ...state, snapshot: null }
+        : state;
   }
+}
+
+function updateLast(turns: Turn[], change: (turn: Turn) => Turn): Turn[] {
+  const last = turns.at(-1);
+  return last === undefined ? turns : [...turns.slice(0, -1), change(last)];
 }

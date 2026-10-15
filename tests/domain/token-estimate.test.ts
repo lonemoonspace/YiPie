@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateTokens } from '@/domain/token-estimate';
+import { estimateTokens, fitTokens } from '@/domain/token-estimate';
 
 describe('estimateTokens', () => {
   it('is zero for empty text', () => {
@@ -39,5 +39,38 @@ describe('estimateTokens', () => {
         expect(estimateTokens(head + tail)).toBeGreaterThanOrEqual(estimateTokens(head));
       }
     }
+  });
+});
+
+describe('fitTokens', () => {
+  const samples = ['', 'abcdefg', '你好世界', 'mixed 文本 😀 текст and more', '😀'.repeat(7)];
+
+  it('keeps as much as fits, from either end, and not one code point more', () => {
+    for (const text of samples) {
+      const codePoints = Array.from(text);
+      for (let limit = 0; limit <= estimateTokens(text) + 1; limit++) {
+        const head = fitTokens(codePoints, limit, 'start');
+        const tail = fitTokens(codePoints, limit, 'end');
+
+        expect(estimateTokens(codePoints.slice(0, head).join(''))).toBeLessThanOrEqual(limit);
+        expect(
+          estimateTokens(codePoints.slice(codePoints.length - tail).join('')),
+        ).toBeLessThanOrEqual(limit);
+        if (head < codePoints.length) {
+          expect(estimateTokens(codePoints.slice(0, head + 1).join(''))).toBeGreaterThan(limit);
+        }
+        if (tail < codePoints.length) {
+          expect(
+            estimateTokens(codePoints.slice(codePoints.length - tail - 1).join('')),
+          ).toBeGreaterThan(limit);
+        }
+      }
+    }
+  });
+
+  it('counts whole code points, so a cut never falls inside a character', () => {
+    expect(fitTokens(Array.from('😀😀😀'), 2, 'start')).toBe(1);
+    expect(fitTokens(Array.from('ab😀'), 1, 'end')).toBe(0);
+    expect(fitTokens(Array.from('ab😀'), 3, 'end')).toBe(3);
   });
 });

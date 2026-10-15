@@ -4,7 +4,8 @@ import { z } from 'zod';
  * What the content script extracts from a page. It comes from the page's
  * renderer, so the background parses it with this schema before anything
  * else sees it. The bounds are a sanity check on that untrusted reply; the
- * content script cuts the text much shorter (platform/extract).
+ * content script stops at the same length (platform/extract), and the panel
+ * cuts the text to the model's budget.
  */
 export const PageContext = z.strictObject({
   title: z.string().max(2_000),

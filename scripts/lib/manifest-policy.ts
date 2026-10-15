@@ -19,7 +19,7 @@ export interface ManifestPolicy {
 }
 
 export const MANIFEST_POLICY: ManifestPolicy = {
-  permissions: ['storage', 'activeTab', 'scripting'],
+  permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   // Requested per origin at runtime, only for the model services the user configures.
   optionalHostPermissions: ['https://*/*', 'http://*/*'],
   exact: {

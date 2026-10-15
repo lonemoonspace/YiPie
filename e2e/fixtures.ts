@@ -126,6 +126,8 @@ export interface StoredModel {
   model: string;
   /** `E2E_KEY` unless given. */
   apiKey?: string;
+  /** Blank (`null`) unless given. */
+  contextWindow?: number | null;
 }
 
 /**
@@ -142,11 +144,11 @@ export async function storeModels(
   const data = [
     ...models.map((model) => ({
       apiKey: E2E_KEY,
+      contextWindow: null,
       ...model,
       baseURL: `${server.origin}/v1`,
       headers: {},
       extraBody: {},
-      contextWindow: null,
       streamUsage: true,
     })),
     ...extra,
@@ -176,6 +178,16 @@ export async function storeDefaults(
   });
 }
 
+/** Stores general settings, as the settings page would. */
+export async function storeSettings(
+  serviceWorker: Worker,
+  settings: { trimming?: 'back' | 'middle' | 'front' | 'nothing' },
+) {
+  await store(serviceWorker, {
+    'general-settings': { version: 1, data: { theme: 'system', logLevel: 'info', ...settings } },
+  });
+}
+
 /** Writes `storage.local` from the service worker, as the extension's own writes land there. */
 async function store(serviceWorker: Worker, items: Record<string, unknown>) {
   await serviceWorker.evaluate(
@@ -191,6 +203,13 @@ export async function stored(serviceWorker: Worker, key: string): Promise<unknow
     key,
   );
   return all[key];
+}
+
+/** Everything in `storage.session`, read in the service worker: the panel registry and snapshots. */
+export async function session(serviceWorker: Worker): Promise<Record<string, unknown>> {
+  return serviceWorker.evaluate(() =>
+    (globalThis as unknown as ChromeStorageGlobal).chrome.storage.session.get(null),
+  );
 }
 
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */
@@ -215,7 +234,7 @@ export interface ChromeStorageGlobal {
         set(items: Record<string, unknown>): Promise<void>;
       };
       session: {
-        get(key: string): Promise<Record<string, unknown>>;
+        get(key: string | null): Promise<Record<string, unknown>>;
       };
     };
   };

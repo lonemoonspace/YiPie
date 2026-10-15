@@ -22,6 +22,12 @@ export const PanelEntry = z.object({
   issuedAt: z.number(),
   /** `documentId` of the panel that presented the nonce, once one has. */
   attachedDocument: z.string().nullable(),
+  /**
+   * The page the panel was mounted on (`domain/page-key`), from the tab URL
+   * the browser reported with our content script's request: the conversation
+   * the panel restores and saves is this page's.
+   */
+  pageKey: z.string(),
 });
 export type PanelEntry = z.infer<typeof PanelEntry>;
 

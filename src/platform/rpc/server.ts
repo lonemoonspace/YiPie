@@ -24,6 +24,18 @@ export interface HandlerContext {
   /** The sender's tab, for the panel and the content script (both live in one). */
   tabId: number | undefined;
   documentId: string | undefined;
+  /**
+   * The sender's URL as the browser reports it: the URL its document loaded
+   * with, which a single-page app's `pushState` does not change. Never write
+   * it to a log (it can carry tokens), nor `tabUrl`.
+   */
+  url: string | undefined;
+  /**
+   * The URL of the sender's tab as the browser reports it now, that is, of
+   * its top frame, following `pushState` and hash changes. For our content
+   * script, which runs only in the top frame, the page it is on.
+   */
+  tabUrl: string | undefined;
 }
 
 export type RpcHandlers = {
@@ -114,6 +126,8 @@ export function createDispatcher(
         caller,
         tabId: sender.tab?.id,
         documentId: sender.documentId,
+        url: sender.url,
+        tabUrl: sender.tab?.url,
       });
       return { ok: true, value: definition.output.parse(value) };
     } catch (error) {

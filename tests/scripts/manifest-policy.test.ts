@@ -5,7 +5,7 @@ const valid = {
   manifest_version: 3,
   name: 'YiPie',
   version: '0.0.0',
-  permissions: ['storage', 'activeTab', 'scripting'],
+  permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   optional_host_permissions: ['https://*/*', 'http://*/*'],
   action: { default_title: '一瞥：总结此页' },
   commands: { 'summarize-page': { suggested_key: { default: 'Alt+Shift+Y' } } },
@@ -31,9 +31,9 @@ describe('checkManifest', () => {
   });
 
   it('catches a missing permission', () => {
-    expect(checkManifest({ ...valid, permissions: ['storage', 'activeTab'] })[0]).toContain(
-      'scripting',
-    );
+    expect(
+      checkManifest({ ...valid, permissions: ['storage', 'activeTab', 'contextMenus'] })[0],
+    ).toContain('scripting');
   });
 
   it('catches optional host permissions that differ from the list', () => {

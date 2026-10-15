@@ -7,8 +7,11 @@ import {
 import { createRepo, type Queue, type StorageLike } from '@/platform/storage';
 
 export interface PanelRegistryService {
-  /** A fresh nonce for the panel frame about to be mounted in `tabId`; replaces any earlier one. */
-  issue(tabId: number): Promise<string>;
+  /**
+   * A fresh nonce for the panel frame about to be mounted in `tabId`, on the
+   * page `pageKey`; replaces any earlier one.
+   */
+  issue(tabId: number, pageKey: string): Promise<string>;
   /**
    * Binds the tab's current nonce to the document presenting it. False when
    * the nonce does not match or another document already presented it.
@@ -16,6 +19,10 @@ export interface PanelRegistryService {
   attach(tabId: number, nonce: string, documentId: string): Promise<boolean>;
   /** Whether `documentId` is the panel attached in `tabId`. */
   isAttached(tabId: number, documentId: string): Promise<boolean>;
+  /** The page of the panel `documentId` attached in `tabId`; null when it is not the one attached. */
+  pageKeyOf(tabId: number, documentId: string): Promise<string | null>;
+  /** Forgets a tab that was closed. */
+  remove(tabId: number): Promise<void>;
 }
 
 /** The registry behind `content.hello` and `panel.attach`; runs in the service worker. */
@@ -33,12 +40,12 @@ export function createPanelRegistry(
   });
 
   return {
-    async issue(tabId) {
+    async issue(tabId, pageKey) {
       const nonce = newNonce();
       await repo.update((registry) =>
         keepNewest({
           ...registry,
-          [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null },
+          [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null, pageKey },
         }),
       );
       return nonce;
@@ -63,6 +70,17 @@ export function createPanelRegistry(
     async isAttached(tabId, documentId) {
       const { value } = await repo.read();
       return value[String(tabId)]?.attachedDocument === documentId;
+    },
+
+    async pageKeyOf(tabId, documentId) {
+      const entry = (await repo.read()).value[String(tabId)];
+      return entry?.attachedDocument === documentId ? entry.pageKey : null;
+    },
+
+    async remove(tabId) {
+      await repo.update((registry) =>
+        Object.fromEntries(Object.entries(registry).filter(([id]) => id !== String(tabId))),
+      );
     },
   };
 }

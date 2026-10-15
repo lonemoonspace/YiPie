@@ -1,19 +1,23 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
+import { contentPageKey } from '@/domain/page-key';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
-import { registerRpcServer } from '@/platform/rpc/server';
+import { registerRpcServer, type HandlerContext } from '@/platform/rpc/server';
 import { createBackupsService } from '@/platform/settings/backups-service';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
+import { createSnapshotStore } from '@/platform/snapshot/store';
+import { onTabClosed } from '@/platform/snapshot/tab-closed';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
+import { onContextMenu } from '@/platform/triggers/context-menu';
 
 const logger = createLogger('background');
 
@@ -26,6 +30,22 @@ export default defineBackground(() => {
   const prompts = createPromptConfigsService(store, writeQueue);
   const backups = createBackupsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
+  const snapshots = createSnapshotStore(store, writeQueue, {
+    attached: (tabId, documentId) => panels.isAttached(tabId, documentId),
+  });
+
+  /**
+   * The tab and the page of the attached panel that sent a request. The
+   * dispatcher has checked that it is attached; asking the registry again
+   * also refuses a panel replaced in the meantime.
+   */
+  const panelPage = async ({ tabId, documentId }: HandlerContext) => {
+    if (tabId !== undefined && documentId !== undefined) {
+      const pageKey = await panels.pageKeyOf(tabId, documentId);
+      if (pageKey !== null) return { tabId, pageKey, documentId };
+    }
+    throw new RpcRefusal('forbidden', 'This panel is not the one attached in its tab.');
+  };
 
   // Register listeners first: the message or click being handled may be what
   // woke this worker. Handlers still wait until storage.local is closed to
@@ -33,6 +53,7 @@ export default defineBackground(() => {
   registerRpcServer(
     {
       'settings.get': () => settings.get(),
+      'settings.current': () => settings.current(),
       'settings.patch': async (patch) => {
         const view = await settings.patch(patch);
         setLogLevel(view.settings.logLevel);
@@ -54,9 +75,15 @@ export default defineBackground(() => {
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),
-      'content.hello': async (_input, { tabId }) => {
-        if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
-        return { nonce: await panels.issue(tabId) };
+      // The page the panel is about to be mounted on, as the browser reports
+      // it: the content script's tab URL, which follows a single-page app's
+      // `pushState` (§4.4, detail 12).
+      'content.hello': async (_input, { tabId, url, tabUrl }) => {
+        const pageKey = contentPageKey(tabUrl, url);
+        if (tabId === undefined || pageKey === null) {
+          throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
+        }
+        return { nonce: await panels.issue(tabId, pageKey), pageKey };
       },
       'panel.attach': async ({ nonce }, { tabId, documentId }) => {
         if (
@@ -73,6 +100,14 @@ export default defineBackground(() => {
         if (tabId === undefined) throw new RpcRefusal('forbidden', 'No tab to read.');
         return requestPageContext(tabId);
       },
+      'snapshot.get': async (_input, context) => {
+        const { tabId, pageKey } = await panelPage(context);
+        return snapshots.get(tabId, pageKey);
+      },
+      'snapshot.save': async ({ messages, revision }, context) => {
+        const { tabId, pageKey, documentId } = await panelPage(context);
+        return snapshots.save(tabId, pageKey, messages, { documentId, revision });
+      },
     },
     {
       storageIsolated: ensureLocalStorageIsolated,
@@ -87,6 +122,16 @@ export default defineBackground(() => {
   };
   onToolbarClick(open);
   onShortcut(open);
+  onContextMenu(open);
+
+  // A closed tab's conversations and panel entry go with it (§4.4). This
+  // wakes the worker on every tab close: the plan asks for deletion right
+  // away rather than whenever the space is next needed.
+  onTabClosed((tabId) => {
+    Promise.all([snapshots.removeTab(tabId), panels.remove(tabId)]).catch((error: unknown) => {
+      logger.error('Could not clean up after a closed tab:', error);
+    });
+  });
 
   // Close storage.local now rather than on the first request. If the browser
   // refuses, RPC stays refused and nothing is injected; each later attempt

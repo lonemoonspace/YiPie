@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { LogLevel, Theme } from '@/contract/general-settings';
+import { LogLevel, Theme, TrimmingStrategy } from '@/contract/general-settings';
+import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
 import { t } from '@/domain/i18n';
 import { applyTheme } from '@/features/theme/apply-theme';
 import { useGeneralSettings, type SaveState } from './use-general-settings';
@@ -66,6 +67,30 @@ export function GeneralSection() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="trimming">{t('settings.trimming')}</label>
+            <select
+              id="trimming"
+              value={view.settings.trimming}
+              disabled={disabled}
+              aria-describedby="trimming-hint"
+              onChange={(event) =>
+                void update({ trimming: TrimmingStrategy.parse(event.target.value) })
+              }
+            >
+              {TrimmingStrategy.options.map((option) => (
+                <option key={option} value={option}>
+                  {t(`settings.trimming.${option}`)}
+                </option>
+              ))}
+            </select>
+            <p id="trimming-hint" className="hint">
+              {t('settings.trimming.hint', {
+                window: DEFAULT_CONTEXT_WINDOW.toLocaleString('en-US'),
+              })}
+            </p>
           </div>
 
           <p role="status" className="save-status">

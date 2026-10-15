@@ -24,15 +24,48 @@ export function estimateTokens(text: string): number {
   let ascii = 0;
   // Everything outside ASCII is tallied in half tokens to stay in integers.
   let halves = 0;
-
   for (const char of text) {
-    const codePoint = char.codePointAt(0) ?? 0;
-    if (codePoint < 0x80) ascii += 1;
-    else if (codePoint < 0x800) halves += 1;
-    else if (isCjk(codePoint)) halves += 2;
-    else halves += 3;
+    const [a, h] = costOf(char);
+    ascii += a;
+    halves += h;
   }
+  return tokensOf(ascii, halves);
+}
 
+/**
+ * How many code points from the start (or the end) of `codePoints` fit in
+ * `limit` estimated tokens: the part kept has an `estimateTokens` of at most
+ * `limit`. Trimming a page to a budget uses it, so the cut agrees with the
+ * estimate exactly.
+ */
+export function fitTokens(
+  codePoints: readonly string[],
+  limit: number,
+  from: 'start' | 'end',
+): number {
+  let ascii = 0;
+  let halves = 0;
+  let count = 0;
+  while (count < codePoints.length) {
+    const char = codePoints[from === 'start' ? count : codePoints.length - 1 - count] ?? '';
+    const [a, h] = costOf(char);
+    if (tokensOf(ascii + a, halves + h) > limit) break;
+    ascii += a;
+    halves += h;
+    count += 1;
+  }
+  return count;
+}
+
+/** One code point's cost: `[ASCII characters, half tokens]`. */
+function costOf(char: string): [number, number] {
+  const codePoint = char.codePointAt(0) ?? 0;
+  if (codePoint < 0x80) return [1, 0];
+  if (codePoint < 0x800) return [0, 1];
+  return [0, isCjk(codePoint) ? 2 : 3];
+}
+
+function tokensOf(ascii: number, halves: number): number {
   return Math.ceil(ascii / 3) + Math.ceil(halves / 2);
 }
 

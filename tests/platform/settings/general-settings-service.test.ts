@@ -14,7 +14,7 @@ describe('general settings service', () => {
     const { settings } = setup();
 
     expect(await settings.get()).toEqual({
-      settings: { theme: 'system', logLevel: 'info' },
+      settings: { theme: 'system', logLevel: 'info', trimming: 'back' },
       status: 'missing',
       readOnly: false,
       quarantined: false,
@@ -24,18 +24,21 @@ describe('general settings service', () => {
   it('saving one field leaves every other field alone', async () => {
     // The phase-0 prototype reset the other fields here, because its patch
     // schema was `.partial()` of the stored one and kept the defaults.
-    const { settings, store } = setup({ version: 1, data: { theme: 'light', logLevel: 'debug' } });
+    const { settings, store } = setup({
+      version: 1,
+      data: { theme: 'light', logLevel: 'debug', trimming: 'middle' },
+    });
 
     await settings.patch({ theme: 'dark' });
 
     expect(store.dump()[GENERAL_SETTINGS_KEY]).toEqual({
       version: 1,
-      data: { theme: 'dark', logLevel: 'debug' },
+      data: { theme: 'dark', logLevel: 'debug', trimming: 'middle' },
     });
   });
 
   it('an empty patch changes nothing', async () => {
-    const stored = { version: 1, data: { theme: 'light', logLevel: 'error' } };
+    const stored = { version: 1, data: { theme: 'light', logLevel: 'error', trimming: 'front' } };
     const { settings, store } = setup(stored);
 
     await settings.patch({});
@@ -46,9 +49,17 @@ describe('general settings service', () => {
   it('applies concurrent patches to different fields without losing either', async () => {
     const { settings } = setup();
 
-    await Promise.all([settings.patch({ theme: 'dark' }), settings.patch({ logLevel: 'warn' })]);
+    await Promise.all([
+      settings.patch({ theme: 'dark' }),
+      settings.patch({ logLevel: 'warn' }),
+      settings.patch({ trimming: 'nothing' }),
+    ]);
 
-    expect((await settings.get()).settings).toEqual({ theme: 'dark', logLevel: 'warn' });
+    expect((await settings.get()).settings).toEqual({
+      theme: 'dark',
+      logLevel: 'warn',
+      trimming: 'nothing',
+    });
   });
 
   it('reports unreadable settings and backs them up on the next save', async () => {
@@ -57,7 +68,7 @@ describe('general settings service', () => {
 
     const read = await settings.get();
     expect(read.status).toBe('invalid');
-    expect(read.settings).toEqual({ theme: 'system', logLevel: 'info' });
+    expect(read.settings).toEqual({ theme: 'system', logLevel: 'info', trimming: 'back' });
 
     const saved = await settings.patch({ theme: 'dark' });
     expect(saved.quarantined).toBe(true);
@@ -75,5 +86,20 @@ describe('general settings service', () => {
 
     await expect(settings.patch({ theme: 'light' })).rejects.toBeInstanceOf(ReadOnlyRecordError);
     expect(store.dump()[GENERAL_SETTINGS_KEY]).toEqual(newer);
+  });
+
+  it('gives the panel only the fields it uses', async () => {
+    const { settings } = setup({
+      version: 1,
+      data: { theme: 'dark', logLevel: 'warn', trimming: 'front', fontSize: 'large' },
+    });
+
+    expect(await settings.current()).toEqual({ trimming: 'front' });
+  });
+
+  it('gives the panel the defaults when the stored value is unreadable', async () => {
+    const { settings } = setup({ version: 1, data: { trimming: 'sideways' } });
+
+    expect(await settings.current()).toEqual({ trimming: 'back' });
   });
 });

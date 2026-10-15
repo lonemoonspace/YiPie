@@ -4,7 +4,7 @@ import type { CallerKind } from '@/contract/rpc';
 export interface SenderLike {
   id?: string;
   url?: string;
-  tab?: { id?: number };
+  tab?: { id?: number; url?: string };
   frameId?: number;
   /** Identifies one document in one frame; a reload gets a new one. */
   documentId?: string;
