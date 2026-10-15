@@ -1,10 +1,11 @@
 import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { MAX_IMPORTED_ITEMS } from '@/contract/config-transfer';
-import { buildConfigFile, previewImport, type ImportPreview } from '@/domain/config-transfer';
+import { buildConfigFile, type ImportPreview } from '@/domain/config-transfer';
 import { t } from '@/domain/i18n';
 import { requestOriginsAccess } from '@/platform/permissions/origin-access';
 import { callRpc } from '@/platform/rpc/client';
 import { downloadJson } from './download';
+import { createImportReader } from './import-reader';
 
 type Ready = Extract<ImportPreview, { kind: 'ready' }>;
 
@@ -28,6 +29,24 @@ export function TransferSection() {
   const fileInput = useRef<HTMLInputElement>(null);
   const checkboxId = useId();
   const fileId = useId();
+  // Only the newest pick's reading is shown (import-reader). The setters it
+  // calls keep their identity, so one reader serves the section's lifetime.
+  const [reader] = useState(() =>
+    createImportReader<File>({
+      read: (file) => file.text(),
+      show: (reading) => {
+        if (reading.kind === 'failed') {
+          setProblem(t('transfer.problem.read', { detail: messageOf(reading.error) }));
+        } else if (reading.preview.kind === 'ready') {
+          setPending(reading.preview);
+        } else {
+          setProblem(
+            t(`transfer.problem.${reading.preview.problem}`, { max: String(MAX_IMPORTED_ITEMS) }),
+          );
+        }
+      },
+    }),
+  );
 
   const exportConfig = () => {
     setBusy(true);
@@ -54,19 +73,15 @@ export function TransferSection() {
     setPending(null);
     setProblem(null);
     setStatus('');
-    if (file === undefined) return;
-    file.text().then(
-      (text) => {
-        const preview = previewImport(text);
-        if (preview.kind === 'ready') setPending(preview);
-        else
-          setProblem(t(`transfer.problem.${preview.problem}`, { max: String(MAX_IMPORTED_ITEMS) }));
-      },
-      (error: unknown) => setProblem(t('transfer.problem.read', { detail: messageOf(error) })),
-    );
+    if (file === undefined) {
+      reader.cancel();
+      return;
+    }
+    reader.choose(file);
   };
 
   const reset = () => {
+    reader.cancel();
     setPending(null);
     if (fileInput.current) fileInput.current.value = '';
   };
