@@ -1,10 +1,9 @@
 /**
- * Chinese messages. Phase 6 adds an English table with the same keys and a
- * language switch (docs/development-plan.md §4.7). `{name}` marks a parameter.
+ * Chinese messages that only extension pages use: the panel and the settings
+ * page. The service worker and the content script never load this table
+ * (docs/development-plan.md §9). `{name}` marks a parameter.
  */
-export const zh = {
-  'app.name': '一瞥',
-
+export const pages = {
   'settings.title': '设置',
   'settings.loading': '加载中…',
   'settings.loadFailed': '读取设置失败：{detail}',
@@ -122,7 +121,6 @@ export const zh = {
   'prompt.confirmRemove': '删除 Prompt「{name}」？',
   'prompt.confirmFallback': '它是默认 Prompt，删除后默认 Prompt 改为「{name}」。',
   'prompt.confirmLast': '这是最后一个 Prompt，删除后面板无法总结，直到再添加一个。',
-  'prompt.builtinName': '网页总结',
   'prompt.answerLanguage': '简体中文',
   'prompt.error.name': '请填写名称',
   'prompt.error.user': '用户模板不能为空',
@@ -149,7 +147,6 @@ export const zh = {
   'backup.exported': '已导出',
   'backup.removed': '已删除备份',
 
-  'panel.close': '关闭',
   'panel.stop': '停止',
   'panel.retry': '重新总结',
   'panel.retry.title': '清空这一页的对话，重新总结',
@@ -199,7 +196,6 @@ export const zh = {
   'panel.snapshot.saveTruncated': '对话较长，保存时去掉了最早的部分。',
   'panel.snapshot.saveFailed': '对话没能保存：{detail}。刷新页面或关闭面板后将无法恢复。',
   'panel.noModel': '还没有配置模型。请先在设置页填写一个 OpenAI 兼容服务。',
-  'panel.attachFailed': '面板无法连接到这个标签页，请重新点击工具栏图标。',
   'panel.noPrompt': '还没有 Prompt。请先在设置页添加一个。',
   'panel.configFailed': '读取设置失败：{detail}',
   'panel.model': '模型',
@@ -218,8 +214,4 @@ export const zh = {
   'error.aborted': '已停止。',
   'error.unknown': '发生了未知错误。',
   'error.detail': '服务返回：{detail}',
-
-  'host.unavailable': '此页面无法总结',
-  'menu.summarizePage': '用一瞥总结此页',
-  'host.title': '一瞥：总结此页',
 } as const satisfies Record<string, string>;

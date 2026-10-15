@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { SUMMARIZE_MENU_ITEM } from '@/contract/commands';
-import { t } from '@/domain/i18n';
+import { t } from '@/domain/i18n/background';
 import type { TabLike } from '@/platform/inject/inject';
 import { createLogger } from '@/platform/logger';
 

@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { t } from '@/domain/i18n';
+import { t } from '@/domain/i18n/background';
 import { isInjectableURL } from '@/domain/url';
 import { createLogger } from '@/platform/logger';
 import { ensureLocalStorageIsolated } from '@/platform/storage';

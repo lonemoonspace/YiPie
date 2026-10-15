@@ -1,5 +1,5 @@
 import type { PromptConfig } from '@/contract/prompt-config';
-import { t } from '@/domain/i18n';
+import { t } from '@/domain/i18n/background';
 
 /**
  * The built-in summary prompt. It is what the prompt list holds until the

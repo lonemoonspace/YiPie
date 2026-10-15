@@ -85,6 +85,20 @@ const noReactAtRuntime = {
   patterns: [{ group: ['react/*', 'react-dom/*'], allowTypeImports: true, message: reactOnlyInUi }],
 };
 
+// Messages (§9): extension pages carry every message; the service worker and
+// the content script carry only their own few, through their own `t`. These
+// are the imports that would bring in every message.
+const allMessages = ['@/domain/i18n', '@/domain/i18n/zh', '@/domain/i18n/zh/pages'];
+const workerMessagesOnly =
+  'SW 只带自己用到的几条消息：用 @/domain/i18n/background 的 t，不要引入整张消息表（§9）。';
+const serviceWorkerImports = {
+  paths: [
+    ...noReactAtRuntime.paths,
+    ...allMessages.map((name) => ({ name, message: workerMessagesOnly })),
+  ],
+  patterns: noReactAtRuntime.patterns,
+};
+
 // The content script (§2.2) runs in the page's renderer and carries only the
 // shell, extraction and locating: no React, no zod (the background validates
 // its messages), no storage, no model requests, no UI code. Types are fine.
@@ -97,11 +111,17 @@ const contentScriptFiles = [
 const contentOnly =
   '内容脚本跑在网页的渲染进程里，只带外壳、提取与定位：运行时不能引用 React、zod、存储、模型请求或界面代码（§2.2）。';
 const contentScriptImports = {
-  paths: ['react', 'react-dom', 'zod'].map((name) => ({
-    name,
-    allowTypeImports: true,
-    message: contentOnly,
-  })),
+  paths: [
+    ...['react', 'react-dom', 'zod'].map((name) => ({
+      name,
+      allowTypeImports: true,
+      message: contentOnly,
+    })),
+    ...allMessages.map((name) => ({
+      name,
+      message: '内容脚本只带自己用到的几条消息：用 @/domain/i18n/content 的 t（§9）。',
+    })),
+  ],
   patterns: [
     {
       group: [
@@ -185,7 +205,17 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-restricted-imports': ['error', noReactAtRuntime] },
   },
   {
-    // Replaces the rule above for these files; the React restriction is part of it.
+    // Code the service worker runs that uses messages. Replaces the rule above
+    // for these files; the React restriction is part of it.
+    files: [
+      'src/platform/**/*.{ts,tsx}',
+      'src/entrypoints/background/**/*.{ts,tsx}',
+      'src/domain/prompt/**/*.{ts,tsx}',
+    ],
+    rules: { '@typescript-eslint/no-restricted-imports': ['error', serviceWorkerImports] },
+  },
+  {
+    // Replaces the rules above for these files; the React restriction is part of it.
     files: contentScriptFiles,
     rules: { '@typescript-eslint/no-restricted-imports': ['error', contentScriptImports] },
   },

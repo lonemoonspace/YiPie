@@ -67,3 +67,15 @@ export function evaluateBundle(
 export function formatKb(bytes: number): string {
   return `${(bytes / 1000).toFixed(2)} kB`;
 }
+
+/**
+ * Which of `keys` a built script contains. The service worker and the content
+ * script carry only their own few messages (§9); a key of the extension
+ * pages' table in either means that table came along. Keys have dots, so the
+ * minifier keeps them quoted, as object keys and as arguments of `t` alike.
+ */
+export function leakedMessages(code: string, keys: readonly string[]): string[] {
+  return keys.filter((key) =>
+    [`"${key}"`, `'${key}'`, `\`${key}\``].some((quoted) => code.includes(quoted)),
+  );
+}

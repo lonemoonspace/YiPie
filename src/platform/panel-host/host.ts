@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { t } from '@/domain/i18n';
+import { t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';

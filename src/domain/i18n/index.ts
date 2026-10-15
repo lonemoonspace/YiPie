@@ -1,20 +1,16 @@
+import { translator } from './format';
 import { zh } from './zh';
+
+export type { MessageParams } from './format';
 
 export type MessageKey = keyof typeof zh;
 
 /** Every table for another language must have exactly these keys. */
 export type Messages = Record<MessageKey, string>;
 
-export type MessageParams = Record<string, string | number>;
-
 /**
- * The text for `key`, with each `{name}` replaced by `params.name`. A
- * placeholder without a parameter stays as written, so a missing value is
- * visible instead of silently blank.
+ * Text for extension pages: the panel and the settings page, which carry
+ * every message. Code the service worker or the content script runs uses
+ * `@/domain/i18n/background` or `@/domain/i18n/content` instead (§9).
  */
-export function t(key: MessageKey, params: MessageParams = {}): string {
-  const table: Messages = zh;
-  return table[key].replace(/\{(\w+)\}/g, (placeholder, name: string) =>
-    Object.hasOwn(params, name) ? String(params[name]) : placeholder,
-  );
-}
+export const t = translator<MessageKey>(zh);
