@@ -18,3 +18,18 @@ export function pageKeyOf(url: string): string {
   parsed.hash = fragment.startsWith('/') || fragment.startsWith('!') ? fragment : '';
   return parsed.href;
 }
+
+/**
+ * The page our content script is on, from what the browser reports about a
+ * message it sent: its tab's URL, which follows a single-page app's
+ * `pushState` and hash changes, rather than its frame's, which stays the URL
+ * the document loaded with. The frame's only when the browser gives no tab
+ * URL; null when it gives neither.
+ */
+export function contentPageKey(
+  tabUrl: string | undefined,
+  frameUrl: string | undefined,
+): string | null {
+  const url = tabUrl !== undefined && tabUrl !== '' ? tabUrl : frameUrl;
+  return url === undefined ? null : pageKeyOf(url);
+}

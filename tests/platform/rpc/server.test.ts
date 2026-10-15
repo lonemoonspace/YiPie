@@ -88,7 +88,13 @@ describe('RPC dispatcher', () => {
     expect(reply).toEqual({ ok: true, value: view });
     expect(handlers['settings.patch']).toHaveBeenCalledWith(
       { theme: 'dark' },
-      { caller: 'options', tabId: undefined, documentId: undefined, url: OPTIONS.url },
+      {
+        caller: 'options',
+        tabId: undefined,
+        documentId: undefined,
+        url: OPTIONS.url,
+        tabUrl: undefined,
+      },
     );
   });
 
@@ -477,16 +483,26 @@ describe('RPC dispatcher: backups', () => {
 
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce, telling the handler its page', async () => {
-    const hello = vi.fn(() => Promise.resolve({ nonce: 'n' }));
+    const hello = vi.fn(() =>
+      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2' }),
+    );
     const { dispatch } = setup({ 'content.hello': hello });
+    // A single-page app moved on: the tab's URL followed, the frame's did not.
+    const moved = { ...CONTENT, tab: { id: 1, url: 'https://example.com/app/2' } };
 
-    expect(await dispatch(request('content.hello'), CONTENT)).toEqual({
+    expect(await dispatch(request('content.hello'), moved)).toEqual({
       ok: true,
-      value: { nonce: 'n' },
+      value: { nonce: 'n', pageKey: 'https://example.com/app/2' },
     });
     expect(hello).toHaveBeenCalledWith(
       {},
-      { caller: 'content', tabId: 1, documentId: undefined, url: 'https://example.com/' },
+      {
+        caller: 'content',
+        tabId: 1,
+        documentId: undefined,
+        url: 'https://example.com/',
+        tabUrl: 'https://example.com/app/2',
+      },
     );
     for (const sender of [PANEL, OPTIONS]) {
       expect(await dispatch(request('content.hello'), sender)).toMatchObject({
@@ -506,7 +522,13 @@ describe('RPC dispatcher: panel handshake', () => {
     });
     expect(attach).toHaveBeenCalledWith(
       { nonce: 'n' },
-      { caller: 'panel', tabId: 1, documentId: 'STRAY', url: STRAY_PANEL.url },
+      {
+        caller: 'panel',
+        tabId: 1,
+        documentId: 'STRAY',
+        url: STRAY_PANEL.url,
+        tabUrl: undefined,
+      },
     );
     expect(await dispatch(request('panel.attach', { nonce: 'n' }), CONTENT)).toMatchObject({
       ok: false,

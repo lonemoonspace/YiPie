@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import { pageKeyOf } from '@/domain/page-key';
+import { contentPageKey } from '@/domain/page-key';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
@@ -73,13 +73,15 @@ export default defineBackground(() => {
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),
-      // The URL is the one the browser reports for the content script's
-      // frame, the page the panel is about to be mounted on.
-      'content.hello': async (_input, { tabId, url }) => {
-        if (tabId === undefined || url === undefined) {
+      // The page the panel is about to be mounted on, as the browser reports
+      // it: the content script's tab URL, which follows a single-page app's
+      // `pushState` (§4.4, detail 12).
+      'content.hello': async (_input, { tabId, url, tabUrl }) => {
+        const pageKey = contentPageKey(tabUrl, url);
+        if (tabId === undefined || pageKey === null) {
           throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         }
-        return { nonce: await panels.issue(tabId, pageKeyOf(url)) };
+        return { nonce: await panels.issue(tabId, pageKey), pageKey };
       },
       'panel.attach': async ({ nonce }, { tabId, documentId }) => {
         if (

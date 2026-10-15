@@ -263,10 +263,12 @@ export const RPC_METHODS = {
     callers: ['options'],
   },
   // The content script's only method: a nonce for the panel frame it is about
-  // to mount in its tab (docs/development-plan.md §2.1, §8).
+  // to mount in its tab (docs/development-plan.md §2.1, §8), and the page the
+  // panel is bound to, worked out from the URL the browser reports. The host
+  // closes the panel once the document is another page (§4.4, detail 12).
   'content.hello': {
     input: z.strictObject({}),
-    output: z.object({ nonce: z.string() }),
+    output: z.object({ nonce: z.string(), pageKey: z.string() }),
     callers: ['content'],
   },
   // A panel proves it was mounted by our content script in the same tab.

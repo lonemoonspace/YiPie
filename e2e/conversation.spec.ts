@@ -52,6 +52,37 @@ async function open(
   return { page, frame: await panelFrame(page) };
 }
 
+/** Whether our host is in the page, that is, whether the panel is open. */
+function hostShown(page: Page): Promise<boolean> {
+  return page.evaluate(() =>
+    [...document.documentElement.children].some((element) =>
+      element.tagName.toLowerCase().startsWith('yipie-panel-'),
+    ),
+  );
+}
+
+/** The page the background bound this tab's panel to. */
+async function registeredPage(serviceWorker: Parameters<typeof session>[0], tabId: number) {
+  const registry = (await session(serviceWorker))['panel-registry'] as
+    { data: Record<string, { pageKey: string }> } | undefined;
+  return registry?.data[String(tabId)]?.pageKey;
+}
+
+/**
+ * Opens the panel again once the browser reports the tab at the URL the
+ * page moved to without loading (`openPanel` finds the tab by its URL).
+ */
+async function reopen(
+  page: Page,
+  serviceWorker: Parameters<typeof session>[0],
+  openPanel: (page: Page) => Promise<void>,
+  panelFrame: (page: Page) => Promise<Frame>,
+) {
+  await expect.poll(() => tabIdOf(serviceWorker, page).then(Boolean, () => false)).toBe(true);
+  await openPanel(page);
+  return panelFrame(page);
+}
+
 /**
  * Asks with the keyboard. Under Playwright's viewport emulation, mouse clicks
  * on a cross-site frame within about 100 px of the viewport's bottom are lost
@@ -354,4 +385,140 @@ test('answering a turn again or starting over saves the conversation as the pane
     /extracting|requesting|streaming/,
   );
   await expect(reopened.locator('.question')).toHaveCount(0);
+});
+
+test('a single-page app moving to another page closes the panel, and each page keeps its own conversation', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:chat');
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html?lang=中文`,
+    openPanel,
+    panelFrame,
+  );
+  const first = page.url();
+  const tabId = await tabIdOf(serviceWorker, page);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await ask(frame, '第一页的问题');
+  await expect(frame.locator('article.answer')).toHaveCount(2);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  expect(await registeredPage(serviceWorker, tabId)).toBe(first);
+  const firstSaved = async () => {
+    const { index, conversation } = await snapshots(serviceWorker);
+    const entry = index.find((item) => item.pageKey === first);
+    return conversation(entry?.id ?? '')?.messages.length;
+  };
+  await expect.poll(firstSaved).toBe(3);
+
+  // The app shows another page without loading one.
+  await page.evaluate(() => {
+    history.pushState({}, '', '/article.html?lang=中文&page=2');
+  });
+  const second = page.url();
+  await expect.poll(() => hostShown(page)).toBe(false);
+
+  // Opened there, the panel is that page's: nothing is saved for it yet, so
+  // it summarizes it.
+  const before = server.requests.length;
+  const onSecond = await reopen(page, serviceWorker, openPanel, panelFrame);
+  await expect(onSecond.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(onSecond.locator('article.answer')).toHaveCount(1);
+  expect(server.requests).toHaveLength(before + 1);
+  expect(await registeredPage(serviceWorker, tabId)).toBe(second);
+  await expect
+    .poll(async () => (await snapshots(serviceWorker)).index.map((entry) => entry.pageKey).sort())
+    .toEqual([first, second].sort());
+  expect(await firstSaved()).toBe(3);
+
+  // Back to the first page: the panel closes again, and opened there it
+  // restores that page's conversation.
+  await page.evaluate(() => {
+    history.back();
+  });
+  await expect.poll(() => hostShown(page)).toBe(false);
+  const onFirst = await reopen(page, serviceWorker, openPanel, panelFrame);
+  await expect(onFirst.locator('main')).toHaveAttribute('data-phase', 'restored');
+  await expect(onFirst.locator('.question')).toHaveText('第一页的问题');
+  expect(server.requests).toHaveLength(before + 1);
+});
+
+test('a jump to an anchor keeps the panel open; a hash route is another page', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:chat');
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html`,
+    openPanel,
+    panelFrame,
+  );
+  const url = page.url();
+  const tabId = await tabIdOf(serviceWorker, page);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  // Still the same page: the conversation goes on, saved under that page.
+  await page.evaluate(() => {
+    location.hash = '#section';
+  });
+  await ask(frame, '还在吗？');
+  await expect(frame.locator('article.answer').nth(1)).toHaveText('回答：还在吗？');
+  expect(await hostShown(page)).toBe(true);
+  await expect
+    .poll(async () => (await snapshots(serviceWorker)).index.map((entry) => entry.pageKey))
+    .toEqual([url]);
+
+  // A hash route names another page.
+  await page.evaluate(() => {
+    location.hash = '#/settings';
+  });
+  await expect.poll(() => hostShown(page)).toBe(false);
+  const onRoute = await reopen(page, serviceWorker, openPanel, panelFrame);
+  await expect(onRoute.locator('main')).toHaveAttribute('data-phase', 'done');
+  expect(await registeredPage(serviceWorker, tabId)).toBe(`${url}#/settings`);
+});
+
+test('a page that moves on while the panel is being mounted gets no panel bound to where it was', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:chat');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  const tabId = await tabIdOf(serviceWorker, page);
+  // The page moves on as soon as our host appears, before the background
+  // has answered the content script.
+  await page.evaluate(() => {
+    new MutationObserver((_, observer) => {
+      if (
+        [...document.documentElement.children].some((element) =>
+          element.tagName.toLowerCase().startsWith('yipie-panel-'),
+        )
+      ) {
+        observer.disconnect();
+        history.pushState({}, '', '/article.html?moved=1');
+      }
+    }).observe(document.documentElement, { childList: true });
+  });
+
+  await openPanel(page);
+
+  // Once the background has answered, the panel is closed, or bound to the
+  // page the document is on.
+  await expect
+    .poll(async () => {
+      const bound = await registeredPage(serviceWorker, tabId);
+      return bound !== undefined && (!(await hostShown(page)) || bound === page.url());
+    })
+    .toBe(true);
 });

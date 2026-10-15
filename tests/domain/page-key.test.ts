@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pageKeyOf } from '@/domain/page-key';
+import { contentPageKey, pageKeyOf } from '@/domain/page-key';
 
 describe('pageKeyOf', () => {
   it.each([
@@ -30,5 +30,24 @@ describe('pageKeyOf', () => {
 
   it('keeps what it cannot parse as it is', () => {
     expect(pageKeyOf('not a url')).toBe('not a url');
+  });
+});
+
+describe('contentPageKey', () => {
+  it("goes by the tab's URL, which follows pushState, not the URL the document loaded with", () => {
+    expect(
+      contentPageKey('https://example.com/app/post/2#top', 'https://example.com/app/post/1'),
+    ).toBe('https://example.com/app/post/2');
+    expect(contentPageKey('https://example.com/#/inbox', 'https://example.com/')).toBe(
+      'https://example.com/#/inbox',
+    );
+  });
+
+  it("goes by the frame's URL when the browser gives no tab URL, and by nothing when it gives neither", () => {
+    expect(contentPageKey(undefined, 'https://example.com/post#top')).toBe(
+      'https://example.com/post',
+    );
+    expect(contentPageKey('', 'https://example.com/post')).toBe('https://example.com/post');
+    expect(contentPageKey(undefined, undefined)).toBeNull();
   });
 });

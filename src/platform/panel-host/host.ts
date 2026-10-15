@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { t } from '@/domain/i18n';
+import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
 import { SHELL_CSS } from './shell-css';
@@ -72,13 +73,34 @@ function createPanelHost(): PanelHost {
 
   let open = false;
   let remounts: number[] = [];
+  /** The page the background bound the mounted panel to; null until it says. */
+  let page: string | null = null;
+
+  /**
+   * The panel belongs to the page it was opened on: its conversation is about
+   * that page and saved under it. When the document becomes another page
+   * without loading (a single-page app's `pushState` or `replaceState`, a
+   * hash route, back and forward between them), the panel closes, as it does
+   * when a page loads (docs/development-plan.md §4.4, detail 12). A jump to
+   * an anchor is the same page.
+   */
+  function closeIfAnotherPage(): boolean {
+    if (!open || page === null || pageKeyOf(location.href) === page) return false;
+    hide();
+    return true;
+  }
+  navigation.addEventListener('currententrychange', closeIfAnotherPage);
 
   /** A new panel document needs a new nonce: the old one was presented already. */
   async function mountPanel(): Promise<void> {
     body.replaceChildren();
+    page = null;
     try {
-      const { nonce } = await callRpcLite('content.hello', {});
+      const { nonce, pageKey } = await callRpcLite('content.hello', {});
       if (!open) return;
+      // The document may have become another page while we asked.
+      page = pageKey;
+      if (closeIfAnotherPage()) return;
       const iframe = document.createElement('iframe');
       // Lets the panel load in pages that send Cross-Origin-Embedder-Policy;
       // set before `src` (docs/development-plan.md appendix F).
@@ -124,6 +146,7 @@ function createPanelHost(): PanelHost {
 
   function hide(): void {
     open = false;
+    page = null;
     observer.disconnect();
     // Removing the frame unloads the panel document, which ends its request.
     body.replaceChildren();
