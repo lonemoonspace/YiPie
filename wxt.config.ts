@@ -15,7 +15,7 @@ export default defineConfig({
     default_locale: 'zh_CN',
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
-    permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
+    permissions: ['storage', 'activeTab', 'scripting', 'contextMenus', 'tabs'],
     // Granted per origin at runtime, when the user saves a model configuration.
     optional_host_permissions: ['https://*/*', 'http://*/*'],
     // No popup: a click goes straight to action.onClicked and opens the panel.
