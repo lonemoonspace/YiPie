@@ -3,7 +3,13 @@ import { t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
-import { HOST_TAG_PREFIX, isOrphaned, removeLeftoverHosts, watchForOrphaning } from './orphan';
+import {
+  HOST_MARKER,
+  HOST_TAG_PREFIX,
+  isOrphaned,
+  removeLeftoverHosts,
+  watchForOrphaning,
+} from './orphan';
 import { SHELL_CSS } from './shell-css';
 
 const logger = createLogger('host');
@@ -56,6 +62,8 @@ function createPanelHost(): PanelHost {
     byte.toString(16).padStart(2, '0'),
   ).join('');
   const element = document.createElement(`${HOST_TAG_PREFIX}${suffix}`);
+  // What a later version looks for before it removes this host (orphan.ts).
+  element.setAttribute(HOST_MARKER, '');
   pin(element, {
     all: 'initial',
     position: 'fixed',

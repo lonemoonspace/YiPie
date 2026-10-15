@@ -181,7 +181,8 @@ test('a host cut off by an update removes itself once the page is in view again'
  */
 function plantLeftoverHost(page: Page, tries: number) {
   return page.evaluate((limit) => {
-    const ghost = document.createElement('yipie-panel-0ld0ld00');
+    const ghost = document.createElement('yipie-panel-0123abcd');
+    ghost.setAttribute('data-yipie-host', '');
     document.documentElement.append(ghost);
     let count = 0;
     new MutationObserver(() => {
@@ -227,4 +228,36 @@ test('a page that keeps putting such a host back is left alone, and the panel st
   await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-phase', 'done');
   // We stopped removing it; the page goes on as it likes.
   expect(await hosts(page)).toBe(2);
+});
+
+test("the page's own elements that only look like a host are never removed", async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  // The same tag names as a host, without the marker; and a marker on a
+  // name a host never has.
+  await page.evaluate(() => {
+    for (const [tag, marked] of [
+      ['yipie-panel-0123abcd', false],
+      ['yipie-panel-widget', false],
+      ['yipie-panel-widget', true],
+    ] as const) {
+      const element = document.createElement(tag);
+      element.className = 'page-own';
+      if (marked) element.setAttribute('data-yipie-host', '');
+      document.documentElement.append(element);
+    }
+  });
+
+  await openPanel(page);
+  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-phase', 'done');
+
+  expect(await page.locator('html > .page-own').count()).toBe(3);
+  expect(await hosts(page)).toBe(4);
 });
