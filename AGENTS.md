@@ -76,7 +76,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 面板唯一能调用的配置变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
 - 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的标签页 URL `sender.tab.url` 算出，`domain/page-key.ts`；`sender.url` 是文档载入时的 URL，不随 `pushState` 变化，不能用来认页面）。不要给它们加页面参数。页面没有重新载入就换成了另一页（SPA），内容脚本关闭面板（`panel-host/host.ts`，Navigation API 的 `currententrychange`），挂载时也核对 `content.hello` 返回的页面键。
 - 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
-- 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
+- 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。来自另一个面板文档的保存，只在写队列里轮到时它仍是这个标签页接上的面板才存（`createSnapshotStore` 的 `attached`）：调度器的核对发生在请求排队之前，排队期间新面板可能已经接上。以后新增「以面板已接上为前提」的写入，同样在队列任务里再核对一次。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志

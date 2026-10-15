@@ -16,6 +16,7 @@ import {
   type SnapshotLimits,
   type SnapshotRevision,
 } from '@/platform/snapshot/store';
+import { createPanelRegistry } from '@/platform/inject/registry';
 import { createQueue, type StorageLike } from '@/platform/storage';
 import { createMemoryStore, type MemoryStore } from '../../helpers/memory-store';
 
@@ -32,11 +33,15 @@ const question = (content: string): SnapshotMessage => ({ role: 'user', content 
 /** A conversation of about `bytes` bytes: one answer. */
 const sized = (bytes: number) => [answer('x'.repeat(bytes))];
 
+/** Unless a test says otherwise, every save comes from the panel attached in its tab. */
+const attached = () => Promise.resolve(true);
+
 function setup(limits?: Partial<SnapshotLimits>, base: StorageLike = createMemoryStore()) {
   let id = 0;
   let clock = 1_000;
   let revision = 0;
   const inner = createSnapshotStore(base, createQueue(), {
+    attached,
     newId: () => `s${++id}`,
     now: () => clock++,
     limits: {
@@ -77,6 +82,7 @@ function createWorld(limits?: Partial<SnapshotLimits>) {
   let revision = 0;
   const start = (store: StorageLike = base) => {
     const inner = createSnapshotStore(store, createQueue(), {
+      attached,
       newId: () => `s${++id}`,
       now: () => clock++,
       limits: {
@@ -667,5 +673,79 @@ describe('snapshot store: a save that fails or stops part way', () => {
     expect(indexOf(world.base).garbage).toEqual(['s1']);
     await restarted.save(3, PAGE, another(3));
     expect(conversations(world.base)).toEqual([snapshotKey('s2'), snapshotKey('s3')]);
+  });
+});
+
+describe('snapshot store: saves from a panel no longer attached', () => {
+  /**
+   * The store and the panel registry on one storage and one write queue, as
+   * the background has them.
+   */
+  function withPanels() {
+    const store = createMemoryStore();
+    const queue = createQueue();
+    let nonce = 0;
+    const panels = createPanelRegistry(store, queue, () => `n${++nonce}`);
+    const snapshots = createSnapshotStore(store, queue, {
+      attached: (tabId, documentId) => panels.isAttached(tabId, documentId),
+    });
+    const mount = async (tabId: number, documentId: string) => {
+      expect(await panels.attach(tabId, await panels.issue(tabId, PAGE), documentId)).toBe(true);
+    };
+    return { store, panels, snapshots, mount };
+  }
+
+  it('stores nothing from a panel replaced while its save waited for the write queue', async () => {
+    const { store, panels, snapshots, mount } = withPanels();
+    await mount(1, 'D1');
+    await snapshots.save(1, PAGE, [answer('旧面板，第一次')], { documentId: 'D1', revision: 1 });
+    // D1's next save passes the dispatcher's check...
+    expect(await panels.isAttached(1, 'D1')).toBe(true);
+
+    // ...but before its turn in the write queue comes, the page is reloaded:
+    // a new panel attaches and saves.
+    await mount(1, 'D2');
+    expect(
+      await snapshots.save(1, PAGE, [answer('新面板')], { documentId: 'D2', revision: 1 }),
+    ).toMatchObject({ stored: true });
+    expect(
+      await snapshots.save(1, PAGE, [answer('旧面板，第二次')], { documentId: 'D1', revision: 2 }),
+    ).toEqual({ stored: false, truncated: false });
+
+    expect(await snapshots.get(1, PAGE)).toMatchObject({ messages: [answer('新面板')] });
+    expect(indexOf(store).entries).toEqual([
+      expect.objectContaining({ documentId: 'D2', revision: 1 }),
+    ]);
+  });
+
+  it('stores nothing from a panel whose page mounted a new one, before that one attached', async () => {
+    const { panels, snapshots, mount } = withPanels();
+    await mount(1, 'D1');
+    await snapshots.save(1, PAGE, [answer('旧面板')], { documentId: 'D1', revision: 1 });
+
+    // A new nonce is out: the old panel is no longer the one attached.
+    await panels.issue(1, PAGE);
+
+    expect(
+      await snapshots.save(1, PAGE, [answer('旧面板，迟到')], { documentId: 'D1', revision: 2 }),
+    ).toMatchObject({ stored: false });
+    expect(await snapshots.get(1, PAGE)).toMatchObject({ messages: [answer('旧面板')] });
+  });
+
+  it('stores nothing for a tab closed while the save waited for the write queue', async () => {
+    const { store, panels, snapshots, mount } = withPanels();
+    await mount(1, 'D1');
+    await mount(2, 'E1');
+    await snapshots.save(2, PAGE, [answer('别的标签页')], { documentId: 'E1', revision: 1 });
+    expect(await panels.isAttached(1, 'D1')).toBe(true);
+
+    // What the background does when the tab closes.
+    await Promise.all([snapshots.removeTab(1), panels.remove(1)]);
+
+    expect(
+      await snapshots.save(1, PAGE, [answer('迟到')], { documentId: 'D1', revision: 1 }),
+    ).toMatchObject({ stored: false });
+    expect(indexOf(store).entries.map((entry) => entry.tabId)).toEqual([2]);
+    expect(keys(store).filter((key) => key.startsWith('session:snapshot:'))).toHaveLength(1);
   });
 });

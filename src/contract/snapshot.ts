@@ -90,7 +90,8 @@ export const SnapshotIndexEntry = z.object({
    * Which save is stored: the panel document that sent it (its `documentId`)
    * and that panel's count of its saves. A save from the same panel with a
    * lower count arrived late and is ignored, so the newest one stands
-   * whatever order they come in (PR #4 review).
+   * whatever order they come in; a save from a panel no longer attached in
+   * the tab is ignored too (PR #4 review).
    */
   documentId: z.string().default(''),
   revision: Count.default(0),

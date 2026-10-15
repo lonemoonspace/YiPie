@@ -21,7 +21,10 @@ export type SnapshotLookup =
   | { status: 'evicted' };
 
 export interface SnapshotSaved {
-  /** False when a newer save from the same panel was stored already: this one arrived late. */
+  /**
+   * False when this save was not stored: a newer save from the same panel
+   * was stored already, or the panel is no longer the one attached in its tab.
+   */
   stored: boolean;
   /** The oldest messages did not fit the page's limit and were left out. */
   truncated: boolean;
@@ -41,7 +44,8 @@ export interface SnapshotStore {
   get(tabId: number, pageKey: string): Promise<SnapshotLookup>;
   /**
    * Saves the whole conversation, replacing what was saved for the page
-   * before, unless the same panel already stored a newer one.
+   * before, unless the same panel already stored a newer one or the panel is
+   * no longer the one attached in the tab.
    */
   save(
     tabId: number,
@@ -60,6 +64,14 @@ export interface SnapshotLimits {
 }
 
 export interface SnapshotStoreDeps {
+  /**
+   * Whether `documentId` is the panel attached in `tabId` now (the panel
+   * registry). A save asks once its turn in the write queue comes: the
+   * dispatcher asked before the request waited there, and meanwhile a new
+   * panel may have attached (the page was reloaded, the panel mounted again)
+   * or the tab may have closed (PR #4 review).
+   */
+  attached: (tabId: number, documentId: string) => Promise<boolean>;
   newId?: () => string;
   now?: () => number;
   limits?: SnapshotLimits;
@@ -97,10 +109,11 @@ export function createSnapshotStore(
   store: StorageLike,
   queue: Queue,
   {
+    attached,
     newId = () => crypto.randomUUID(),
     now = () => Date.now(),
     limits = DEFAULT_LIMITS,
-  }: SnapshotStoreDeps = {},
+  }: SnapshotStoreDeps,
 ): SnapshotStore {
   const index = createRepo(store, queue, {
     key: SNAPSHOT_INDEX_KEY,
@@ -150,6 +163,11 @@ export function createSnapshotStore(
 
     save(tabId, pageKey, messages, { documentId, revision }) {
       return queue(async () => {
+        // Asked here, in the queue, where attaching a panel and closing a tab
+        // take their turns too. A save from a panel that is no longer the one
+        // attached would overwrite what the new panel saved, or bring back
+        // the conversation of a closed tab.
+        if (!(await attached(tabId, documentId))) return { stored: false, truncated: false };
         // First what an earlier save left behind: the worker stopped before
         // it could delete, or deleting failed.
         await collect();
@@ -159,8 +177,8 @@ export function createSnapshotStore(
         // Saves from one panel may arrive in any order: a later one may have
         // been sent while an earlier one was still on its way. The newest
         // stands. A save from another panel document (the page was reloaded,
-        // the panel mounted again) always counts: the background no longer
-        // serves the old document at all.
+        // the panel mounted again) counts: that panel is the one attached
+        // now, so whatever was saved before came from an earlier one.
         if (existing?.documentId === documentId && existing.revision >= revision) {
           return { stored: false, truncated: false };
         }

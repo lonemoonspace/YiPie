@@ -30,7 +30,9 @@ export default defineBackground(() => {
   const prompts = createPromptConfigsService(store, writeQueue);
   const backups = createBackupsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
-  const snapshots = createSnapshotStore(store, writeQueue);
+  const snapshots = createSnapshotStore(store, writeQueue, {
+    attached: (tabId, documentId) => panels.isAttached(tabId, documentId),
+  });
 
   /**
    * The tab and the page of the attached panel that sent a request. The
