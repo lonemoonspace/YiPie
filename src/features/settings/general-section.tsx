@@ -1,7 +1,14 @@
 import { useEffect } from 'react';
-import { LogLevel, Theme, TrimmingStrategy } from '@/contract/general-settings';
+import {
+  AnswerLanguage,
+  FontSize,
+  LogLevel,
+  Theme,
+  TrimmingStrategy,
+  type AnswerLanguage as AnswerLanguageValue,
+} from '@/contract/general-settings';
 import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
-import { t } from '@/domain/i18n';
+import { t, type MessageKey } from '@/domain/i18n';
 import { applyTheme } from '@/features/theme/apply-theme';
 import { useGeneralSettings, type SaveState } from './use-general-settings';
 
@@ -54,6 +61,44 @@ export function GeneralSection() {
           </div>
 
           <div className="field">
+            <label htmlFor="font-size">{t('settings.fontSize')}</label>
+            <select
+              id="font-size"
+              value={view.settings.fontSize}
+              disabled={disabled}
+              onChange={(event) => void update({ fontSize: FontSize.parse(event.target.value) })}
+            >
+              {FontSize.options.map((option) => (
+                <option key={option} value={option}>
+                  {t(`settings.fontSize.${option}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="answer-language">{t('settings.answerLanguage')}</label>
+            <select
+              id="answer-language"
+              value={view.settings.answerLanguage}
+              disabled={disabled}
+              aria-describedby="answer-language-hint"
+              onChange={(event) =>
+                void update({ answerLanguage: AnswerLanguage.parse(event.target.value) })
+              }
+            >
+              {AnswerLanguage.options.map((option) => (
+                <option key={option} value={option}>
+                  {t(languageLabel(option))}
+                </option>
+              ))}
+            </select>
+            <p id="answer-language-hint" className="hint">
+              {t('settings.answerLanguage.hint')}
+            </p>
+          </div>
+
+          <div className="field">
             <label htmlFor="log-level">{t('settings.logLevel')}</label>
             <select
               id="log-level"
@@ -100,6 +145,12 @@ export function GeneralSection() {
       )}
     </section>
   );
+}
+
+function languageLabel(option: AnswerLanguageValue): MessageKey {
+  return option === 'interface' || option === 'page'
+    ? `settings.answerLanguage.${option}`
+    : `language.${option}`;
 }
 
 function describeSave(save: SaveState): string {

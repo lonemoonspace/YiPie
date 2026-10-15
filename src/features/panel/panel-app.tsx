@@ -20,7 +20,7 @@ import {
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, stop, summarize, ask, retry, switchModel } = usePanel();
+  const { state, stop, summarize, ask, retry, switchModel, pageText } = usePanel();
   const busy = isBusy(state);
   const attached = state.phase !== 'attaching' && state.problem?.kind !== 'attach';
 
@@ -46,6 +46,13 @@ export function PanelApp() {
         <p className="status" role="status">
           {describePhase(state)}
         </p>
+        {attached ? (
+          <CopyButton
+            text={pageText}
+            label={t('panel.copyPage')}
+            title={t('panel.copyPage.title')}
+          />
+        ) : null}
         {busy ? (
           <button type="button" onClick={stop}>
             {t('panel.stop')}
@@ -142,7 +149,11 @@ const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
         <div className="meta">
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
-          <CopyButton text={turn.text} />
+          <CopyButton
+            text={() => turn.text}
+            label={t('panel.copy')}
+            title={t('panel.copy.title')}
+          />
         </div>
       ) : null}
     </section>
@@ -179,7 +190,14 @@ function usageParts(input: number | null, output: number | null, total: number |
   return parts.join(' · ');
 }
 
-function CopyButton({ text }: { text: string }) {
+interface CopyButtonProps {
+  /** What to copy, worked out when the button is pressed. */
+  text: () => string | Promise<string>;
+  label: string;
+  title: string;
+}
+
+function CopyButton({ text, label, title }: CopyButtonProps) {
   const [result, setResult] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
@@ -192,19 +210,22 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       className="quiet"
-      title={t('panel.copy.title')}
+      title={title}
       onClick={() => {
-        copyText(text).then(
-          () => setResult('copied'),
-          () => setResult('failed'),
-        );
+        Promise.resolve()
+          .then(text)
+          .then(copyText)
+          .then(
+            () => setResult('copied'),
+            () => setResult('failed'),
+          );
       }}
     >
       {result === 'copied'
         ? t('panel.copied')
         : result === 'failed'
           ? t('panel.copyFailed')
-          : t('panel.copy')}
+          : label}
     </button>
   );
 }

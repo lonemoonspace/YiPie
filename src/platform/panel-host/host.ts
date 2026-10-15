@@ -132,8 +132,10 @@ function createPanelHost(): PanelHost {
     body.replaceChildren();
     page = null;
     try {
-      const { nonce, pageKey } = await callRpcLite('content.hello', {});
+      const { nonce, pageKey, theme } = await callRpcLite('content.hello', {});
       if (!open) return;
+      // The shell wears the panel's theme (shell-css.ts).
+      frame.dataset.theme = theme;
       // The document may have become another page while we asked.
       page = pageKey;
       if (closeIfAnotherPage()) return;

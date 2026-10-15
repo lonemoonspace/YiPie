@@ -82,18 +82,33 @@ iframe {
 .message {
   margin: 16px;
 }
+/* The panel's theme, as the background reported it; until then, and for
+   "system", the system's. */
+.frame[data-theme='dark'] {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #15171c;
+  color-scheme: dark;
+  color: #e6e8eb;
+}
+.frame[data-theme='dark'] .bar {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: #1f2228;
+}
+.frame[data-theme='dark'] .close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
 @media (prefers-color-scheme: dark) {
-  .frame {
+  .frame:not([data-theme='light']) {
     border-color: rgba(255, 255, 255, 0.16);
     background: #15171c;
     color-scheme: dark;
     color: #e6e8eb;
   }
-  .bar {
+  .frame:not([data-theme='light']) .bar {
     border-bottom-color: rgba(255, 255, 255, 0.1);
     background: #1f2228;
   }
-  .close:hover {
+  .frame:not([data-theme='light']) .close:hover {
     background: rgba(255, 255, 255, 0.1);
   }
 }

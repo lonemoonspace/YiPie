@@ -222,7 +222,12 @@ export async function storeDefaults(
 /** Stores general settings, as the settings page would. */
 export async function storeSettings(
   serviceWorker: Worker,
-  settings: { trimming?: 'back' | 'middle' | 'front' | 'nothing' },
+  settings: {
+    trimming?: 'back' | 'middle' | 'front' | 'nothing';
+    theme?: 'system' | 'light' | 'dark';
+    fontSize?: 'small' | 'medium' | 'large' | 'x-large';
+    answerLanguage?: string;
+  },
 ) {
   await store(serviceWorker, {
     'general-settings': { version: 1, data: { theme: 'system', logLevel: 'info', ...settings } },

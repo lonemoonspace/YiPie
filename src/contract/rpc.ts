@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { BackedUpKey, BackupsView } from './backups';
-import { GeneralSettings, GeneralSettingsPatch, TrimmingStrategy } from './general-settings';
+import {
+  AnswerLanguage,
+  FontSize,
+  GeneralSettings,
+  GeneralSettingsPatch,
+  Theme,
+  TrimmingStrategy,
+} from './general-settings';
 import {
   BaseURL,
   ExtraBody,
@@ -43,7 +50,12 @@ export type ReadStatus = z.infer<typeof ReadStatus>;
  * fields it does not know (`z.looseObject`), and those have no business in
  * the panel (docs/development-plan.md §4.3, decision 8).
  */
-export const PanelSettings = z.object({ trimming: TrimmingStrategy });
+export const PanelSettings = z.object({
+  trimming: TrimmingStrategy,
+  theme: Theme,
+  fontSize: FontSize,
+  answerLanguage: AnswerLanguage,
+});
 export type PanelSettings = z.infer<typeof PanelSettings>;
 
 export const GeneralSettingsView = z.object({
@@ -276,7 +288,8 @@ export const RPC_METHODS = {
   // closes the panel once the document is another page (§4.4, detail 12).
   'content.hello': {
     input: z.strictObject({}),
-    output: z.object({ nonce: z.string(), pageKey: z.string() }),
+    // The theme lets the shell around the panel match it.
+    output: z.object({ nonce: z.string(), pageKey: z.string(), theme: Theme }),
     callers: ['content'],
   },
   // A panel proves it was mounted by our content script in the same tab.

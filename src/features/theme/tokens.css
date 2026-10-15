@@ -1,7 +1,8 @@
 /*
  * The one set of colour and font tokens, shared by every extension page
  * (docs/development-plan.md §4.6). Pages set `data-theme` on <html>:
- * `light`, `dark`, or `system` to follow the OS.
+ * `light`, `dark`, or `system` to follow the OS; the panel also sets
+ * `data-font-size` for its reading text. There is one accent colour.
  */
 :root {
   color-scheme: light;
@@ -19,6 +20,19 @@
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     sans-serif;
+  --font-size-reading: 14px;
+}
+
+:root[data-font-size='small'] {
+  --font-size-reading: 13px;
+}
+
+:root[data-font-size='large'] {
+  --font-size-reading: 16px;
+}
+
+:root[data-font-size='x-large'] {
+  --font-size-reading: 18px;
 }
 
 :root[data-theme='dark'] {

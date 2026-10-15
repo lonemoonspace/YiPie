@@ -87,6 +87,7 @@ function harness(options: {
         config,
         prompt,
         trimming: 'back',
+        answerLanguage: 'interface',
         ...options.setup,
       }),
     restore: () =>
@@ -122,7 +123,12 @@ function harness(options: {
       events.push(event);
       state = reducePanel(state, event);
     },
-    language: '简体中文',
+    language: (language) =>
+      language.kind === 'interface'
+        ? '简体中文'
+        : language.kind === 'named'
+          ? `named:${language.language}`
+          : `tag:${language.tag}`,
     frame: (flush) => {
       flush();
       return () => {};
@@ -173,6 +179,28 @@ describe('conversation: summary and follow-ups', () => {
         },
       ],
     ]);
+  });
+
+  it("answers in the language the settings ask for, the page's own when they say so", async () => {
+    const english = { ...page, lang: 'en-GB' };
+    const h = harness({
+      scripts: [answer('一'), answer('二')],
+      page: english,
+      setup: { answerLanguage: 'page' },
+    });
+
+    await h.conversation.open();
+    await settle();
+    expect(h.sent(0)[0]).toEqual({ role: 'system', content: '系统：用tag:en-GB回答' });
+
+    const fixed = harness({
+      scripts: [answer('一')],
+      page: english,
+      setup: { answerLanguage: 'ja' },
+    });
+    await fixed.conversation.open();
+    await settle();
+    expect(fixed.sent(0)[0]).toEqual({ role: 'system', content: '系统：用named:ja回答' });
   });
 
   it('asks a follow-up with the page, the conversation so far and the question', async () => {

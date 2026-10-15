@@ -1,8 +1,9 @@
-import type { TrimmingStrategy } from '@/contract/general-settings';
+import type { AnswerLanguage, TrimmingStrategy } from '@/contract/general-settings';
 import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { ModelChoice, PanelModelConfig, SnapshotView } from '@/contract/rpc';
 import type { SnapshotMessage } from '@/contract/snapshot';
+import { resolveAnswerLanguage, type ResolvedLanguage } from '@/domain/answer-language';
 import {
   DEFAULT_CONTEXT_WINDOW,
   estimateMessages,
@@ -33,6 +34,7 @@ export interface RunSetup {
   /** The default prompt; null when there is none. */
   prompt: Pick<PromptConfig, 'system' | 'user'> | null;
   trimming: TrimmingStrategy;
+  answerLanguage: AnswerLanguage;
 }
 
 export interface StreamRequest {
@@ -64,8 +66,8 @@ export interface ConversationDeps {
   /** The service of a model refused `stream_options` (`models.disableStreamUsage`). */
   disableStreamUsage: (id: string) => Promise<unknown>;
   dispatch: (event: PanelEvent) => void;
-  /** The language to answer in, for `{{language}}`. */
-  language: string;
+  /** The name of the language to answer in, for `{{language}}`. */
+  language: (language: ResolvedLanguage) => string;
   /** Runs `flush` before the next paint and returns a way to cancel that. */
   frame: (flush: () => void) => () => void;
 }
@@ -203,8 +205,9 @@ export function createConversation(deps: ConversationDeps): Conversation {
     const strategy =
       options.cut === true && setup.trimming === 'nothing' ? CUT_RETRY_STRATEGY : setup.trimming;
     const past = toHistoryMessages(history);
+    const language = deps.language(resolveAnswerLanguage(setup.answerLanguage, page.lang));
     const build = (content: string) =>
-      conversationMessages(prompt, promptValues(page, content, deps.language), past, question);
+      conversationMessages(prompt, promptValues(page, content, language), past, question);
     const plan = planContent({
       content: pageContent(page),
       strategy,

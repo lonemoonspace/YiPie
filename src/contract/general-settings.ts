@@ -19,6 +19,30 @@ export const TRIMMING_STRATEGIES = ['back', 'middle', 'front', 'nothing'] as con
 export const TrimmingStrategy = z.enum(TRIMMING_STRATEGIES);
 export type TrimmingStrategy = z.infer<typeof TrimmingStrategy>;
 
+/** Size of the panel's reading text: four steps (docs/development-plan.md §4.6). */
+export const FONT_SIZES = ['small', 'medium', 'large', 'x-large'] as const;
+export const FontSize = z.enum(FONT_SIZES);
+export type FontSize = z.infer<typeof FontSize>;
+
+/**
+ * The language answers are written in, for `{{language}}`: the interface's,
+ * the page's own (from its `lang`, else the interface's), or a fixed one.
+ */
+export const ANSWER_LANGUAGES = [
+  'interface',
+  'page',
+  'zh-Hans',
+  'zh-Hant',
+  'en',
+  'ja',
+  'ko',
+  'fr',
+  'de',
+  'es',
+] as const;
+export const AnswerLanguage = z.enum(ANSWER_LANGUAGES);
+export type AnswerLanguage = z.infer<typeof AnswerLanguage>;
+
 export const GENERAL_SETTINGS_KEY = 'local:general-settings' satisfies StorageKey;
 export const GENERAL_SETTINGS_VERSION = 1;
 
@@ -34,6 +58,8 @@ export const GeneralSettings = z.looseObject({
   logLevel: LogLevel.default('info'),
   /** Keeps the start of the page, as phase 1 and 2 always did. */
   trimming: TrimmingStrategy.default('back'),
+  fontSize: FontSize.default('medium'),
+  answerLanguage: AnswerLanguage.default('interface'),
 });
 export type GeneralSettings = z.infer<typeof GeneralSettings>;
 
@@ -50,5 +76,7 @@ export const GeneralSettingsPatch = z.strictObject({
   theme: Theme.optional(),
   logLevel: LogLevel.optional(),
   trimming: TrimmingStrategy.optional(),
+  fontSize: FontSize.optional(),
+  answerLanguage: AnswerLanguage.optional(),
 });
 export type GeneralSettingsPatch = z.infer<typeof GeneralSettingsPatch>;

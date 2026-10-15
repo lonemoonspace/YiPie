@@ -14,7 +14,13 @@ describe('general settings service', () => {
     const { settings } = setup();
 
     expect(await settings.get()).toEqual({
-      settings: { theme: 'system', logLevel: 'info', trimming: 'back' },
+      settings: {
+        theme: 'system',
+        logLevel: 'info',
+        trimming: 'back',
+        fontSize: 'medium',
+        answerLanguage: 'interface',
+      },
       status: 'missing',
       readOnly: false,
       quarantined: false,
@@ -26,19 +32,40 @@ describe('general settings service', () => {
     // schema was `.partial()` of the stored one and kept the defaults.
     const { settings, store } = setup({
       version: 1,
-      data: { theme: 'light', logLevel: 'debug', trimming: 'middle' },
+      data: {
+        theme: 'light',
+        logLevel: 'debug',
+        trimming: 'middle',
+        fontSize: 'small',
+        answerLanguage: 'en',
+      },
     });
 
     await settings.patch({ theme: 'dark' });
 
     expect(store.dump()[GENERAL_SETTINGS_KEY]).toEqual({
       version: 1,
-      data: { theme: 'dark', logLevel: 'debug', trimming: 'middle' },
+      data: {
+        theme: 'dark',
+        logLevel: 'debug',
+        trimming: 'middle',
+        fontSize: 'small',
+        answerLanguage: 'en',
+      },
     });
   });
 
   it('an empty patch changes nothing', async () => {
-    const stored = { version: 1, data: { theme: 'light', logLevel: 'error', trimming: 'front' } };
+    const stored = {
+      version: 1,
+      data: {
+        theme: 'light',
+        logLevel: 'error',
+        trimming: 'front',
+        fontSize: 'x-large',
+        answerLanguage: 'page',
+      },
+    };
     const { settings, store } = setup(stored);
 
     await settings.patch({});
@@ -53,12 +80,15 @@ describe('general settings service', () => {
       settings.patch({ theme: 'dark' }),
       settings.patch({ logLevel: 'warn' }),
       settings.patch({ trimming: 'nothing' }),
+      settings.patch({ fontSize: 'large' }),
     ]);
 
     expect((await settings.get()).settings).toEqual({
       theme: 'dark',
       logLevel: 'warn',
       trimming: 'nothing',
+      fontSize: 'large',
+      answerLanguage: 'interface',
     });
   });
 
@@ -68,7 +98,13 @@ describe('general settings service', () => {
 
     const read = await settings.get();
     expect(read.status).toBe('invalid');
-    expect(read.settings).toEqual({ theme: 'system', logLevel: 'info', trimming: 'back' });
+    expect(read.settings).toEqual({
+      theme: 'system',
+      logLevel: 'info',
+      trimming: 'back',
+      fontSize: 'medium',
+      answerLanguage: 'interface',
+    });
 
     const saved = await settings.patch({ theme: 'dark' });
     expect(saved.quarantined).toBe(true);
@@ -91,15 +127,32 @@ describe('general settings service', () => {
   it('gives the panel only the fields it uses', async () => {
     const { settings } = setup({
       version: 1,
-      data: { theme: 'dark', logLevel: 'warn', trimming: 'front', fontSize: 'large' },
+      data: {
+        theme: 'dark',
+        logLevel: 'warn',
+        trimming: 'front',
+        fontSize: 'large',
+        answerLanguage: 'en',
+        density: 'compact',
+      },
     });
 
-    expect(await settings.current()).toEqual({ trimming: 'front' });
+    expect(await settings.current()).toEqual({
+      trimming: 'front',
+      theme: 'dark',
+      fontSize: 'large',
+      answerLanguage: 'en',
+    });
   });
 
   it('gives the panel the defaults when the stored value is unreadable', async () => {
     const { settings } = setup({ version: 1, data: { trimming: 'sideways' } });
 
-    expect(await settings.current()).toEqual({ trimming: 'back' });
+    expect(await settings.current()).toEqual({
+      trimming: 'back',
+      theme: 'system',
+      fontSize: 'medium',
+      answerLanguage: 'interface',
+    });
   });
 });

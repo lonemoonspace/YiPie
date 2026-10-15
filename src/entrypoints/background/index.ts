@@ -84,7 +84,11 @@ export default defineBackground(() => {
         if (tabId === undefined || pageKey === null) {
           throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         }
-        return { nonce: await panels.issue(tabId, pageKey), pageKey };
+        const [nonce, { theme }] = await Promise.all([
+          panels.issue(tabId, pageKey),
+          settings.current(),
+        ]);
+        return { nonce, pageKey, theme };
       },
       'panel.attach': async ({ nonce }, { tabId, documentId }) => {
         if (

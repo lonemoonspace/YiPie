@@ -31,7 +31,13 @@ const attachedInTab1 = (tabId: number, documentId: string) =>
   Promise.resolve(tabId === 1 && documentId === 'DOC');
 
 const view: GeneralSettingsView = {
-  settings: { theme: 'dark', logLevel: 'info', trimming: 'back' },
+  settings: {
+    theme: 'dark',
+    logLevel: 'info',
+    trimming: 'back',
+    fontSize: 'medium',
+    answerLanguage: 'interface',
+  },
   status: 'ok',
   readOnly: false,
   quarantined: false,
@@ -506,7 +512,7 @@ describe('RPC dispatcher: backups', () => {
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce, telling the handler its page', async () => {
     const hello = vi.fn(() =>
-      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2' }),
+      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' as const }),
     );
     const { dispatch } = setup({ 'content.hello': hello });
     // A single-page app moved on: the tab's URL followed, the frame's did not.
@@ -514,7 +520,7 @@ describe('RPC dispatcher: panel handshake', () => {
 
     expect(await dispatch(request('content.hello'), moved)).toEqual({
       ok: true,
-      value: { nonce: 'n', pageKey: 'https://example.com/app/2' },
+      value: { nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' },
     });
     expect(hello).toHaveBeenCalledWith(
       {},
@@ -657,13 +663,20 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
 
   it('gives the attached panel the settings it uses, field by field, and no one else', async () => {
     const current = vi.fn(() =>
-      Promise.resolve({ trimming: 'middle' as const, theme: 'dark', anything: 'else' }),
+      Promise.resolve({
+        trimming: 'middle' as const,
+        theme: 'dark' as const,
+        fontSize: 'large' as const,
+        answerLanguage: 'en' as const,
+        logLevel: 'debug',
+        anything: 'else',
+      }),
     );
     const { dispatch } = setup({ 'settings.current': current });
 
     expect(await dispatch(request('settings.current'), PANEL)).toEqual({
       ok: true,
-      value: { trimming: 'middle' },
+      value: { trimming: 'middle', theme: 'dark', fontSize: 'large', answerLanguage: 'en' },
     });
     for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
       expect(await dispatch(request('settings.current'), sender)).toMatchObject({

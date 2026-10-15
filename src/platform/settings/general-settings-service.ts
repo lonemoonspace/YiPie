@@ -43,7 +43,8 @@ export function createGeneralSettingsService(
 
     async current() {
       const { settings } = toView(await repo.read());
-      return { trimming: settings.trimming };
+      const { trimming, theme, fontSize, answerLanguage } = settings;
+      return { trimming, theme, fontSize, answerLanguage };
     },
   };
 }
