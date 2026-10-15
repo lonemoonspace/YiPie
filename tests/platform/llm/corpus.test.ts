@@ -221,7 +221,11 @@ const CASES: Case[] = [
     file: 'apache-404.html',
     status: 404,
     config: { baseURL: 'https://api.example.com' },
-    expected: { kind: 'not-found', status: 404, detail: expect.stringContaining('Not Found') },
+    expected: {
+      kind: 'not-found',
+      status: 404,
+      detail: '404 Not Found Not Found The requested URL was not found on this server.',
+    },
   },
 ];
 

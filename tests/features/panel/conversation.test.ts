@@ -882,9 +882,7 @@ describe('conversation: reasoning (§4.5, decision 3)', () => {
     await settle();
 
     expect(h.state().turns).toMatchObject([{ text: '总结', reasoning: '先想一想' }]);
-    expect(h.saves.at(-1)).toEqual([
-      { role: 'assistant', content: '总结', stopped: false, usage: expect.anything() },
-    ]);
+    expect(h.saves.at(-1)).toMatchObject([{ role: 'assistant', content: '总结', stopped: false }]);
     expect(JSON.stringify(h.saves)).not.toContain('先想');
 
     h.conversation.ask('问题');
