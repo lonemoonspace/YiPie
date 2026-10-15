@@ -59,6 +59,8 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - patch schema 逐字段 `.optional()`，不要从存储 schema `.partial()` 派生：那样会带上默认值，保存一个字段就会静默重置其它字段。编辑表单只发送改过的字段（`domain/patch.ts` 的 `changedFields`），别的标签页同时改的字段不会被改回去。
 - **列表记录**用 `createListRepo`（`platform/storage/list-repo.ts`）：一行通不过 schema、或者 id 与前面的行重复，就放进 `unrecognized`，不参与业务、界面不显示，写回时原样放在已识别的行之后。只有整个值不是数组才算 invalid。
 - **几条记录一起变**（列表与默认项）时，在一个 `queue(...)` 任务里依次调用各自的 `updateUnqueued`。在队列任务之外调用它，写入会交错、丢更新。
+- **删除整条记录**用 repo 的 `removeUnqueued`，只给扩展按设计管理寿命的记录（对话快照：被驱逐、随标签页关闭而删除）；用户自己的数据只由用户的显式操作删除。
+- **对话快照**（`platform/snapshot/store.ts`，`storage.session`）：每段对话一个键 `session:snapshot:<id>`，另有索引 `session:snapshots`。会话键先删后改索引、先改索引后写会话键：索引可以多出读不到的条目（读作「没有保存」），不能漏掉存在的键。快照只放回答与追问，不放正文、Prompt 和任何凭据。
 - **默认项**（`local:selection`）里的 id 找不到时，以列表首项为默认。只在一次变更会让默认项变化时才写它，规则是 `domain/list-mutations.ts` 的 `defaultAfterChange`；设置页删除前的确认也用它预告默认项的去向。
 - 扩展页面想知道存储变了，用 `platform/storage/watch.ts` 的 `onStoredChange` 当信号，值仍经 RPC 读：存储只由后台解读。
 
@@ -71,7 +73,9 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
 - 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
 - 面板只拿它要用的东西：读模型用 `models.current`，只有菜单（名称）和正在用的那个模型的配置；`models.list` 带着全部 Key，只给设置页。给面板新增方法时同样收窄输出：不要直接复用存储 schema（`z.looseObject` 会让未知字段穿透），逐字段映射到专门的 `z.object`（如 `PanelModelConfig`），它会丢掉 handler 多塞的字段。
-- 面板唯一能调用的变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。
+- 面板唯一能调用的配置变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
+- 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的 `sender.url` 算出，`domain/page-key.ts`）。不要给它们加页面参数。
+- 结果取决于到达顺序的 RPC（换默认模型、保存整段对话）在面板里经 `features/panel/latest-only.ts` 发送：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志
@@ -87,7 +91,9 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
 - E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
-- E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels` / `storePrompts` / `storeDefaults`，读回存储用 `stored`。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
+- E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels`（可带 `contextWindow`）/ `storePrompts` / `storeDefaults` / `storeSettings`，读回存储用 `stored`（`storage.local`）与 `session`（`storage.session`：面板登记与快照）。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
+- Playwright 的视口模拟下，离视口底部约 100 px 以内对跨站 iframe 的鼠标点击会丢（普通跨站 iframe 也一样，与面板无关）。面板底部的追问框用键盘操作（`fill` 后 `press('Enter')`）；非点不可时先把视口调高。
+- 面板的对话逻辑在 `features/panel/conversation.ts`（不依赖 React，单测用假的 RPC 与流）；`use-panel.ts` 只负责接线。假服务的场景：`scenario:chat`（追问的回答写出问题）、`scenario:no-usage`、`scenario:context-limit`（超过约 2,000 字就以超长拒绝），长文页面是 `/long.html`。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
 - 模型输出只经 `src/features/markdown/render.ts` 变成 HTML，`dangerouslySetInnerHTML` 只用于它的结果。计划 §8 列出的注入回归用例在 `tests/features/markdown/render.test.ts` 里，改渲染器时它们必须仍然通过；要放行新的语法或属性，先补用例并更新测试里的白名单。
 
