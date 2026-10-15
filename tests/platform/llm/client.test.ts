@@ -253,6 +253,22 @@ describe('streamChat', () => {
     });
   });
 
+  it('gives the body as long to start as the response: the first token can take a while', async () => {
+    const silent = fakeFetch(() => new Response(new ReadableStream<Uint8Array>(), { status: 200 }));
+    const late = fakeFetch(() => streamResponse([chunk('好'), 'data: [DONE]\n\n'], 60));
+
+    expect(
+      (await run({ fetch: silent, firstByteTimeout: 40, idleTimeout: 10_000 })).outcome,
+    ).toEqual({ kind: 'error', error: { kind: 'timeout', detail: '' } });
+    expect((await run({ fetch: late, firstByteTimeout: 1_000, idleTimeout: 30 })).outcome).toEqual({
+      kind: 'error',
+      error: { kind: 'timeout', detail: '' },
+    });
+    expect(
+      (await run({ fetch: late, firstByteTimeout: 1_000, idleTimeout: 200 })).outcome.kind,
+    ).toBe('done');
+  });
+
   it('gives up when the stream goes silent, keeping what arrived', async () => {
     const fetch = fakeFetch(() => streamResponse([chunk('开头')], 0, {}));
     const stalled = fakeFetch(() => {

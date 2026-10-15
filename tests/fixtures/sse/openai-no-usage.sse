@@ -1,0 +1,8 @@
+data: {"id":"chatcmpl-CQx7Lk2vVbN0","object":"chat.completion.chunk","created":1760500000,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-CQx7Lk2vVbN0","object":"chat.completion.chunk","created":1760500000,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"没有用量的回答"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-CQx7Lk2vVbN0","object":"chat.completion.chunk","created":1760500000,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}
+
+data: [DONE]
+

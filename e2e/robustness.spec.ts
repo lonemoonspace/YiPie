@@ -1,7 +1,7 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
-import type { RecordedRequest } from './fake-llm/llm';
+import { NORMAL_ANSWER, REASONING, type RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { expect, stored, test, useModel } from './fixtures';
+import { expect, session, stored, test, useModel } from './fixtures';
 
 /**
  * Phase 4 (docs/development-plan.md §4.5): what the panel does on its own when
@@ -77,4 +77,34 @@ test('a service that refuses stream_options gets the request again without it, a
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
   const next = requestsFor(server, model).slice(before + 2);
   expect(next.map((request) => 'stream_options' in (request.body as object))).toEqual([false]);
+});
+
+test('reasoning shows folded above the answer, and is never saved or copied', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: server.origin });
+  await useModel(serviceWorker, server, 'scenario:reasoning');
+  const { page, frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  const reasoning = frame.locator('details.reasoning');
+  await expect(reasoning).not.toHaveAttribute('open');
+  await expect(reasoning.locator('summary')).toHaveText('思考过程');
+  await expect(reasoning.locator('p')).toHaveText(REASONING.join(''));
+  await expect(frame.locator('article.answer')).not.toContainText('用户想要');
+
+  // Saved without it.
+  await expect
+    .poll(async () => JSON.stringify(await session(serviceWorker)))
+    .toContain('这篇文章介绍了');
+  expect(JSON.stringify(await session(serviceWorker))).not.toContain(REASONING[0]);
+
+  // Copied without it.
+  await frame.getByRole('button', { name: '复制' }).click();
+  await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(NORMAL_ANSWER.join(''));
 });

@@ -47,6 +47,11 @@ export interface Turn {
   question: string | null;
   /** The answer so far, as Markdown. */
   text: string;
+  /**
+   * The model's reasoning, shown folded (§4.5, decision 3). Never saved,
+   * copied or sent again: a restored turn has none.
+   */
+  reasoning: string;
   status: 'pending' | 'done' | 'stopped' | 'failed';
   usage: TurnUsage | null;
   cut: CutNote | null;
@@ -117,6 +122,7 @@ export type PanelEvent =
   /** The request is sent once more after `seconds`. */
   | { type: 'retrying'; seconds: number }
   | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
   | { type: 'finished'; usage: TurnUsage }
   | { type: 'stopped'; usage: TurnUsage | null }
   | { type: 'failed'; problem: PanelProblem }
@@ -165,6 +171,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         turns: event.exchanges.map((exchange) => ({
           question: exchange.question,
           text: exchange.answer,
+          reasoning: '',
           status: exchange.stopped ? 'stopped' : 'done',
           usage: exchange.usage,
           cut: null,
@@ -180,7 +187,14 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         retrying: null,
         turns: [
           ...state.turns.slice(0, event.keep),
-          { question: event.question, text: '', status: 'pending', usage: null, cut: null },
+          {
+            question: event.question,
+            text: '',
+            reasoning: '',
+            status: 'pending',
+            usage: null,
+            cut: null,
+          },
         ],
         problem: null,
       };
@@ -213,6 +227,17 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         phase: 'streaming',
         retrying: null,
         turns: updateLast(state.turns, (turn) => ({ ...turn, text: turn.text + event.text })),
+      };
+    case 'reasoning':
+      if (state.phase !== 'requesting' && state.phase !== 'streaming') return state;
+      return {
+        ...state,
+        phase: 'streaming',
+        retrying: null,
+        turns: updateLast(state.turns, (turn) => ({
+          ...turn,
+          reasoning: turn.reasoning + event.text,
+        })),
       };
     case 'finished':
       if (!isBusy(state)) return state;

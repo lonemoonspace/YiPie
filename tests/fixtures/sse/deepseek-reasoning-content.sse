@@ -1,0 +1,20 @@
+: keep-alive
+
+: keep-alive
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":""},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"用户想要"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"一份总结。"},"logprobs":null,"finish_reason":null}]}
+
+: keep-alive
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"content":"## 概要","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"content":"\n\n一瞥是浏览器扩展。","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"5f0cbd1b-0c2c-4e57-a0f2-1a9d5f2a3b11","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-reasoner","system_fingerprint":"fp_7e0991cad4_prod0820_fp8_kvcache","choices":[{"index":0,"delta":{"content":"","reasoning_content":null},"logprobs":null,"finish_reason":"stop"}],"usage":{"prompt_tokens":1200,"completion_tokens":300,"total_tokens":1500,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":120},"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":1200}}
+
+data: [DONE]
+

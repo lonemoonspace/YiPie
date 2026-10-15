@@ -8,6 +8,8 @@ export interface Usage {
 
 export type StreamEvent =
   | { type: 'content'; text: string }
+  /** The model's reasoning, apart from the answer (appendix D). */
+  | { type: 'reasoning'; text: string }
   | { type: 'usage'; usage: Usage }
   /** The service reported a failure. */
   | { type: 'error'; failure: StreamFailure }
@@ -21,8 +23,9 @@ export type StreamEvent =
  * events split across network chunks) is the parser's job; this function only
  * reads one payload.
  *
- * Reasoning fields (`delta.reasoning_content`, `delta.reasoning`) are ignored
- * here, so they never mix into the answer; phase 4 shows them separately.
+ * Reasoning comes as `delta.reasoning_content` (DeepSeek, vLLM) or
+ * `delta.reasoning` (OpenRouter, Ollama), and never mixes into the answer;
+ * reasoning written inline as `<think>…</think>` is `createThinkSplitter`'s.
  */
 export function interpretEventData(data: string, event?: string): StreamEvent[] {
   const payload = data.trim();
@@ -51,8 +54,15 @@ export function interpretEventData(data: string, event?: string): StreamEvent[] 
   if (event === 'error') return [{ type: 'error', failure: failureOf(chunk) }];
 
   const events: StreamEvent[] = [];
-  const text = firstChoiceContent(chunk.choices);
-  if (text !== '') events.push({ type: 'content', text });
+  const delta = firstDelta(chunk.choices);
+  // A service that sends both fields sends the same text twice.
+  const reasoning = [delta.reasoning_content, delta.reasoning].find(
+    (value): value is string => typeof value === 'string' && value !== '',
+  );
+  if (reasoning !== undefined) events.push({ type: 'reasoning', text: reasoning });
+  if (typeof delta.content === 'string' && delta.content !== '') {
+    events.push({ type: 'content', text: delta.content });
+  }
 
   // Usually its own final chunk with `choices: []`, but some servers attach
   // it to the last content chunk.
@@ -62,11 +72,87 @@ export function interpretEventData(data: string, event?: string): StreamEvent[] 
   return events;
 }
 
-function firstChoiceContent(choices: unknown): string {
-  if (!Array.isArray(choices)) return '';
-  const first: unknown = choices[0];
-  if (!isRecord(first) || !isRecord(first.delta)) return '';
-  return typeof first.delta.content === 'string' ? first.delta.content : '';
+function firstDelta(choices: unknown): Record<string, unknown> {
+  const first: unknown = Array.isArray(choices) ? choices[0] : undefined;
+  return isRecord(first) && isRecord(first.delta) ? first.delta : {};
+}
+
+const OPEN = '<think>';
+const CLOSE = '</think>';
+
+/** Text of the answer, sorted into what the model reasoned and what it answered. */
+export interface Sorted {
+  reasoning: string;
+  answer: string;
+}
+
+/**
+ * Sorts an answer that carries its reasoning inline, as `<think>…</think>`
+ * at its very start (local models such as DeepSeek R1 distills; appendix D),
+ * piece by piece as it streams. A tag may be split across pieces, so a piece
+ * that could be the start of one waits for the next. A `<think>` anywhere
+ * but at the start is the answer's own text.
+ */
+export function createThinkSplitter() {
+  let mode: 'start' | 'reasoning' | 'after' | 'answer' = 'start';
+  let held = '';
+
+  return {
+    push(text: string): Sorted {
+      const sorted: Sorted = { reasoning: '', answer: '' };
+      held += text;
+      for (;;) {
+        if (mode === 'start') {
+          const rest = held.trimStart();
+          if (rest.startsWith(OPEN)) {
+            mode = 'reasoning';
+            held = rest.slice(OPEN.length);
+            continue;
+          }
+          if (OPEN.startsWith(rest)) return sorted;
+          mode = 'answer';
+        }
+        if (mode === 'reasoning') {
+          const end = held.indexOf(CLOSE);
+          if (end === -1) {
+            const keep = partialTagAtEnd(held, CLOSE);
+            sorted.reasoning += held.slice(0, held.length - keep);
+            held = held.slice(held.length - keep);
+            return sorted;
+          }
+          sorted.reasoning += held.slice(0, end);
+          held = held.slice(end + CLOSE.length);
+          mode = 'after';
+        }
+        if (mode === 'after') {
+          // The answer starts after the blank lines that follow the tag.
+          held = held.trimStart();
+          if (held === '') return sorted;
+          mode = 'answer';
+        }
+        sorted.answer += held;
+        held = '';
+        return sorted;
+      }
+    },
+
+    /** What is still held when the stream ends. */
+    flush(): Sorted {
+      const rest = held;
+      held = '';
+      return mode === 'reasoning'
+        ? { reasoning: rest, answer: '' }
+        : { reasoning: '', answer: mode === 'after' ? '' : rest };
+    },
+  };
+}
+
+/** How many characters at the end of `text` could be the start of `tag`. */
+function partialTagAtEnd(text: string, tag: string): number {
+  for (let length = Math.min(text.length, tag.length - 1); length > 0; length -= 1) {
+    if (text.endsWith(tag.slice(0, length))) return length;
+  }
+  return 0;
 }
 
 function readUsage(value: unknown): Usage | null {

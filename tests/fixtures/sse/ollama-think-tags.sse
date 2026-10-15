@@ -1,0 +1,22 @@
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"\u003cthink\u003e"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"\n"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"嗯，"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"用户要总结。"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"\n"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"\u003c/think\u003e"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"\n\n"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"**概要**"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"：一瞥。"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-381","object":"chat.completion.chunk","created":1760500000,"model":"deepseek-r1:7b","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"stop"}]}
+
+data: [DONE]
+

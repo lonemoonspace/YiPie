@@ -122,6 +122,13 @@ const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
     <section className="turn">
       {turn.question !== null ? <p className="question">{turn.question}</p> : null}
       {turn.cut !== null ? <p className="note">{describeCut(turn.cut)}</p> : null}
+      {turn.reasoning !== '' ? (
+        // Folded: the answer is what the panel is for (§4.5, decision 3).
+        <details className="reasoning">
+          <summary>{t('panel.reasoning')}</summary>
+          <p>{turn.reasoning}</p>
+        </details>
+      ) : null}
       {turn.text !== '' ? (
         // Built by renderMarkdown, which escapes raw HTML and drops unsafe
         // links and every image (docs/development-plan.md §8).
@@ -253,7 +260,10 @@ function describePhase(state: PanelState): string {
         ? t('panel.status.requesting', { model })
         : t('panel.status.retrying', { seconds: state.retrying });
     case 'streaming':
-      return t('panel.status.streaming', { model });
+      // Reasoning first, the answer after.
+      return state.turns.at(-1)?.text === ''
+        ? t('panel.status.thinking', { model })
+        : t('panel.status.streaming', { model });
     case 'done':
       return t('panel.status.done');
     case 'stopped':

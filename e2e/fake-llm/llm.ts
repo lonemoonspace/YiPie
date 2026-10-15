@@ -31,6 +31,12 @@ const UNSAFE_ANSWER = [
 const delta = (content: string) =>
   `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`;
 
+/** The reasoning `scenario:reasoning` streams before its answer. */
+export const REASONING = ['用户想要', '这篇文章的', '总结。'];
+
+const reasoningDelta = (reasoning: string) =>
+  `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: null, reasoning_content: reasoning } }] })}\n\n`;
+
 const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 321, completion_tokens: 45, total_tokens: 366 } })}\n\n`;
 
 /** Characters of message text `scenario:context-limit` accepts, as a small local model would. */
@@ -156,6 +162,18 @@ export function handleChat(
         stream([...NORMAL_ANSWER.map(delta), 'data: [DONE]\n\n'], 10);
         return;
       }
+      // A reasoning model, the DeepSeek way: reasoning_content, then the answer.
+      case 'scenario:reasoning':
+        stream(
+          [
+            ...REASONING.map((text) => reasoningDelta(text)),
+            ...NORMAL_ANSWER.map(delta),
+            usageChunk,
+            'data: [DONE]\n\n',
+          ],
+          10,
+        );
+        return;
       // An old gateway that does not know `stream_options` (appendix D).
       case 'scenario:no-stream-options':
         if (body.stream_options !== undefined) {

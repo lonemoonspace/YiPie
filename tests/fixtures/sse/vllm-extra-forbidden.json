@@ -1,0 +1,1 @@
+{"object": "error", "message": "[{'type': 'extra_forbidden', 'loc': ('body', 'stream_options'), 'msg': 'Extra inputs are not permitted', 'input': {'include_usage': True}}]", "type": "BadRequestError", "param": null, "code": 400}

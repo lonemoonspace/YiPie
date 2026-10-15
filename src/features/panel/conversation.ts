@@ -40,6 +40,7 @@ export interface StreamRequest {
   messages: ChatMessage[];
   signal: AbortSignal;
   onText: (text: string) => void;
+  onReasoning: (text: string) => void;
   onRetry: (retry: { seconds: number }) => void;
   onStreamOptionsRejected: () => void;
 }
@@ -232,13 +233,24 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
     // One render per frame, however fast the tokens come.
     let answer = '';
+    let reasoning = '';
     let unsent = '';
+    let unsentReasoning = '';
     let scheduled = false;
     let cancel = () => {};
     const flush = () => {
       scheduled = false;
+      if (unsentReasoning !== '' && current()) {
+        deps.dispatch({ type: 'reasoning', text: unsentReasoning });
+      }
       if (unsent !== '' && current()) deps.dispatch({ type: 'text', text: unsent });
       unsent = '';
+      unsentReasoning = '';
+    };
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      cancel = deps.frame(flush);
     };
     const outcome = await deps.stream({
       config,
@@ -247,9 +259,12 @@ export function createConversation(deps: ConversationDeps): Conversation {
       onText: (text) => {
         answer += text;
         unsent += text;
-        if (scheduled) return;
-        scheduled = true;
-        cancel = deps.frame(flush);
+        schedule();
+      },
+      onReasoning: (text) => {
+        reasoning += text;
+        unsentReasoning += text;
+        schedule();
       },
       onRetry: ({ seconds }) => {
         if (current()) deps.dispatch({ type: 'retrying', seconds });
@@ -265,7 +280,11 @@ export function createConversation(deps: ConversationDeps): Conversation {
     flush();
     if (!current()) return;
 
-    const estimate = { input: estimateMessages(messages), output: estimateTokens(answer) };
+    // Reasoning is output the service bills for, though it is not the answer.
+    const estimate = {
+      input: estimateMessages(messages),
+      output: estimateTokens(reasoning + answer),
+    };
     switch (outcome.kind) {
       case 'done': {
         if (answer === '') return fail({ kind: 'empty-answer' });

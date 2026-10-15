@@ -78,12 +78,30 @@ describe('reducePanel: one run', () => {
       {
         question: null,
         text: '## 概要\n\n要点',
+        reasoning: '',
         status: 'done',
         usage,
         cut: requesting.type === 'requesting' ? requesting.cut : null,
       },
     ]);
     expect(done.problem).toBeNull();
+  });
+
+  it('keeps reasoning apart from the answer, and says the model is thinking until it answers', () => {
+    const thinking = play([
+      summary,
+      requesting,
+      { type: 'reasoning', text: '先想' },
+      { type: 'reasoning', text: '一想' },
+    ]);
+    expect(thinking.phase).toBe('streaming');
+    expect(thinking.turns).toMatchObject([{ text: '', reasoning: '先想一想' }]);
+
+    const answering = play([{ type: 'text', text: '答' }], thinking);
+    expect(answering.turns).toMatchObject([{ text: '答', reasoning: '先想一想' }]);
+    // Reasoning that comes after a stop changes nothing.
+    const stopped = play([{ type: 'stopped', usage: null }], answering);
+    expect(play([{ type: 'reasoning', text: '迟到' }], stopped)).toBe(stopped);
   });
 
   it('keeps the text when stopped, and ignores chunks that arrive afterwards', () => {
@@ -207,8 +225,9 @@ describe('reducePanel: a conversation', () => {
     expect(state.phase).toBe('restored');
     expect(isBusy(state)).toBe(false);
     expect(state.turns).toEqual([
-      { question: null, text: '总结', status: 'done', usage, cut: null },
-      { question: '追问', text: '半截', status: 'stopped', usage: null, cut: null },
+      // Reasoning is never saved: a restored turn has none.
+      { question: null, text: '总结', reasoning: '', status: 'done', usage, cut: null },
+      { question: '追问', text: '半截', reasoning: '', status: 'stopped', usage: null, cut: null },
     ]);
     expect(state.snapshot).toEqual({ kind: 'restored-truncated' });
   });

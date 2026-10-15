@@ -10,7 +10,12 @@ import {
   type LlmError,
 } from '@/domain/llm/errors';
 import { buildChatRequest, requestSecrets, type ChatMessage } from '@/domain/llm/request';
-import { interpretEventData, type Usage } from '@/domain/llm/stream';
+import {
+  createThinkSplitter,
+  interpretEventData,
+  type Sorted,
+  type Usage,
+} from '@/domain/llm/stream';
 import { hasOriginAccess } from '@/platform/permissions/origin-access';
 
 export type ChatOutcome =
@@ -29,6 +34,8 @@ export interface ChatOptions {
   signal: AbortSignal;
   /** Called with each piece of the answer as it arrives. */
   onText: (text: string) => void;
+  /** Called with each piece of the model's reasoning, which is not the answer (appendix D). */
+  onReasoning?: (text: string) => void;
   /**
    * The request failed before anything arrived, in a way worth one more try
    * (§4.5, decision 1): the client waits `seconds`, then sends it again.
@@ -78,6 +85,10 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
       onText: (text) => {
         started = true;
         options.onText(text);
+      },
+      onReasoning: (text) => {
+        started = true;
+        options.onReasoning?.(text);
       },
       onAccepted: () => {
         if (downgraded) options.onStreamOptionsRejected?.();
@@ -164,10 +175,12 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
     options.onAccepted();
     if (response.body === null) return clean(fromProtocolError('The response has no body.'));
 
+    // The first-byte timer runs on until the body's first bytes: many servers
+    // send the headers at once and the first token only after reading the
+    // prompt or loading the model (appendix D). From then on, any bytes count
+    // as life, SSE comments and heartbeats included. The streaming decoder
+    // keeps a character split across chunks in one piece.
     const idle = options.idleTimeout ?? DEFAULT_IDLE_TIMEOUT;
-    watch(idle);
-    // Any bytes count as life, SSE comments and heartbeats included. The
-    // streaming decoder keeps a character split across chunks in one piece.
     const decoder = new TextDecoder();
     const decode = new TransformStream<Uint8Array<ArrayBuffer>, string>({
       transform(chunk, sink) {
@@ -192,13 +205,20 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
     });
     aborted.catch(() => undefined);
 
+    // Reasoning written inline (`<think>…</think>`) is sorted out as it comes.
+    const think = createThinkSplitter();
+    const deliver = ({ reasoning, answer }: Sorted) => {
+      if (reasoning !== '') options.onReasoning?.(reasoning);
+      if (answer !== '') options.onText(answer);
+    };
     let usage: Usage | null = null;
     try {
       for (;;) {
         const { done, value } = await Promise.race([reader.read(), aborted]);
         if (done) return { kind: 'done', usage };
         for (const event of interpretEventData(value.data, value.event)) {
-          if (event.type === 'content') options.onText(event.text);
+          if (event.type === 'content') deliver(think.push(event.text));
+          else if (event.type === 'reasoning') options.onReasoning?.(event.text);
           else if (event.type === 'usage') usage = event.usage;
           else if (event.type === 'error') return clean(fromStreamError(event.failure));
           else if (event.type === 'invalid') return clean(fromProtocolError(event.message));
@@ -208,6 +228,8 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
     } catch (error) {
       return await failed(error);
     } finally {
+      // What the splitter still holds arrived too, however the stream ended.
+      deliver(think.flush());
       // Ends the connection when we stop early ([DONE] seen, error, stop).
       void reader.cancel().catch(() => undefined);
     }
