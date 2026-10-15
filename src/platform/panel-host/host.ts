@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { PanelMode } from '@/contract/rpc-wire';
-import { t } from '@/domain/i18n/content';
+import { setLocale, t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
@@ -87,17 +87,19 @@ function createPanelHost(): PanelHost {
   sheet.replaceSync(SHELL_CSS);
   shadow.adoptedStyleSheets = [sheet];
 
-  const frame = node('aside', { class: 'frame', 'aria-label': t('app.name') });
+  const frame = node('aside', { class: 'frame' });
   const bar = node('div', { class: 'bar' });
-  const close = node('button', {
-    class: 'close',
-    type: 'button',
-    'aria-label': t('panel.close'),
-    title: t('panel.close'),
-  });
+  const close = node('button', { class: 'close', type: 'button' });
   close.textContent = '×';
   const title = node('span', { class: 'title' });
-  title.textContent = t('app.name');
+  /** Words of the shell, in the interface language of the moment. */
+  function label(): void {
+    frame.setAttribute('aria-label', t('app.name'));
+    close.setAttribute('aria-label', t('panel.close'));
+    close.title = t('panel.close');
+    title.textContent = t('app.name');
+  }
+  label();
   const body = node('div', { class: 'body' });
   bar.append(title, close);
   frame.append(bar, body);
@@ -142,11 +144,13 @@ function createPanelHost(): PanelHost {
     body.replaceChildren();
     page = null;
     try {
-      const { nonce, pageKey, theme } = await callRpcLite('content.hello', { mode });
+      const { nonce, pageKey, theme, locale } = await callRpcLite('content.hello', { mode });
       // Closed, or mounted afresh, while we asked: that mount's nonce is the one.
       if (!open || mount !== mounts) return;
-      // The shell wears the panel's theme (shell-css.ts).
+      // The shell wears the panel's theme (shell-css.ts) and speaks its language.
       frame.dataset.theme = theme;
+      setLocale(locale);
+      label();
       // The document may have become another page while we asked.
       page = pageKey;
       if (closeIfAnotherPage()) return;

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import {
   AnswerLanguage,
   FontSize,
+  InterfaceLanguage,
   LogLevel,
   Theme,
   TrimmingStrategy,
@@ -9,6 +10,7 @@ import {
 } from '@/contract/general-settings';
 import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
 import { t, type MessageKey } from '@/domain/i18n';
+import { htmlLang } from '@/domain/i18n/locale';
 import { applyTheme } from '@/features/theme/apply-theme';
 import { useGeneralSettings, type SaveState } from './use-general-settings';
 
@@ -43,6 +45,28 @@ export function GeneralSection() {
               {t('settings.invalid')}
             </p>
           ) : null}
+
+          <div className="field">
+            <label htmlFor="interface-language">{t('settings.interfaceLanguage')}</label>
+            <select
+              id="interface-language"
+              value={view.settings.interfaceLanguage}
+              disabled={disabled}
+              aria-describedby="interface-language-hint"
+              onChange={(event) =>
+                void update({ interfaceLanguage: InterfaceLanguage.parse(event.target.value) })
+              }
+            >
+              {InterfaceLanguage.options.map((option) => (
+                <option key={option} value={option} lang={optionLang(option)}>
+                  {t(`settings.interfaceLanguage.${option}`)}
+                </option>
+              ))}
+            </select>
+            <p id="interface-language-hint" className="hint">
+              {t('settings.interfaceLanguage.hint')}
+            </p>
+          </div>
 
           <div className="field">
             <label htmlFor="theme">{t('settings.theme')}</label>
@@ -145,6 +169,11 @@ export function GeneralSection() {
       )}
     </section>
   );
+}
+
+/** A language's own name is written in it, whatever the page's language. */
+function optionLang(option: InterfaceLanguage): string | undefined {
+  return option === 'auto' ? undefined : htmlLang(option);
 }
 
 function languageLabel(option: AnswerLanguageValue): MessageKey {

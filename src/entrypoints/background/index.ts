@@ -1,7 +1,10 @@
 import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
-import { contentPageKey } from '@/domain/page-key';
+import { GENERAL_SETTINGS_KEY } from '@/contract/general-settings';
+import type { GeneralSettingsView } from '@/contract/rpc';
 import type { TriggerWire } from '@/contract/rpc-wire';
+import { locale, setLocale } from '@/domain/i18n/background';
+import { contentPageKey } from '@/domain/page-key';
 import { openPanelInTab, type TabLike } from '@/platform/inject/inject';
 import { requestLocate, requestPageContext } from '@/platform/inject/page-context';
 import { createPanelRegistry } from '@/platform/inject/registry';
@@ -16,19 +19,23 @@ import { createPromptConfigsService } from '@/platform/settings/prompt-configs-s
 import { createSnapshotStore } from '@/platform/snapshot/store';
 import { onTabClosed } from '@/platform/snapshot/tab-closed';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
+import { onStoredChange } from '@/platform/storage/watch';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
-import { onContextMenu } from '@/platform/triggers/context-menu';
+import { onContextMenu, retitleContextMenu } from '@/platform/triggers/context-menu';
 
 const logger = createLogger('background');
 
 export default defineBackground(() => {
   const store = getExtensionStore();
-  const settings = createGeneralSettingsService(store, writeQueue);
+  const settings = createGeneralSettingsService(store, writeQueue, {
+    browserLanguage: () => browser.i18n.getUILanguage(),
+  });
   const models = createModelConfigsService(store, writeQueue, {
     releaseOrigins: (patterns) => releaseOriginAccess(patterns),
   });
-  const prompts = createPromptConfigsService(store, writeQueue);
+  // The built-in prompt is in the interface language (§4.7).
+  const prompts = createPromptConfigsService(store, writeQueue, { locale });
   const backups = createBackupsService(store, writeQueue);
   const panels = createPanelRegistry(store, writeQueue);
   const snapshots = createSnapshotStore(store, writeQueue, {
@@ -40,6 +47,31 @@ export default defineBackground(() => {
    * dispatcher has checked that it is attached; asking the registry again
    * also refuses a panel replaced in the meantime.
    */
+  /**
+   * What the worker itself takes from the general settings: the log level and
+   * the interface language (for the menu, the icon's title and the built-in
+   * prompt). Returns whether the language changed.
+   */
+  const applySettings = (view: GeneralSettingsView): boolean => {
+    setLogLevel(view.settings.logLevel);
+    const changed = view.locale !== locale();
+    setLocale(view.locale);
+    return changed;
+  };
+  // Read once at start. No handler runs before it is done, so the built-in
+  // prompt and the menu are in the right language from the first request.
+  const settingsRead = settings.get().then(
+    (view) => void applySettings(view),
+    (error: unknown) => logger.error('Could not read the general settings:', error),
+  );
+  // And again whenever they change, whoever wrote them.
+  onStoredChange([GENERAL_SETTINGS_KEY], () => {
+    settings
+      .get()
+      .then((view) => (applySettings(view) ? retitleContextMenu() : undefined))
+      .catch((error: unknown) => logger.error('Could not apply the general settings:', error));
+  });
+
   const panelPage = async ({ tabId, documentId }: HandlerContext) => {
     if (tabId !== undefined && documentId !== undefined) {
       const pageKey = await panels.pageKeyOf(tabId, documentId);
@@ -55,11 +87,7 @@ export default defineBackground(() => {
     {
       'settings.get': () => settings.get(),
       'settings.current': () => settings.current(),
-      'settings.patch': async (patch) => {
-        const view = await settings.patch(patch);
-        setLogLevel(view.settings.logLevel);
-        return view;
-      },
+      'settings.patch': (patch) => settings.patch(patch),
       'models.list': () => models.list(),
       'models.add': (draft) => models.add(draft),
       'models.update': ({ id, patch }) => models.update(id, patch),
@@ -92,11 +120,11 @@ export default defineBackground(() => {
         if (tabId === undefined || pageKey === null) {
           throw new RpcRefusal('forbidden', 'No tab to mount a panel in.');
         }
-        const [nonce, { theme }] = await Promise.all([
+        const [nonce, { theme, locale }] = await Promise.all([
           panels.issue(tabId, pageKey, mode),
           settings.current(),
         ]);
-        return { nonce, pageKey, theme };
+        return { nonce, pageKey, theme, locale };
       },
       'panel.attach': async ({ nonce }, { tabId, documentId }) => {
         if (
@@ -127,7 +155,10 @@ export default defineBackground(() => {
       },
     },
     {
-      storageIsolated: ensureLocalStorageIsolated,
+      storageIsolated: async () => {
+        await ensureLocalStorageIsolated();
+        await settingsRead;
+      },
       panelAttached: (tabId, documentId) => panels.isAttached(tabId, documentId),
     },
   );
@@ -139,7 +170,7 @@ export default defineBackground(() => {
   };
   onToolbarClick(open);
   onShortcut(open);
-  onContextMenu(open);
+  onContextMenu(open, undefined, () => settingsRead);
 
   // A closed tab's conversations and panel entry go with it (§4.4). This
   // wakes the worker on every tab close: the plan asks for deletion right
@@ -156,11 +187,6 @@ export default defineBackground(() => {
   ensureLocalStorageIsolated().catch((error: unknown) => {
     logger.error('Could not restrict storage.local to extension pages:', error);
   });
-
-  settings
-    .get()
-    .then((view) => setLogLevel(view.settings.logLevel))
-    .catch((error: unknown) => logger.error('Could not read the log level:', error));
 
   // Only in the E2E build: Playwright cannot click the toolbar icon or press
   // an extension shortcut (docs/development-plan.md §6). The production build

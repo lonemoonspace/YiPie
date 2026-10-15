@@ -10,6 +10,12 @@ export const pages = {
   'settings.readOnly': '这些设置是由更新版本的扩展写入的。当前版本只能查看，不能修改。',
   'settings.invalid': '已保存的设置无法识别，下面显示的是默认值。下次保存前，原来的数据会先备份。',
   'settings.general': '通用',
+  'settings.interfaceLanguage': '界面语言',
+  'settings.interfaceLanguage.auto': '跟随浏览器',
+  'settings.interfaceLanguage.zh-Hans': '简体中文',
+  'settings.interfaceLanguage.en': 'English',
+  'settings.interfaceLanguage.hint':
+    '设置页、面板与右键菜单使用的语言。扩展在浏览器里显示的名称跟随浏览器自身的语言。',
   'settings.theme': '主题',
   'settings.theme.system': '跟随系统',
   'settings.theme.light': '浅色',

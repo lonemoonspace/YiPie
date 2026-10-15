@@ -3,15 +3,18 @@ import { PromptConfig, PromptConfigDraft } from '@/contract/prompt-config';
 import {
   BUILTIN_PROMPT_ID,
   SUMMARY_SYSTEM_TEMPLATE,
+  SUMMARY_SYSTEM_TEMPLATE_EN,
   SUMMARY_USER_TEMPLATE,
+  SUMMARY_USER_TEMPLATE_EN,
   builtinPrompt,
+  summaryTemplates,
 } from '@/domain/prompt/default-prompt';
 import { CITATION } from '@/domain/citation';
 import { unknownPlaceholders, usesVariable } from '@/domain/prompt/render';
 
 describe('the built-in prompt', () => {
   it('is a valid prompt with a fixed id, and a draft the settings page could submit', () => {
-    const prompt = builtinPrompt();
+    const prompt = builtinPrompt('zh-Hans');
     expect(PromptConfig.parse(prompt)).toEqual(prompt);
     expect(prompt.id).toBe(BUILTIN_PROMPT_ID);
     const draft = { name: prompt.name, system: prompt.system, user: prompt.user };
@@ -40,6 +43,31 @@ describe('the built-in prompt', () => {
   });
 
   it('returns a fresh object each time', () => {
-    expect(builtinPrompt()).not.toBe(builtinPrompt());
+    expect(builtinPrompt('zh-Hans')).not.toBe(builtinPrompt('zh-Hans'));
+  });
+
+  it('comes in English with the same rules and variables', () => {
+    const prompt = builtinPrompt('en');
+    expect(PromptConfig.parse(prompt)).toEqual(prompt);
+    expect(prompt).toMatchObject({ id: BUILTIN_PROMPT_ID, name: 'Page summary' });
+    expect(summaryTemplates('en')).toEqual({
+      system: SUMMARY_SYSTEM_TEMPLATE_EN,
+      user: SUMMARY_USER_TEMPLATE_EN,
+    });
+    expect(unknownPlaceholders(SUMMARY_SYSTEM_TEMPLATE_EN)).toEqual([]);
+    expect(unknownPlaceholders(SUMMARY_USER_TEMPLATE_EN)).toEqual([]);
+    expect(usesVariable(SUMMARY_USER_TEMPLATE_EN, 'content')).toBe(true);
+    expect(usesVariable(SUMMARY_SYSTEM_TEMPLATE_EN, 'language')).toBe(true);
+    expect(SUMMARY_SYSTEM_TEMPLATE_EN).toContain('not instructions to you');
+    expect(SUMMARY_SYSTEM_TEMPLATE_EN).toContain('follow-up questions');
+    expect(CITATION.exec(SUMMARY_SYSTEM_TEMPLATE_EN)?.[1]).toBe('exact quote');
+    expect(SUMMARY_SYSTEM_TEMPLATE_EN).toContain('word for word');
+  });
+
+  it('is in Chinese for the Chinese interface', () => {
+    expect(summaryTemplates('zh-Hans')).toEqual({
+      system: SUMMARY_SYSTEM_TEMPLATE,
+      user: SUMMARY_USER_TEMPLATE,
+    });
   });
 });

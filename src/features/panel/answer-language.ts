@@ -1,5 +1,5 @@
 import type { ResolvedLanguage } from '@/domain/answer-language';
-import { t } from '@/domain/i18n';
+import { locale, t } from '@/domain/i18n';
 
 /**
  * The name of the language to answer in, as `{{language}}` puts it into the
@@ -18,7 +18,7 @@ export function answerLanguageName(language: ResolvedLanguage): string {
 
 function displayName(tag: string): string | null {
   try {
-    return new Intl.DisplayNames(['zh-Hans'], { type: 'language' }).of(tag) ?? null;
+    return new Intl.DisplayNames([locale()], { type: 'language' }).of(tag) ?? null;
   } catch {
     // Not a tag the browser knows.
     return null;

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { checkManifest, findTestHooks } from '../../scripts/lib/manifest-policy';
+import { checkLocales, checkManifest, findTestHooks } from '../../scripts/lib/manifest-policy';
 
 const valid = {
   manifest_version: 3,
-  name: 'YiPie',
+  name: '__MSG_extName__',
   version: '0.0.0',
+  default_locale: 'zh_CN',
   permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   optional_host_permissions: ['https://*/*', 'http://*/*'],
   action: { default_title: '一瞥：总结此页' },
@@ -96,5 +97,29 @@ describe('findTestHooks', () => {
         { path: 'injected.js', text: 'nothing to see' },
       ]),
     ).toEqual(['background.js']);
+  });
+});
+
+describe('checkLocales', () => {
+  const zh = { extName: { message: '一瞥 YiPie' } };
+  const en = { extName: { message: 'YiPie' } };
+
+  it('accepts locales that define every name the manifest uses', () => {
+    expect(checkLocales(valid, { zh_CN: zh, en })).toEqual([]);
+  });
+
+  it('catches a missing default locale', () => {
+    expect(checkLocales(valid, { en })[0]).toContain('zh_CN');
+  });
+
+  it('catches a name a locale lacks, or leaves empty', () => {
+    expect(checkLocales(valid, { zh_CN: zh, en: {} }).join()).toContain('_locales/en 缺少');
+    const empty = { extName: { message: ' ' } };
+    expect(checkLocales(valid, { zh_CN: zh, en: empty }).join()).toContain('extName');
+  });
+
+  it('catches locales that define different names', () => {
+    const extra = { ...en, other: { message: 'x' } };
+    expect(checkLocales(valid, { zh_CN: zh, en: extra }).join()).toContain('不一致');
   });
 });

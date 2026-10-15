@@ -1,9 +1,18 @@
 import { z } from 'zod';
+import { LOCALES } from './rpc-wire';
 import type { StorageKey } from './storage';
 
 export const THEMES = ['system', 'light', 'dark'] as const;
 export const Theme = z.enum(THEMES);
 export type Theme = z.infer<typeof Theme>;
+
+/**
+ * The interface language (docs/development-plan.md §4.7): `auto` follows the
+ * browser's own language (Chinese for any `zh`, English otherwise).
+ */
+export const INTERFACE_LANGUAGES = ['auto', ...LOCALES] as const;
+export const InterfaceLanguage = z.enum(INTERFACE_LANGUAGES);
+export type InterfaceLanguage = z.infer<typeof InterfaceLanguage>;
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
 export const LogLevel = z.enum(LOG_LEVELS);
@@ -60,6 +69,7 @@ export const GeneralSettings = z.looseObject({
   trimming: TrimmingStrategy.default('back'),
   fontSize: FontSize.default('medium'),
   answerLanguage: AnswerLanguage.default('interface'),
+  interfaceLanguage: InterfaceLanguage.default('auto'),
 });
 export type GeneralSettings = z.infer<typeof GeneralSettings>;
 
@@ -78,5 +88,6 @@ export const GeneralSettingsPatch = z.strictObject({
   trimming: TrimmingStrategy.optional(),
   fontSize: FontSize.optional(),
   answerLanguage: AnswerLanguage.optional(),
+  interfaceLanguage: InterfaceLanguage.optional(),
 });
 export type GeneralSettingsPatch = z.infer<typeof GeneralSettingsPatch>;

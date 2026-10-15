@@ -48,6 +48,15 @@ export type PageRequestWire =
 export type PageReplyWire = { ok: true; value: unknown } | { ok: false; message: string };
 
 /**
+ * The languages the interface is written in (docs/development-plan.md §4.7).
+ * The settings may also say `auto`, which the background resolves from the
+ * browser's own language; what travels to the panel and the content script is
+ * always one of these.
+ */
+export const LOCALES = ['zh-Hans', 'en'] as const;
+export type Locale = (typeof LOCALES)[number];
+
+/**
  * What the panel works on (docs/development-plan.md §4.6): the page, or the
  * text the user selected and asked about from the right-click menu.
  */
@@ -65,4 +74,9 @@ export interface TriggerWire {
   mode: PanelMode;
   /** The menu's `selectionText`: a stand-in when the page's own selection reads empty. */
   selectionText: string;
+}
+
+/** What the slot holds: the trigger, and the interface language for the shell around the panel. */
+export interface TriggerSlotWire extends TriggerWire {
+  locale: Locale;
 }

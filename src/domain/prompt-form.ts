@@ -1,6 +1,6 @@
 import type { PromptConfig } from '@/contract/prompt-config';
-import { t } from '@/domain/i18n';
-import { SUMMARY_SYSTEM_TEMPLATE, SUMMARY_USER_TEMPLATE } from '@/domain/prompt/default-prompt';
+import { locale, t } from '@/domain/i18n';
+import { summaryTemplates } from '@/domain/prompt/default-prompt';
 import {
   PROMPT_VARIABLES,
   renderTemplate,
@@ -24,9 +24,12 @@ export type PromptFormWarnings = Partial<Record<'system' | 'user', string[]>>;
 export type PromptFormResult =
   { ok: true; value: PromptFormFields } | { ok: false; errors: PromptFormErrors };
 
-/** A new prompt starts from the built-in templates: writing one from nothing is hard. */
+/**
+ * A new prompt starts from the built-in templates, in the interface language:
+ * writing one from nothing is hard.
+ */
 export function newPromptForm(): PromptFormFields {
-  return { name: '', system: SUMMARY_SYSTEM_TEMPLATE, user: SUMMARY_USER_TEMPLATE };
+  return { name: '', ...summaryTemplates(locale()) };
 }
 
 export function formFromPrompt(config: PromptConfig): PromptFormFields {

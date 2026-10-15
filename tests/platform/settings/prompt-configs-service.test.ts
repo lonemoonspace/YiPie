@@ -24,7 +24,7 @@ describe('prompts: the built-in prompt', () => {
     const { prompts, store } = setup();
 
     expect(await prompts.list()).toMatchObject({
-      items: [builtinPrompt()],
+      items: [builtinPrompt('zh-Hans')],
       defaultId: BUILTIN_PROMPT_ID,
       status: 'missing',
     });
@@ -39,10 +39,25 @@ describe('prompts: the built-in prompt', () => {
     expect(store.dump()[PROMPT_CONFIGS_KEY]).toEqual({
       version: 1,
       data: [
-        builtinPrompt(),
+        builtinPrompt('zh-Hans'),
         { id: 'p-1', name: '一句话', system: '', user: '一句话总结：{{content}}' },
       ],
     });
+  });
+
+  it('is in the interface language of the moment until stored, and stays as stored after', async () => {
+    const store = createMemoryStore();
+    let locale: 'zh-Hans' | 'en' = 'en';
+    const prompts = createPromptConfigsService(store, createQueue(), {
+      newId: () => 'p-1',
+      locale: () => locale,
+    });
+
+    expect((await prompts.list()).items).toEqual([builtinPrompt('en')]);
+    await prompts.add(draft({ name: 'Terse', user: '{{content}}' }));
+
+    locale = 'zh-Hans';
+    expect((await prompts.list()).items[0]).toEqual(builtinPrompt('en'));
   });
 
   it('can be edited like any other prompt', async () => {
@@ -50,7 +65,7 @@ describe('prompts: the built-in prompt', () => {
 
     const view = await prompts.update(BUILTIN_PROMPT_ID, { user: '{{content}}' });
 
-    expect(view.items).toEqual([{ ...builtinPrompt(), user: '{{content}}' }]);
+    expect(view.items).toEqual([{ ...builtinPrompt('zh-Hans'), user: '{{content}}' }]);
   });
 
   it('does not come back once the user has removed every prompt', async () => {
@@ -71,7 +86,7 @@ describe('prompts: the built-in prompt', () => {
 
     expect(await prompts.list()).toMatchObject({
       status: 'invalid',
-      items: [builtinPrompt()],
+      items: [builtinPrompt('zh-Hans')],
       defaultId: BUILTIN_PROMPT_ID,
     });
 
@@ -102,20 +117,20 @@ describe('prompts: the list', () => {
 
   it('changes only the named fields', async () => {
     const { prompts, store } = setup({
-      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt(), terse] },
+      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt('zh-Hans'), terse] },
     });
 
     await prompts.update('terse', { system: '你很简洁。' });
 
     expect(store.dump()[PROMPT_CONFIGS_KEY]).toEqual({
       version: 1,
-      data: [builtinPrompt(), { ...terse, system: '你很简洁。' }],
+      data: [builtinPrompt('zh-Hans'), { ...terse, system: '你很简洁。' }],
     });
   });
 
   it('stores its default next to the model default, without touching it', async () => {
     const { prompts, store } = setup({
-      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt(), terse] },
+      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt('zh-Hans'), terse] },
       [SELECTION_KEY]: { version: 1, data: { defaultModelId: 'm', defaultPromptId: null } },
     });
 
@@ -129,10 +144,15 @@ describe('prompts: the list', () => {
 
 describe('prompts written by a newer version', () => {
   it('are shown but cannot get a new default, and storage stays as it was', async () => {
-    const stored = { [PROMPT_CONFIGS_KEY]: { version: 2, data: [builtinPrompt(), terse] } };
+    const stored = {
+      [PROMPT_CONFIGS_KEY]: { version: 2, data: [builtinPrompt('zh-Hans'), terse] },
+    };
     const { prompts, store } = setup(stored);
 
-    expect(await prompts.list()).toMatchObject({ readOnly: true, items: [builtinPrompt(), terse] });
+    expect(await prompts.list()).toMatchObject({
+      readOnly: true,
+      items: [builtinPrompt('zh-Hans'), terse],
+    });
     await expect(prompts.setDefault('terse')).rejects.toBeInstanceOf(ReadOnlyRecordError);
     expect(store.dump()).toEqual(stored);
   });
@@ -141,7 +161,7 @@ describe('prompts written by a newer version', () => {
 describe('models and prompts share the default record', () => {
   it('loses neither default when both are chosen at the same time', async () => {
     const { store, queue, prompts } = setup({
-      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt(), terse] },
+      [PROMPT_CONFIGS_KEY]: { version: 1, data: [builtinPrompt('zh-Hans'), terse] },
       [MODEL_CONFIGS_KEY]: {
         version: 1,
         data: [

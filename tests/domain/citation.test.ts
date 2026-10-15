@@ -65,5 +65,6 @@ describe('citations in model output', () => {
     expect(plainCitations('要点 [[ 原文 ]]，另见 [[第二处]]')).toBe(
       '要点 「原文」，另见 「第二处」',
     );
+    expect(plainCitations('Point [[ a quote ]].', 'en')).toBe('Point “a quote”.');
   });
 });

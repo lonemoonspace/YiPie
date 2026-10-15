@@ -1,5 +1,6 @@
 import { defineUnlistedScript } from 'wxt/utils/define-unlisted-script';
-import { TRIGGER_SLOT, type TriggerWire } from '@/contract/rpc-wire';
+import { TRIGGER_SLOT, type TriggerSlotWire } from '@/contract/rpc-wire';
+import { setLocale } from '@/domain/i18n/content';
 import { listenForPageRequests } from '@/platform/extract/listener';
 import { rememberSelection } from '@/platform/extract/selection';
 import { openPanelHost } from '@/platform/panel-host/host';
@@ -16,11 +17,14 @@ import { openPanelHost } from '@/platform/panel-host/host';
 export default defineUnlistedScript(() => {
   // Word of the trigger, left by the background just before this injection
   // (platform/inject); taken, so a later injection does not read it again.
-  const scope = globalThis as unknown as Record<symbol, TriggerWire | undefined>;
+  const scope = globalThis as unknown as Record<symbol, TriggerSlotWire | undefined>;
   const slot = Symbol.for(TRIGGER_SLOT);
   const trigger = scope[slot];
   scope[slot] = undefined;
 
+  // The shell speaks the interface language from the start; `content.hello`
+  // brings it again for every later mount.
+  if (trigger !== undefined) setLocale(trigger.locale);
   rememberSelection(trigger?.selectionText ?? '');
   listenForPageRequests();
   openPanelHost(trigger?.mode ?? 'page');

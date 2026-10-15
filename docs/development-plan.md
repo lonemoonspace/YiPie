@@ -889,6 +889,7 @@ docs/            development-plan.md（本文）
 | `action`（不设 `default_popup`）                                      | 点图标触发 `action.onClicked`，在页面里打开面板                   | 少了主要的触发方式                 | 1        |
 | `commands`（manifest 键，不是权限）                                   | 快捷键触发，同时会授予 activeTab；默认 `Alt+Shift+Y`，可在 `chrome://extensions/shortcuts` 改 | 少一种触发方式                     | 1        |
 | `content_security_policy.extension_pages`                             | 纵深防御（§8）                                                    | 渲染管线出漏洞时没有第二道防线     | 1        |
+| `default_locale: zh_CN`（manifest 键，不是权限）与 `_locales/{zh_CN,en}` | 名称、描述、图标标题与快捷键说明跟随浏览器语言；设置里的界面语言管不到浏览器自己显示的这几处。`check:manifest` 核对每个 `__MSG_*__` 在各语言里都有 | 浏览器里只能显示一种语言的名称     | 6        |
 
 **明确不要的**：
 

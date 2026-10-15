@@ -20,10 +20,12 @@ describe('general settings service', () => {
         trimming: 'back',
         fontSize: 'medium',
         answerLanguage: 'interface',
+        interfaceLanguage: 'auto',
       },
       status: 'missing',
       readOnly: false,
       quarantined: false,
+      locale: 'zh-Hans',
     });
   });
 
@@ -38,6 +40,7 @@ describe('general settings service', () => {
         trimming: 'middle',
         fontSize: 'small',
         answerLanguage: 'en',
+        interfaceLanguage: 'auto',
       },
     });
 
@@ -51,6 +54,7 @@ describe('general settings service', () => {
         trimming: 'middle',
         fontSize: 'small',
         answerLanguage: 'en',
+        interfaceLanguage: 'auto',
       },
     });
   });
@@ -64,6 +68,7 @@ describe('general settings service', () => {
         trimming: 'front',
         fontSize: 'x-large',
         answerLanguage: 'page',
+        interfaceLanguage: 'auto',
       },
     };
     const { settings, store } = setup(stored);
@@ -89,6 +94,7 @@ describe('general settings service', () => {
       trimming: 'nothing',
       fontSize: 'large',
       answerLanguage: 'interface',
+      interfaceLanguage: 'auto',
     });
   });
 
@@ -104,6 +110,7 @@ describe('general settings service', () => {
       trimming: 'back',
       fontSize: 'medium',
       answerLanguage: 'interface',
+      interfaceLanguage: 'auto',
     });
 
     const saved = await settings.patch({ theme: 'dark' });
@@ -133,6 +140,7 @@ describe('general settings service', () => {
         trimming: 'front',
         fontSize: 'large',
         answerLanguage: 'en',
+        interfaceLanguage: 'en',
         density: 'compact',
       },
     });
@@ -142,6 +150,7 @@ describe('general settings service', () => {
       theme: 'dark',
       fontSize: 'large',
       answerLanguage: 'en',
+      locale: 'en',
     });
   });
 
@@ -153,6 +162,37 @@ describe('general settings service', () => {
       theme: 'system',
       fontSize: 'medium',
       answerLanguage: 'interface',
+      locale: 'zh-Hans',
     });
+  });
+});
+
+describe('the interface language', () => {
+  const stored = (interfaceLanguage: string) => ({
+    version: 1,
+    data: { interfaceLanguage },
+  });
+  const service = (value: unknown, browserLanguage: string) =>
+    createGeneralSettingsService(
+      createMemoryStore({ [GENERAL_SETTINGS_KEY]: value }),
+      createQueue(),
+      { browserLanguage: () => browserLanguage },
+    );
+
+  it('follows the browser while the settings say auto', async () => {
+    expect((await service(stored('auto'), 'zh-TW').get()).locale).toBe('zh-Hans');
+    expect((await service(stored('auto'), 'en-US').get()).locale).toBe('en');
+    expect((await service(stored('auto'), 'fr').current()).locale).toBe('en');
+  });
+
+  it('is the one the settings name, whatever the browser speaks', async () => {
+    expect((await service(stored('en'), 'zh-CN').current()).locale).toBe('en');
+    expect((await service(stored('zh-Hans'), 'de').get()).locale).toBe('zh-Hans');
+  });
+
+  it('reports the language a change leads to', async () => {
+    const settings = service(stored('auto'), 'zh-CN');
+    expect((await settings.patch({ interfaceLanguage: 'en' })).locale).toBe('en');
+    expect((await settings.patch({ interfaceLanguage: 'auto' })).locale).toBe('zh-Hans');
   });
 });

@@ -13,6 +13,7 @@ describe('GeneralSettings', () => {
       trimming: 'back',
       fontSize: 'medium',
       answerLanguage: 'interface',
+      interfaceLanguage: 'auto',
     });
   });
 
@@ -23,6 +24,7 @@ describe('GeneralSettings', () => {
       trimming: 'back',
       fontSize: 'medium',
       answerLanguage: 'interface',
+      interfaceLanguage: 'auto',
     });
   });
 
@@ -45,5 +47,6 @@ describe('GeneralSettingsPatch', () => {
     expect(GeneralSettingsPatch.safeParse({ trimming: 'everything' }).success).toBe(false);
     expect(GeneralSettingsPatch.safeParse({ fontSize: 'huge' }).success).toBe(false);
     expect(GeneralSettingsPatch.safeParse({ answerLanguage: 'klingon' }).success).toBe(false);
+    expect(GeneralSettingsPatch.safeParse({ interfaceLanguage: 'zh-Hant' }).success).toBe(false);
   });
 });

@@ -1,5 +1,8 @@
 import { useEffect, useReducer, useState } from 'react';
 import { GENERAL_SETTINGS_KEY } from '@/contract/general-settings';
+import type { Locale } from '@/contract/rpc-wire';
+import { locale as currentLocale } from '@/domain/i18n';
+import { applyLocale } from '@/features/i18n/locale';
 import { applyFontSize, applyTheme } from '@/features/theme/apply-theme';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
@@ -10,6 +13,8 @@ import { INITIAL_PANEL_STATE, reducePanel, type PanelState } from './state';
 
 export interface PanelControls extends Omit<Conversation, 'open' | 'dispose'> {
   state: PanelState;
+  /** The interface language, for what renders once and keeps its words (finished turns). */
+  locale: Locale;
   /** The page text as the extension reads it, for the copy button. */
   pageText: () => Promise<string>;
   /** Finds a quote in the page and shows it there; resolves to whether it was found. */
@@ -26,6 +31,7 @@ const locate = async (quote: string) => (await callRpc('page.locate', { quote })
  */
 export function usePanel(): PanelControls {
   const [state, dispatch] = useReducer(reducePanel, INITIAL_PANEL_STATE);
+  const [locale, setLocaleState] = useState<Locale>(currentLocale);
   const [conversation] = useState(() =>
     createConversation({
       // The defaults of both lists and the trimming strategy: the panel always
@@ -63,14 +69,16 @@ export function usePanel(): PanelControls {
   useEffect(() => {
     let active = true;
     let unwatch = () => {};
-    // Theme and reading size follow the settings, also when they change
-    // while the panel is open.
+    // Theme, reading size and language follow the settings, also when they
+    // change while the panel is open.
     const appearance = () => {
       callRpc('settings.current', {}).then(
-        ({ theme, fontSize }) => {
+        ({ theme, fontSize, locale: next }) => {
           if (!active) return;
           applyTheme(theme);
           applyFontSize(fontSize);
+          applyLocale(next);
+          setLocaleState(next);
         },
         () => undefined,
       );
@@ -95,5 +103,5 @@ export function usePanel(): PanelControls {
   }, [conversation]);
 
   const { summarize, ask, retry, stop, switchModel } = conversation;
-  return { state, summarize, ask, retry, stop, switchModel, pageText, locate };
+  return { state, locale, summarize, ask, retry, stop, switchModel, pageText, locate };
 }

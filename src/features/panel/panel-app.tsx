@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import type { Locale } from '@/contract/rpc-wire';
 import type { TurnUsage } from '@/contract/snapshot';
 import { plainCitations } from '@/domain/citation';
 import { t } from '@/domain/i18n';
@@ -21,7 +22,7 @@ import {
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, stop, summarize, ask, retry, switchModel, pageText, locate } = usePanel();
+  const { state, locale, stop, summarize, ask, retry, switchModel, pageText, locate } = usePanel();
   const busy = isBusy(state);
   const attached = state.phase !== 'attaching' && state.problem?.kind !== 'attach';
   const conversation = useRef<HTMLDivElement>(null);
@@ -87,7 +88,13 @@ export function PanelApp() {
 
       <div className="conversation" ref={conversation}>
         {state.turns.map((turn, index) => (
-          <TurnView key={index} turn={turn} streaming={busy && index === state.turns.length - 1} />
+          // A new language renders the turn afresh: its quote markers carry labels.
+          <TurnView
+            key={`${index}-${locale}`}
+            turn={turn}
+            streaming={busy && index === state.turns.length - 1}
+            locale={locale}
+          />
         ))}
 
         {state.problem !== null ? (
@@ -185,10 +192,12 @@ function useFollowConversation(state: PanelState): void {
 interface TurnProps {
   turn: Turn;
   streaming: boolean;
+  /** Its words (labels, quote markers) are in the interface language. */
+  locale: Locale;
 }
 
 /** One question and its answer. A finished turn never changes, so it never renders again. */
-const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
+const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) {
   const html = useMemo(() => renderMarkdown(turn.text), [turn.text]);
 
   return (
@@ -216,7 +225,7 @@ const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
           <CopyButton
-            text={() => plainCitations(turn.text)}
+            text={() => plainCitations(turn.text, locale)}
             label={t('panel.copy')}
             title={t('panel.copy.title')}
           />
