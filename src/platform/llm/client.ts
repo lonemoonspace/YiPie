@@ -1,14 +1,21 @@
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 import type { ModelConfig } from '@/contract/model-config';
 import {
+  automaticRetryWait,
   fromFetchFailure,
   fromHttpStatus,
+  fromProtocolError,
   fromStreamError,
   redact,
   type LlmError,
 } from '@/domain/llm/errors';
 import { buildChatRequest, requestSecrets, type ChatMessage } from '@/domain/llm/request';
-import { interpretEventData, type Usage } from '@/domain/llm/stream';
+import {
+  createThinkSplitter,
+  interpretEventData,
+  type Sorted,
+  type Usage,
+} from '@/domain/llm/stream';
 import { hasOriginAccess } from '@/platform/permissions/origin-access';
 
 export type ChatOutcome =
@@ -27,6 +34,18 @@ export interface ChatOptions {
   signal: AbortSignal;
   /** Called with each piece of the answer as it arrives. */
   onText: (text: string) => void;
+  /** Called with each piece of the model's reasoning, which is not the answer (appendix D). */
+  onReasoning?: (text: string) => void;
+  /**
+   * The request failed before anything arrived, in a way worth one more try
+   * (§4.5, decision 1): the client waits `seconds`, then sends it again.
+   */
+  onRetry?: (retry: { error: LlmError; seconds: number }) => void;
+  /**
+   * The service refused `stream_options`, then took the request without it:
+   * the configuration should stop asking for usage (§4.5, decision 2).
+   */
+  onStreamOptionsRejected?: () => void;
   /** How long the response may take to start (ms). Local models can be slow to load. */
   firstByteTimeout?: number;
   /** How long the stream may stay silent once it has started (ms). */
@@ -34,6 +53,8 @@ export interface ChatOptions {
   fetch?: typeof fetch;
   /** Whether we hold the host permission; decides how a failed fetch is explained. */
   hasAccess?: (baseURL: string) => Promise<boolean>;
+  /** Waits before the retry, or less once `signal` aborts. Tests replace it. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
 export const DEFAULT_FIRST_BYTE_TIMEOUT = 120_000;
@@ -46,10 +67,52 @@ const ERROR_BODY_LIMIT = 64 * 1024;
  * docs/development-plan.md: our own client rather than an SDK). Runs in the
  * panel, never in the service worker (D4).
  *
- * Never throws: every way it can end is an outcome. There is no automatic
- * retry in phase 1.
+ * Never throws: every way it can end is an outcome. Before anything has
+ * arrived, it sends the request once more after a rate limit, a server error
+ * or a network failure, and once without `stream_options` when the service
+ * refuses that field (§4.5, decisions 1 and 2). Once text has been shown, a
+ * failure ends the answer there.
  */
 export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
+  let config = options.config;
+  let retried = false;
+  let downgraded = false;
+  for (;;) {
+    let started = false;
+    const outcome = await attempt({
+      ...options,
+      config,
+      onText: (text) => {
+        started = true;
+        options.onText(text);
+      },
+      onReasoning: (text) => {
+        started = true;
+        options.onReasoning?.(text);
+      },
+      onAccepted: () => {
+        if (downgraded) options.onStreamOptionsRejected?.();
+      },
+    });
+    if (outcome.kind !== 'error' || started) return outcome;
+
+    const { error } = outcome;
+    if (error.streamOptionsRejected === true && config.streamUsage && !downgraded) {
+      downgraded = true;
+      config = { ...config, streamUsage: false };
+      continue;
+    }
+    const seconds = retried ? null : automaticRetryWait(error);
+    if (seconds === null) return outcome;
+    retried = true;
+    options.onRetry?.({ error, seconds });
+    // Stopped during the wait, the next attempt ends before it starts.
+    await (options.sleep ?? sleep)(seconds * 1000, options.signal);
+  }
+}
+
+/** One request, as `streamChat` describes; `onAccepted` hears of a 2xx answer. */
+async function attempt(options: ChatOptions & { onAccepted: () => void }): Promise<ChatOutcome> {
   const { config, signal } = options;
   if (signal.aborted) return { kind: 'stopped' };
 
@@ -107,14 +170,17 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
 
     if (!response.ok) {
       const body = await readLimited(response, ERROR_BODY_LIMIT);
-      return clean(fromHttpStatus(response.status, body));
+      return clean(fromHttpStatus(response.status, body, response.headers.get('Retry-After')));
     }
-    if (response.body === null) return clean(fromStreamError('The response has no body.'));
+    options.onAccepted();
+    if (response.body === null) return clean(fromProtocolError('The response has no body.'));
 
+    // The first-byte timer runs on until the body's first bytes: many servers
+    // send the headers at once and the first token only after reading the
+    // prompt or loading the model (appendix D). From then on, any bytes count
+    // as life, SSE comments and heartbeats included. The streaming decoder
+    // keeps a character split across chunks in one piece.
     const idle = options.idleTimeout ?? DEFAULT_IDLE_TIMEOUT;
-    watch(idle);
-    // Any bytes count as life, SSE comments and heartbeats included. The
-    // streaming decoder keeps a character split across chunks in one piece.
     const decoder = new TextDecoder();
     const decode = new TransformStream<Uint8Array<ArrayBuffer>, string>({
       transform(chunk, sink) {
@@ -139,21 +205,31 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
     });
     aborted.catch(() => undefined);
 
+    // Reasoning written inline (`<think>…</think>`) is sorted out as it comes.
+    const think = createThinkSplitter();
+    const deliver = ({ reasoning, answer }: Sorted) => {
+      if (reasoning !== '') options.onReasoning?.(reasoning);
+      if (answer !== '') options.onText(answer);
+    };
     let usage: Usage | null = null;
     try {
       for (;;) {
         const { done, value } = await Promise.race([reader.read(), aborted]);
         if (done) return { kind: 'done', usage };
-        for (const event of interpretEventData(value.data)) {
-          if (event.type === 'content') options.onText(event.text);
+        for (const event of interpretEventData(value.data, value.event)) {
+          if (event.type === 'content') deliver(think.push(event.text));
+          else if (event.type === 'reasoning') options.onReasoning?.(event.text);
           else if (event.type === 'usage') usage = event.usage;
-          else if (event.type === 'error') return clean(fromStreamError(event.message));
+          else if (event.type === 'error') return clean(fromStreamError(event.failure));
+          else if (event.type === 'invalid') return clean(fromProtocolError(event.message));
           else return { kind: 'done', usage };
         }
       }
     } catch (error) {
       return await failed(error);
     } finally {
+      // What the splitter still holds arrived too, however the stream ended.
+      deliver(think.flush());
       // Ends the connection when we stop early ([DONE] seen, error, stop).
       void reader.cancel().catch(() => undefined);
     }
@@ -161,6 +237,20 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
     clearTimeout(timer);
     signal.removeEventListener('abort', stop);
   }
+}
+
+/** Waits `ms`, or until `signal` aborts. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+    if (signal.aborted) done();
+  });
 }
 
 async function readLimited(response: Response, limit: number): Promise<string> {

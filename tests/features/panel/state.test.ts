@@ -78,12 +78,30 @@ describe('reducePanel: one run', () => {
       {
         question: null,
         text: '## 概要\n\n要点',
+        reasoning: '',
         status: 'done',
         usage,
         cut: requesting.type === 'requesting' ? requesting.cut : null,
       },
     ]);
     expect(done.problem).toBeNull();
+  });
+
+  it('keeps reasoning apart from the answer, and says the model is thinking until it answers', () => {
+    const thinking = play([
+      summary,
+      requesting,
+      { type: 'reasoning', text: '先想' },
+      { type: 'reasoning', text: '一想' },
+    ]);
+    expect(thinking.phase).toBe('streaming');
+    expect(thinking.turns).toMatchObject([{ text: '', reasoning: '先想一想' }]);
+
+    const answering = play([{ type: 'text', text: '答' }], thinking);
+    expect(answering.turns).toMatchObject([{ text: '答', reasoning: '先想一想' }]);
+    // Reasoning that comes after a stop changes nothing.
+    const stopped = play([{ type: 'stopped', usage: null }], answering);
+    expect(play([{ type: 'reasoning', text: '迟到' }], stopped)).toBe(stopped);
   });
 
   it('keeps the text when stopped, and ignores chunks that arrive afterwards', () => {
@@ -106,11 +124,37 @@ describe('reducePanel: one run', () => {
       { type: 'text', text: '部分' },
       {
         type: 'failed',
-        problem: { kind: 'llm', error: { kind: 'stream', detail: 'boom' }, window: null },
+        problem: { kind: 'llm', error: { kind: 'server', detail: 'boom' }, window: null },
       },
     ]);
     expect(state).toMatchObject({ phase: 'error', problem: { kind: 'llm' } });
     expect(state.turns).toMatchObject([{ text: '部分', status: 'failed' }]);
+  });
+
+  it('shows the automatic retry while the request waits, and forgets it once text comes', () => {
+    const waiting = play([summary, requesting, { type: 'retrying', seconds: 3 }]);
+    expect(waiting).toMatchObject({ phase: 'requesting', retrying: 3 });
+
+    expect(play([{ type: 'text', text: '好' }], waiting)).toMatchObject({
+      phase: 'streaming',
+      retrying: null,
+    });
+    expect(
+      play(
+        [
+          {
+            type: 'failed',
+            problem: { kind: 'llm', error: { kind: 'server', detail: '' }, window: null },
+          },
+        ],
+        waiting,
+      ),
+    ).toMatchObject({ phase: 'error', retrying: null });
+  });
+
+  it('ignores a retry reported when no request is waiting', () => {
+    const finished = play(answered('答'));
+    expect(play([{ type: 'retrying', seconds: 2 }], finished)).toBe(finished);
   });
 
   it('keeps the model menu across runs, so it does not flicker', () => {
@@ -181,8 +225,9 @@ describe('reducePanel: a conversation', () => {
     expect(state.phase).toBe('restored');
     expect(isBusy(state)).toBe(false);
     expect(state.turns).toEqual([
-      { question: null, text: '总结', status: 'done', usage, cut: null },
-      { question: '追问', text: '半截', status: 'stopped', usage: null, cut: null },
+      // Reasoning is never saved: a restored turn has none.
+      { question: null, text: '总结', reasoning: '', status: 'done', usage, cut: null },
+      { question: '追问', text: '半截', reasoning: '', status: 'stopped', usage: null, cut: null },
     ]);
     expect(state.snapshot).toEqual({ kind: 'restored-truncated' });
   });

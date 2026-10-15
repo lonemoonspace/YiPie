@@ -44,17 +44,41 @@ function fakeFetch(respond: () => Response | Promise<Response>) {
   });
 }
 
+/**
+ * Runs one chat. Waits before a retry take no time unless a test passes its
+ * own `sleep`; the retries are recorded.
+ */
 async function run(options: Partial<ChatOptions> & Pick<ChatOptions, 'fetch'>) {
   const texts: string[] = [];
+  const retries: { kind: string; seconds: number }[] = [];
   const outcome = await streamChat({
     config,
     messages: [{ role: 'user', content: 'hi' }],
     signal: new AbortController().signal,
     onText: (text) => texts.push(text),
+    onRetry: ({ error, seconds }) => retries.push({ kind: error.kind, seconds }),
     hasAccess: () => Promise.resolve(true),
+    sleep: () => Promise.resolve(),
     ...options,
   });
-  return { outcome, text: texts.join('') };
+  return { outcome, text: texts.join(''), retries };
+}
+
+/** A fetch that answers each call with the next of `responses` (the last one repeats). */
+function answers(...responses: (() => Response | Promise<Response>)[]) {
+  let call = 0;
+  return fakeFetch(() => {
+    const respond = responses[Math.min(call, responses.length - 1)];
+    call += 1;
+    if (respond === undefined) throw new Error('no response');
+    return respond();
+  });
+}
+
+/** The body request `call` sent, parsed. */
+function sentBody(fetch: ReturnType<typeof fakeFetch>, call: number): Record<string, unknown> {
+  const body = fetch.mock.calls[call]?.[1]?.body;
+  return typeof body === 'string' ? (JSON.parse(body) as Record<string, unknown>) : {};
 }
 
 describe('streamChat', () => {
@@ -124,7 +148,7 @@ describe('streamChat', () => {
 
   it('treats a stream that ends without [DONE] as finished', async () => {
     const fetch = fakeFetch(() => streamResponse([chunk('a'), chunk('b')]));
-    expect(await run({ fetch })).toEqual({ outcome: { kind: 'done', usage: null }, text: 'ab' });
+    expect((await run({ fetch })).outcome).toEqual({ kind: 'done', usage: null });
   });
 
   it('keeps what arrived before an error inside the stream', async () => {
@@ -132,10 +156,13 @@ describe('streamChat', () => {
       streamResponse([chunk('部分'), `data: {"error":{"message":"Upstream overloaded"}}\n\n`]),
     );
 
-    expect(await run({ fetch })).toEqual({
-      outcome: { kind: 'error', error: { kind: 'stream', detail: 'Upstream overloaded' } },
+    expect(await run({ fetch })).toMatchObject({
+      outcome: { kind: 'error', error: { kind: 'server', detail: 'Upstream overloaded' } },
       text: '部分',
+      // Once text has been shown, a failure ends the answer there.
+      retries: [],
     });
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('explains an HTTP error with the service message, never the key', async () => {
@@ -187,10 +214,13 @@ describe('streamChat', () => {
       kind: 'error',
       error: { kind: 'unauthorized-access' },
     });
-    expect((await run({ fetch })).outcome).toMatchObject({
-      kind: 'error',
-      error: { kind: 'network', detail: 'Failed to fetch' },
+    expect(fetch).toHaveBeenCalledOnce();
+    // A network failure is tried once more, then reported.
+    expect(await run({ fetch })).toMatchObject({
+      outcome: { kind: 'error', error: { kind: 'network', detail: 'Failed to fetch' } },
+      retries: [{ kind: 'network', seconds: 2 }],
     });
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it('stops when the user asks, keeping what arrived', async () => {
@@ -223,6 +253,22 @@ describe('streamChat', () => {
     });
   });
 
+  it('gives the body as long to start as the response: the first token can take a while', async () => {
+    const silent = fakeFetch(() => new Response(new ReadableStream<Uint8Array>(), { status: 200 }));
+    const late = fakeFetch(() => streamResponse([chunk('好'), 'data: [DONE]\n\n'], 60));
+
+    expect(
+      (await run({ fetch: silent, firstByteTimeout: 40, idleTimeout: 10_000 })).outcome,
+    ).toEqual({ kind: 'error', error: { kind: 'timeout', detail: '' } });
+    expect((await run({ fetch: late, firstByteTimeout: 1_000, idleTimeout: 30 })).outcome).toEqual({
+      kind: 'error',
+      error: { kind: 'timeout', detail: '' },
+    });
+    expect(
+      (await run({ fetch: late, firstByteTimeout: 1_000, idleTimeout: 200 })).outcome.kind,
+    ).toBe('done');
+  });
+
   it('gives up when the stream goes silent, keeping what arrived', async () => {
     const fetch = fakeFetch(() => streamResponse([chunk('开头')], 0, {}));
     const stalled = fakeFetch(() => {
@@ -235,9 +281,163 @@ describe('streamChat', () => {
     });
 
     expect((await run({ fetch })).outcome.kind).toBe('done');
-    expect(await run({ fetch: stalled, idleTimeout: 40 })).toEqual({
+    expect(await run({ fetch: stalled, idleTimeout: 40 })).toMatchObject({
       outcome: { kind: 'error', error: { kind: 'timeout', detail: '' } },
       text: '开头',
     });
+  });
+});
+
+describe('streamChat: the one automatic retry (§4.5, decision 1)', () => {
+  const tooMany = (retryAfter?: string) => () =>
+    new Response('{"error":{"message":"Rate limit reached"}}', {
+      status: 429,
+      headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter },
+    });
+  const ok = () => streamResponse([chunk('好'), 'data: [DONE]\n\n']);
+
+  it('waits as long as a 429 asks, then succeeds on the second try', async () => {
+    const fetch = answers(tooMany('3'), ok);
+    const waits: number[] = [];
+
+    const result = await run({
+      fetch,
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: { kind: 'done' },
+      text: '好',
+      retries: [{ kind: 'rate-limit', seconds: 3 }],
+    });
+    expect(waits).toEqual([3000]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('tries only once more', async () => {
+    const fetch = answers(tooMany(), tooMany());
+
+    expect(await run({ fetch })).toMatchObject({
+      outcome: { kind: 'error', error: { kind: 'rate-limit', status: 429 } },
+      retries: [{ kind: 'rate-limit', seconds: 2 }],
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves a wait over 10 s to the user', async () => {
+    const fetch = answers(tooMany('30'), ok);
+
+    expect(await run({ fetch })).toMatchObject({
+      outcome: { kind: 'error', error: { kind: 'rate-limit', retryAfter: 30 } },
+      retries: [],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('tries a server error once more, also one reported in the stream before any text', async () => {
+    const http = answers(() => new Response('Bad Gateway', { status: 502 }), ok);
+    const inStream = answers(
+      () => streamResponse([`data: {"error":{"code":503,"message":"overloaded"}}\n\n`]),
+      ok,
+    );
+
+    for (const fetch of [http, inStream]) {
+      expect(await run({ fetch })).toMatchObject({ outcome: { kind: 'done' }, text: '好' });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it.each([
+    [401, '{"error":{"message":"bad key"}}'],
+    [400, '{"error":{"message":"invalid model"}}'],
+    [404, '{"error":{"message":"no such model"}}'],
+    [402, '{"error":{"message":"Insufficient Balance"}}'],
+    [400, '{"error":{"code":"context_length_exceeded","message":"maximum context length"}}'],
+  ])('does not try a %i again', async (status, body) => {
+    const fetch = answers(() => new Response(body, { status }), ok);
+
+    expect((await run({ fetch })).outcome.kind).toBe('error');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('stops during the wait when the user asks, without sending again', async () => {
+    const user = new AbortController();
+    const fetch = answers(tooMany('5'), ok);
+
+    const result = await run({
+      fetch,
+      signal: user.signal,
+      onRetry: () => user.abort(),
+      sleep: undefined,
+    });
+
+    expect(result.outcome).toEqual({ kind: 'stopped' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('really waits when nobody replaces the wait', async () => {
+    const fetch = answers(tooMany('0.05'), ok);
+    const started = Date.now();
+
+    expect((await run({ fetch, sleep: undefined })).outcome.kind).toBe('done');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe('streamChat: a service that refuses stream_options (§4.5, decision 2)', () => {
+  const refused = () =>
+    new Response('{"error":{"message":"Unrecognized request argument supplied: stream_options"}}', {
+      status: 400,
+    });
+  const ok = () => streamResponse([chunk('好'), 'data: [DONE]\n\n']);
+
+  it('sends the request again without it, and says so once the service takes it', async () => {
+    const fetch = answers(refused, ok);
+    const rejected = vi.fn();
+
+    const result = await run({ fetch, onStreamOptionsRejected: rejected });
+
+    expect(result).toMatchObject({ outcome: { kind: 'done' }, text: '好', retries: [] });
+    expect(sentBody(fetch, 0)).toHaveProperty('stream_options', { include_usage: true });
+    expect(sentBody(fetch, 1)).not.toHaveProperty('stream_options');
+    expect(rejected).toHaveBeenCalledOnce();
+  });
+
+  it('says nothing when the service never refused it', async () => {
+    const fetch = answers(ok);
+    const rejected = vi.fn();
+
+    expect((await run({ fetch, onStreamOptionsRejected: rejected })).outcome.kind).toBe('done');
+    expect(sentBody(fetch, 0)).toHaveProperty('stream_options');
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it('says nothing when the request fails without it too', async () => {
+    const fetch = answers(refused, () => new Response('invalid model', { status: 400 }));
+    const rejected = vi.fn();
+
+    const result = await run({ fetch, onStreamOptionsRejected: rejected });
+
+    expect(result.outcome).toMatchObject({ kind: 'error', error: { kind: 'bad-request' } });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it('leaves alone stream_options the user put in the extra body', async () => {
+    const fetch = answers(refused, ok);
+    const rejected = vi.fn();
+
+    const result = await run({
+      config: { ...config, streamUsage: false, extraBody: { stream_options: { x: 1 } } },
+      fetch,
+      onStreamOptionsRejected: rejected,
+    });
+
+    expect(result.outcome).toMatchObject({ kind: 'error', error: { kind: 'bad-request' } });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(rejected).not.toHaveBeenCalled();
   });
 });

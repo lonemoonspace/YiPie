@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TurnUsage } from '@/contract/snapshot';
 import { t } from '@/domain/i18n';
+import { adviceFor, isLocalOriginRefusal, type LlmError } from '@/domain/llm/errors';
 import { renderMarkdown } from '@/features/markdown/render';
 import { openSettingsPage } from '@/platform/runtime/settings-page';
 import { copyText } from './clipboard';
@@ -121,6 +122,13 @@ const TurnView = memo(function TurnView({ turn, streaming }: TurnProps) {
     <section className="turn">
       {turn.question !== null ? <p className="question">{turn.question}</p> : null}
       {turn.cut !== null ? <p className="note">{describeCut(turn.cut)}</p> : null}
+      {turn.reasoning !== '' ? (
+        // Folded: the answer is what the panel is for (§4.5, decision 3).
+        <details className="reasoning">
+          <summary>{t('panel.reasoning')}</summary>
+          <p>{turn.reasoning}</p>
+        </details>
+      ) : null}
       {turn.text !== '' ? (
         // Built by renderMarkdown, which escapes raw HTML and drops unsafe
         // links and every image (docs/development-plan.md §8).
@@ -248,9 +256,14 @@ function describePhase(state: PanelState): string {
     case 'extracting':
       return t('panel.status.extracting');
     case 'requesting':
-      return t('panel.status.requesting', { model });
+      return state.retrying === null
+        ? t('panel.status.requesting', { model })
+        : t('panel.status.retrying', { seconds: state.retrying });
     case 'streaming':
-      return t('panel.status.streaming', { model });
+      // Reasoning first, the answer after.
+      return state.turns.at(-1)?.text === ''
+        ? t('panel.status.thinking', { model })
+        : t('panel.status.streaming', { model });
     case 'done':
       return t('panel.status.done');
     case 'stopped':
@@ -339,11 +352,16 @@ function Problem({ problem, origin, retry }: ProblemProps) {
       break;
     case 'llm': {
       const { error, window } = problem;
-      lines.push(t(`error.${error.kind}`, { status: error.status ?? '', origin: origin ?? '' }));
-      if (error.detail !== '') lines.push(t('error.detail', { detail: error.detail }));
-      if (error.kind === 'auth' || error.kind === 'unauthorized-access') {
-        settings = true;
-      } else if (error.kind === 'context-length') {
+      lines.push(t(`error.${error.kind}`, { origin: origin ?? '' }));
+      const detail = errorDetail(error);
+      if (detail !== null) lines.push(detail);
+      if (origin !== null && isLocalOriginRefusal(error, origin)) {
+        lines.push(t('error.hint.localOrigin'));
+      }
+      if (error.kind === 'rate-limit' && error.retryAfter !== undefined) {
+        lines.push(t('error.hint.retryAfter', { seconds: error.retryAfter }));
+      }
+      if (error.kind === 'context-length') {
         if (window === null) {
           lines.push(t('panel.contextHint.unchecked'));
           again = 'cut';
@@ -356,8 +374,10 @@ function Problem({ problem, origin, retry }: ProblemProps) {
           );
           settings = true;
         }
-      } else if (error.kind !== 'aborted') {
-        again = 'retry';
+      } else {
+        const advice = adviceFor(error.kind);
+        if (advice.retry) again = 'retry';
+        settings = advice.settings;
       }
       break;
     }
@@ -389,6 +409,23 @@ function Problem({ problem, origin, retry }: ProblemProps) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * What the service or the browser said: the status and the service's words,
+ * or the browser's report for a request that never got an answer.
+ */
+function errorDetail(error: LlmError): string | null {
+  const { status, detail } = error;
+  if (status !== undefined) {
+    return detail === ''
+      ? t('error.status', { status })
+      : t('error.statusDetail', { status, detail });
+  }
+  if (detail === '') return null;
+  return error.kind === 'network' || error.kind === 'unauthorized-access'
+    ? t('error.browserDetail', { detail })
+    : t('error.detail', { detail });
 }
 
 function formatCount(count: number): string {

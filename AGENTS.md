@@ -21,7 +21,7 @@
 | `npm run test:e2e`       | Playwright 在真实 Chromium 里加载 E2E 构建（先 build:e2e）                   |
 | `npm run format`         | 用 Prettier 改写格式（Markdown 不在格式检查范围内）                           |
 
-CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → build:e2e → E2E。两项检查只针对生产构建，其中 check:manifest 会确认 E2E 专用的主机权限和触发入口没有混进来。
+CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → build:e2e → E2E。两项检查只针对生产构建，其中 check:manifest 会确认 E2E 专用的主机权限和触发入口没有混进来，check:bundle 还会确认 SW 与内容脚本里没有扩展页面的消息。全部通过后，生产构建作为测试包上传（运行页面上的 artifact `yipie-chrome-<提交>`，保留 14 天）：给用户的测试包从这里取，不必从会话里发文件。
 
 ## 目录与分层
 
@@ -44,6 +44,8 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **单一写入口**：只有 `src/platform/storage/**` 能引用 `wxt-store.ts`。其它代码通过 repo（`createRepo(...).update`）写入，写入都在 SW 的唯一写队列里执行。扩展页面要改数据就发 RPC，不要自己写存储。
 - **SW 不含界面**：background 入口不能引用 `features/**`；contract / domain / platform / background 不能在运行时引用 `react`、`react-dom`（`import type` 可以）。React 只出现在 features 和扩展页面入口里。
 - **内容脚本只带外壳、提取与定位**：`src/entrypoints/injected.ts`、`platform/panel-host/**`、`platform/extract/**`、`platform/rpc/lite-client.ts` 不能在运行时引用 React、zod、`platform/storage`、`platform/llm`、`platform/settings`、`features`，也不能在运行时引用 contract 下定义 schema 的文件（一个常量就会把 zod 带进来）；只有 `@/contract/rpc-wire`、`@/contract/commands` 这两个纯常量文件例外，其余只能 `import type`。
+- **消息表按上下文拆分**（计划 §9、§4.5）：扩展页面用 `@/domain/i18n` 的 `t`（全部消息）；SW 会运行的代码用 `@/domain/i18n/background`，内容脚本用 `@/domain/i18n/content`，各自的 `t` 只认自己那张表的键名。新文案放进用到它的上下文的表（`domain/i18n/zh/{background,content,pages}.ts`）。ESLint 拦整张表进入 SW 会运行的代码（platform、background 入口、domain/prompt）与内容脚本；check:bundle 另查 `background.js`、`injected.js` 里有没有扩展页面的键名。
+- **内容脚本可能比扩展活得久**：扩展更新或重载后，旧版本的内容脚本留在已注入的页面里、与扩展断开，再次注入的脚本在新的隔离世界里。挂在 `globalThis` 上的重复注入保护要记下创建它的 runtime，换了就重建；页面里旧版本留下的宿主由新宿主移除（`platform/panel-host/orphan.ts`）。
 - **内容脚本按需注入，不进 manifest**：入口文件叫 `injected.ts` 而不是 `content.ts`（WXT 会把 `content.ts` 当成 manifest 声明的内容脚本），由 `platform/inject/inject.ts` 在用户触发、隔离闸门通过之后 `executeScript`。
 - **不用 `eslint-disable`、不用 `any`**：`noInlineConfig` 让 `eslint-disable` 注释无效并报告，`--max-warnings 0` 让它失败。
 - **manifest 与计划附录 C 一致**：新增权限或 manifest 键，先改附录 C，再在同一提交里改 `scripts/lib/manifest-policy.ts`。
@@ -73,7 +75,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
 - 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
 - 面板只拿它要用的东西：读模型用 `models.current`，只有菜单（名称）和正在用的那个模型的配置；`models.list` 带着全部 Key，只给设置页。给面板新增方法时同样收窄输出：不要直接复用存储 schema（`z.looseObject` 会让未知字段穿透），逐字段映射到专门的 `z.object`（如 `PanelModelConfig`），它会丢掉 handler 多塞的字段。
-- 面板唯一能调用的配置变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
+- 面板能调用的配置变更只有两个（计划 §8 的例外）：`models.choose`（换默认模型）与 `models.disableStreamUsage`（服务拒绝 `stream_options` 后关掉这个模型的用量请求，只能关）。Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
 - 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的标签页 URL `sender.tab.url` 算出，`domain/page-key.ts`；`sender.url` 是文档载入时的 URL，不随 `pushState` 变化，不能用来认页面）。不要给它们加页面参数。页面没有重新载入就换成了另一页（SPA），内容脚本关闭面板（`panel-host/host.ts`，Navigation API 的 `currententrychange`），挂载时也核对 `content.hello` 返回的页面键。
 - 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
 - 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。来自另一个面板文档的保存，只在写队列里轮到时它仍是这个标签页接上的面板才存（`createSnapshotStore` 的 `attached`）：调度器的核对发生在请求排队之前，排队期间新面板可能已经接上。以后新增「以面板已接上为前提」的写入，同样在队列任务里再核对一次。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
@@ -82,7 +84,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 ## 凭据与日志
 
 - 展示给用户的错误详情一律经 `redact(detail, requestSecrets(config))`（`src/domain/llm/`）：Key、每个请求头的值、base URL 的查询参数都算凭据，不论长短。
-- 日志里不写凭据，也不写完整 URL：base URL 的查询参数可能带 key，页面 URL 可能带 token。只记 origin（或权限模式）。
+- 日志里不写凭据，也不写完整 URL：base URL 的查询参数可能带 key，页面 URL 可能带 token。只记 origin（或权限模式）。模型请求的详情（服务原话、请求体）不进日志，所以脱敏规则只有 `redact` 一处（计划 §4.5 决定 4）。
 - 离开扩展的数据（目前是备份导出）默认经 `withoutCredentials`（`src/domain/credentials.ts`）剔除 `apiKey`、`headers` 与 `baseURL` 的查询参数，用户勾选后才包含；设置页显示原始数据时一律经过它。
 - 主机访问权：申请必须在设置页的点击 / 提交回调里、任何 `await` 之前调用 `requestOriginAccess`（浏览器只在用户手势里弹出提示）。回收由 SW 的模型列表服务在变更写入后、同一个队列槽内完成，只回收不再被任何行（含认不出的行）使用的 origin。
 
@@ -94,8 +96,10 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
 - E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels`（可带 `contextWindow`）/ `storePrompts` / `storeDefaults` / `storeSettings`，读回存储用 `stored`（`storage.local`）与 `session`（`storage.session`：面板登记与快照）。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
 - Playwright 的视口模拟下，离视口底部约 100 px 以内对跨站 iframe 的鼠标点击会丢（普通跨站 iframe 也一样，与面板无关）。面板底部的追问框用键盘操作（`fill` 后 `press('Enter')`）；非点不可时先把视口调高。
-- 面板的对话逻辑在 `features/panel/conversation.ts`（不依赖 React，单测用假的 RPC 与流）；`use-panel.ts` 只负责接线。控制器里每个 `await` 之后的继续都要确认自己仍属于最新的那次操作（`action`），面板离开（`dispose`）后的结果不再派发；新增等待步骤照此办理，并补「中途用户做了别的 / 已经 dispose」的测试。假服务的场景：`scenario:chat`（追问的回答写出问题）、`scenario:no-usage`、`scenario:context-limit`（超过约 2,000 字就以超长拒绝），长文页面是 `/long.html`。
+- 面板的对话逻辑在 `features/panel/conversation.ts`（不依赖 React，单测用假的 RPC 与流）；`use-panel.ts` 只负责接线。控制器里每个 `await` 之后的继续都要确认自己仍属于最新的那次操作（`action`），面板离开（`dispose`）后的结果不再派发；新增等待步骤照此办理，并补「中途用户做了别的 / 已经 dispose」的测试。假服务的场景：`scenario:chat`（追问的回答写出问题）、`scenario:no-usage`、`scenario:context-limit`（超过约 2,000 字就以超长拒绝）、`scenario:busy-once:<任意>`（同一个名字的第一次请求返回 429 与 `Retry-After: 1`，所以每条测试用自己的名字）、`scenario:no-stream-options`（带 `stream_options` 就 400）、`scenario:reasoning`（先推理再回答），长文页面是 `/long.html`。
+- 模拟扩展更新用 `reloadExtension(context, serviceWorker)`，它返回新的 SW；之后用 `openPanelWith(worker, tabId)` 触发（`openPanel` 绑着旧的 SW）。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
+- **模型请求**（`platform/llm/client.ts`）的错误分类在 `domain/llm/errors.ts`：每类带下一步建议（`adviceFor`），自动重试只在还没收到内容时、只一次（`automaticRetryWait`）。遇到新的兼容差异，先把服务的原样输出放进 `tests/fixtures/sse`（Prettier 不碰这里）、在 `tests/platform/llm/corpus.test.ts` 加一条，再改代码；那里有一条测试核对附录 D 的每一行都有语料。客户端（client.ts 与 domain/llm）的体量是计划 D2 推翻条件的一部分，加代码时留意。
 - 模型输出只经 `src/features/markdown/render.ts` 变成 HTML，`dangerouslySetInnerHTML` 只用于它的结果。计划 §8 列出的注入回归用例在 `tests/features/markdown/render.test.ts` 里，改渲染器时它们必须仍然通过；要放行新的语法或属性，先补用例并更新测试里的白名单。
 
 ## 依赖版本约束
@@ -114,6 +118,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
   1. 容器的 `no new privileges` 让 Chromium 自带沙箱不可用，需要 `--no-sandbox`。Playwright 默认 `chromiumSandbox: false`，已经会带上。
   2. 缺 X11 / NSS 等约 16 个动态库时：把 deb 依赖解到可写前缀（例如 `/tmp/sysroot`），运行时用 `LD_LIBRARY_PATH` 指过去。
   3. 必须装字体并自建 fontconfig 配置，否则 Skia 直接 FATAL（`SkFontMgr_FontConfigInterface.cpp:163 Not implemented`），浏览器一开就崩。这一条最容易误判成「库没装齐」。
+- Playwright 默认带 `--disable-extensions`，全新的浏览器配置也不在开发者模式：这时 `runtime.reload()` 之后扩展直接消失、不会重新加载。E2E 的 `context` fixture 因此用一个开启了开发者模式的临时配置。
 - 沙箱恢复后 `node_modules` 等会被清空：`npm ci` → `npm run gate` → `npm run build`。
 
 ## 提交与分支

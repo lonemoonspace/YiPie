@@ -66,6 +66,7 @@ function setup(
     'models.setDefault': vi.fn(() => Promise.resolve(models)),
     'models.current': vi.fn(() => Promise.resolve(panelModels)),
     'models.choose': vi.fn(() => Promise.resolve(panelModels)),
+    'models.disableStreamUsage': vi.fn(() => Promise.resolve(panelModels)),
     ...overrides,
   });
   return {
@@ -330,6 +331,27 @@ describe('RPC dispatcher: model configurations', () => {
     });
   });
 
+  it('lets the attached panel turn usage off for a model, and nothing more', async () => {
+    const { dispatch, handlers } = setup();
+    const disable = request('models.disableStreamUsage', { id: 'a' });
+
+    expect(await dispatch(disable, PANEL)).toEqual({ ok: true, value: panelModels });
+    for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(disable, sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handlers['models.disableStreamUsage']).toHaveBeenCalledExactlyOnceWith(
+      { id: 'a' },
+      expect.objectContaining({ caller: 'panel' }),
+    );
+    // There is no value to set: it can only turn the option off.
+    expect(
+      await dispatch(request('models.disableStreamUsage', { id: 'a', streamUsage: true }), PANEL),
+    ).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+  });
+
   it('drops anything else a handler adds to the panel answer, such as every configuration', async () => {
     const leaky = { ...panelModels, items: [{ id: 'b', apiKey: 'sk-other-model' }] };
     const { dispatch } = setup({ 'models.current': () => Promise.resolve(leaky) });
@@ -553,6 +575,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     ['settings.current', {}],
     ['models.current', {}],
     ['models.choose', { id: 'a' }],
+    ['models.disableStreamUsage', { id: 'a' }],
     ['prompts.list', {}],
     ['page.getContext', {}],
     ['snapshot.get', {}],

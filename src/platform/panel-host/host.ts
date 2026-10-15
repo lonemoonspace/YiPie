@@ -1,8 +1,15 @@
 import { browser } from 'wxt/browser';
-import { t } from '@/domain/i18n';
+import { t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
+import {
+  HOST_MARKER,
+  HOST_TAG_PREFIX,
+  isOrphaned,
+  removeLeftoverHosts,
+  watchForOrphaning,
+} from './orphan';
 import { SHELL_CSS } from './shell-css';
 
 const logger = createLogger('host');
@@ -10,12 +17,18 @@ const logger = createLogger('host');
 const PANEL_PAGE = '/panel.html';
 /** Times per minute the host puts itself back after the page removed it, before giving up. */
 const REMOUNT_LIMIT = 5;
+/**
+ * Times per minute the host removes a leftover host again. A host of the
+ * previous version puts itself back up to five times before it gives up;
+ * a page that keeps putting one back is left alone after this many.
+ */
+const LEFTOVER_LIMIT = 10;
 
 /**
  * Lives on the isolated world's global object, which every injection into
  * this document shares and the page cannot see. That, and the reference we
- * keep to our own element, is the duplicate-injection guard: we never look the
- * host up in the DOM, so an element the page planted cannot stand in for it.
+ * keep to our own element, is the duplicate-injection guard: we never look up
+ * our host in the DOM, so an element the page planted cannot stand in for it.
  */
 const INSTANCE_KEY = Symbol.for('yipie.panel-host');
 
@@ -23,11 +36,23 @@ interface PanelHost {
   open(): void;
 }
 
+/** The host, and the runtime of the extension that created it. */
+interface Instance {
+  runtime: unknown;
+  host: PanelHost;
+}
+
 /** Shows the panel in this tab, creating the host on the first call. */
 export function openPanelHost(): void {
-  const scope = globalThis as unknown as Record<symbol, PanelHost | undefined>;
-  const host = (scope[INSTANCE_KEY] ??= createPanelHost());
-  host.open();
+  const scope = globalThis as unknown as Record<symbol, Instance | undefined>;
+  let instance = scope[INSTANCE_KEY];
+  // Left by an older version of the extension, should it share this world:
+  // dead, so a new host replaces it (orphan.ts).
+  if (instance?.runtime !== browser.runtime) {
+    instance = { runtime: browser.runtime, host: createPanelHost() };
+    scope[INSTANCE_KEY] = instance;
+  }
+  instance.host.open();
 }
 
 function createPanelHost(): PanelHost {
@@ -36,7 +61,9 @@ function createPanelHost(): PanelHost {
   const suffix = Array.from(crypto.getRandomValues(new Uint8Array(4)), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
-  const element = document.createElement(`yipie-panel-${suffix}`);
+  const element = document.createElement(`${HOST_TAG_PREFIX}${suffix}`);
+  // What a later version looks for before it removes this host (orphan.ts).
+  element.setAttribute(HOST_MARKER, '');
   pin(element, {
     all: 'initial',
     position: 'fixed',
@@ -73,6 +100,15 @@ function createPanelHost(): PanelHost {
 
   let open = false;
   let remounts: number[] = [];
+  let leftovers: number[] = [];
+
+  /** Removes the hosts an older version left, as often as `LEFTOVER_LIMIT` allows. */
+  function clearLeftovers(): void {
+    const now = Date.now();
+    leftovers = leftovers.filter((at) => now - at < 60_000);
+    if (leftovers.length >= LEFTOVER_LIMIT) return;
+    if (removeLeftoverHosts(element) > 0) leftovers.push(now);
+  }
   /** The page the background bound the mounted panel to; null until it says. */
   let page: string | null = null;
 
@@ -114,6 +150,11 @@ function createPanelHost(): PanelHost {
       iframe.src = `${browser.runtime.getURL(PANEL_PAGE)}#${nonce}`;
       body.replaceChildren(iframe);
     } catch (error) {
+      // The extension was updated or reloaded: a new injection takes over.
+      if (isOrphaned()) {
+        hide();
+        return;
+      }
       logger.warn('Could not mount the panel:', error);
       const message = node('p', { class: 'message', role: 'alert' });
       message.textContent = t('panel.attachFailed');
@@ -124,13 +165,24 @@ function createPanelHost(): PanelHost {
   function place(): void {
     const root = document.documentElement;
     root.append(element);
+    // A host an older version left in the page would sit under ours.
+    clearLeftovers();
     // Watch for the page removing our host, or replacing <html> altogether.
     observer.observe(document, { childList: true });
     observer.observe(root, { childList: true });
   }
 
   const observer = new MutationObserver(() => {
-    if (!open || element.isConnected) return;
+    if (!open) return;
+    // Our extension is gone: leave the page to the version that replaced it.
+    if (isOrphaned()) {
+      hide();
+      return;
+    }
+    // An older version's host puts itself back after we removed it, a few
+    // times before it gives up.
+    clearLeftovers();
+    if (element.isConnected) return;
     const now = Date.now();
     remounts = remounts.filter((at) => now - at < 60_000);
     if (remounts.length >= REMOUNT_LIMIT) {
@@ -155,6 +207,9 @@ function createPanelHost(): PanelHost {
 
   close.addEventListener('click', hide);
   makeDraggable(element, bar, frame, close);
+  // Once the extension is updated or reloaded, this host is dead: it goes
+  // as soon as someone could see it (orphan.ts).
+  watchForOrphaning(element, hide);
 
   return {
     open() {

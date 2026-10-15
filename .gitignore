@@ -9,3 +9,6 @@ release/
 .env.*
 *.log
 .DS_Store
+
+# gh CLI 的本地配置：hosts.yml 里有登录令牌
+.gh-config/

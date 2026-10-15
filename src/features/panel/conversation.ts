@@ -40,6 +40,9 @@ export interface StreamRequest {
   messages: ChatMessage[];
   signal: AbortSignal;
   onText: (text: string) => void;
+  onReasoning: (text: string) => void;
+  onRetry: (retry: { seconds: number }) => void;
+  onStreamOptionsRejected: () => void;
 }
 
 export interface ConversationDeps {
@@ -58,6 +61,8 @@ export interface ConversationDeps {
   save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   /** Makes a model the default (`models.choose`). */
   choose: (id: string) => Promise<unknown>;
+  /** The service of a model refused `stream_options` (`models.disableStreamUsage`). */
+  disableStreamUsage: (id: string) => Promise<unknown>;
   dispatch: (event: PanelEvent) => void;
   /** The language to answer in, for `{{language}}`. */
   language: string;
@@ -228,13 +233,24 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
     // One render per frame, however fast the tokens come.
     let answer = '';
+    let reasoning = '';
     let unsent = '';
+    let unsentReasoning = '';
     let scheduled = false;
     let cancel = () => {};
     const flush = () => {
       scheduled = false;
+      if (unsentReasoning !== '' && current()) {
+        deps.dispatch({ type: 'reasoning', text: unsentReasoning });
+      }
       if (unsent !== '' && current()) deps.dispatch({ type: 'text', text: unsent });
       unsent = '';
+      unsentReasoning = '';
+    };
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      cancel = deps.frame(flush);
     };
     const outcome = await deps.stream({
       config,
@@ -243,16 +259,32 @@ export function createConversation(deps: ConversationDeps): Conversation {
       onText: (text) => {
         answer += text;
         unsent += text;
-        if (scheduled) return;
-        scheduled = true;
-        cancel = deps.frame(flush);
+        schedule();
+      },
+      onReasoning: (text) => {
+        reasoning += text;
+        unsentReasoning += text;
+        schedule();
+      },
+      onRetry: ({ seconds }) => {
+        if (current()) deps.dispatch({ type: 'retrying', seconds });
+      },
+      // Remembered for the next request, whoever makes it (§4.5, decision 2).
+      // Should this fail, the next request is refused once more and the
+      // client asks again without the field.
+      onStreamOptionsRejected: () => {
+        deps.disableStreamUsage(config.id).catch(() => undefined);
       },
     });
     if (scheduled) cancel();
     flush();
     if (!current()) return;
 
-    const estimate = { input: estimateMessages(messages), output: estimateTokens(answer) };
+    // Reasoning is output the service bills for, though it is not the answer.
+    const estimate = {
+      input: estimateMessages(messages),
+      output: estimateTokens(reasoning + answer),
+    };
     switch (outcome.kind) {
       case 'done': {
         if (answer === '') return fail({ kind: 'empty-answer' });

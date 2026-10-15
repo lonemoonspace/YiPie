@@ -53,9 +53,14 @@ export function originPattern(baseURL: string): string {
 const STORE_HOSTS = new Set(['chromewebstore.google.com', 'microsoftedge.microsoft.com']);
 
 /**
- * Whether we may inject into a tab showing `url`. Only ordinary web pages
- * qualify; browser pages, other extensions, `file:` and the extension stores
- * do not. Phase 4 refines the list (built-in PDF viewer and the like).
+ * Whether we may inject into a tab showing `url` (docs/development-plan.md
+ * §4.5, decision 5). Only ordinary `http(s)` web pages qualify. Not browser
+ * pages (`chrome://`, `edge://`, `chrome-search://`, `devtools://`), other
+ * extensions (`chrome-extension://`), `view-source:`, `about:`, `data:`,
+ * `blob:`, `file:`; not the extension stores, which no extension may script;
+ * not a PDF, which the browser shows in its own viewer at the file's URL.
+ * Only a path that ends in `.pdf` tells; a PDF without one is injected, and
+ * the panel finds no text in it.
  */
 export function isInjectableURL(url: string | undefined): boolean {
   if (url === undefined) return false;
@@ -70,5 +75,21 @@ export function isInjectableURL(url: string | undefined): boolean {
   if (parsed.hostname === 'chrome.google.com' && parsed.pathname.startsWith('/webstore')) {
     return false;
   }
-  return true;
+  return !/\.pdf$/i.test(parsed.pathname);
+}
+
+/**
+ * Whether `origin` is this machine, where a local model server such as Ollama
+ * runs: `localhost` (and its subdomains), 127.0.0.0/8 or `[::1]`.
+ */
+export function isLocalOrigin(origin: string): boolean {
+  let host: string;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  return (
+    host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127\./.test(host)
+  );
 }

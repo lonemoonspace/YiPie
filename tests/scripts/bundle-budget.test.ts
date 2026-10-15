@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorize, evaluateBundle } from '../../scripts/lib/bundle-budget';
+import { categorize, evaluateBundle, leakedMessages } from '../../scripts/lib/bundle-budget';
 
 describe('categorize', () => {
   it.each([
@@ -51,5 +51,23 @@ describe('evaluateBundle', () => {
 
     expect(report.violations).toHaveLength(2);
     expect(report.violations.join('\n')).toMatch(/background[\s\S]*total/);
+  });
+});
+
+describe('leakedMessages', () => {
+  const keys = ['settings.title', 'panel.ask', 'model.intro'];
+
+  it('finds keys of the pages table in a built script, however they are quoted', () => {
+    const code = 'var a={"settings.title":"\\u8bbe\\u7f6e"};f(\'panel.ask\');g(`model.intro`)';
+    expect(leakedMessages(code, keys)).toEqual(keys);
+  });
+
+  it('finds none in a script with only its own messages', () => {
+    const code = 'var a={"host.unavailable":"x","menu.summarizePage":"y"};t("prompt.builtinName")';
+    expect(leakedMessages(code, keys)).toEqual([]);
+  });
+
+  it('does not take a key that is only part of a longer one', () => {
+    expect(leakedMessages('t("panel.ask.placeholder")', ['panel.ask'])).toEqual([]);
   });
 });

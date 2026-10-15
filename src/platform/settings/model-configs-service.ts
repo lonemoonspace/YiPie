@@ -24,6 +24,11 @@ export interface ModelConfigsService extends ConfigListService<
   current(): Promise<PanelModelsView>;
   /** The panel's menu: makes `id` the default, then answers like `current`. */
   choose(id: string): Promise<PanelModelsView>;
+  /**
+   * The service of `id` refused `stream_options`: stop asking it for usage
+   * (docs/development-plan.md §4.5, decision 2), then answer like `current`.
+   */
+  disableStreamUsage(id: string): Promise<PanelModelsView>;
 }
 
 export interface ModelConfigsDeps {
@@ -65,6 +70,7 @@ export function createModelConfigsService(
     ...configs,
     current: async () => forPanel(await configs.list()),
     choose: async (id) => forPanel(await configs.setDefault(id)),
+    disableStreamUsage: async (id) => forPanel(await configs.update(id, { streamUsage: false })),
   };
 }
 

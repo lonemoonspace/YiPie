@@ -145,6 +145,10 @@ button:disabled {
   align-items: center;
 }
 
+.checkbox .hint {
+  grid-column: 2;
+}
+
 .actions {
   display: flex;
   align-items: center;

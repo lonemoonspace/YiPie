@@ -6,12 +6,14 @@ const INSTALLED = Symbol.for('yipie.page-requests');
 
 /**
  * Answers the background's requests about this page. Installed once per
- * document, however many times the content script is injected.
+ * document and extension runtime, however many times the content script is
+ * injected: after an update or a reload, the new runtime needs its own
+ * listener (panel-host/orphan.ts).
  */
 export function listenForPageRequests(): void {
-  const scope = globalThis as unknown as Record<symbol, boolean | undefined>;
-  if (scope[INSTALLED]) return;
-  scope[INSTALLED] = true;
+  const scope = globalThis as unknown as Record<symbol, unknown>;
+  if (scope[INSTALLED] === browser.runtime) return;
+  scope[INSTALLED] = browser.runtime;
 
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     // Only our own background talks to our content script, but say so anyway.

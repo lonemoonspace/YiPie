@@ -1,0 +1,4 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1760500000-Qm3ZtXbL","provider":"Novita","model":"deepseek/deepseek-r1","object":"chat.completion.chunk","created":1760500000,"error":{"code":429,"message":"Rate limit exceeded: upstream provider is rate limited"},"choices":[{"index":0,"delta":{"content":""},"finish_reason":"error"}]}
+

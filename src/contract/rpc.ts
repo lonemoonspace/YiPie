@@ -9,7 +9,7 @@ import {
   ModelConfigDraft,
   ModelConfigPatch,
 } from './model-config';
-import { MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
+import { ItemId, MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
 import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
 import { RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
@@ -215,6 +215,14 @@ export const RPC_METHODS = {
   // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
   'models.choose': {
     input: SetDefaultInput,
+    output: PanelModelsView,
+    callers: ['panel'],
+  },
+  // The other one: the service of a model refused `stream_options`, so the
+  // panel stops asking it for usage (docs/development-plan.md §4.5, decision
+  // 2; listed as an exception in §8). It can only turn the option off.
+  'models.disableStreamUsage': {
+    input: z.strictObject({ id: ItemId }),
     output: PanelModelsView,
     callers: ['panel'],
   },

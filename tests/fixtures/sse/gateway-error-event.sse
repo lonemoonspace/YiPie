@@ -1,0 +1,5 @@
+data: {"id":"msg_01","object":"chat.completion.chunk","created":1760500000,"model":"claude-sonnet","choices":[{"index":0,"delta":{"role":"assistant","content":"先说"},"finish_reason":null}]}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+

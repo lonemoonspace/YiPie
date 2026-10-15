@@ -164,6 +164,25 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
+/* The model's reasoning, folded above its answer. */
+.reasoning {
+  margin: 0 0 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.reasoning summary {
+  cursor: pointer;
+}
+
+.reasoning p {
+  margin: 6px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Model output. */
 .answer {
   overflow-wrap: anywhere;

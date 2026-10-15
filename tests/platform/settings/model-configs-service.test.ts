@@ -309,6 +309,24 @@ describe('model configurations: what the panel gets', () => {
     const { models } = setup(list(openai));
     await expect(models.choose('gone')).rejects.toBeInstanceOf(NotFoundError);
   });
+
+  it('stops asking one model for usage once its service refused stream_options', async () => {
+    const { models, store } = setup(list(keyed('a', 'sk-a'), keyed('b', 'sk-b')));
+
+    const panel = await models.disableStreamUsage('a');
+
+    expect(panel.current).toMatchObject({ id: 'a', streamUsage: false });
+    const stored = (
+      store.dump()[MODEL_CONFIGS_KEY] as { data: { id: string; streamUsage: boolean }[] }
+    ).data;
+    expect(stored.map(({ id, streamUsage }) => [id, streamUsage])).toEqual([
+      ['a', false],
+      ['b', true],
+    ]);
+    // The settings page shows it, and can turn it on again.
+    expect((await models.update('a', { streamUsage: true })).items[0]?.streamUsage).toBe(true);
+    await expect(models.disableStreamUsage('gone')).rejects.toBeInstanceOf(NotFoundError);
+  });
 });
 
 describe('model configurations: host access', () => {
