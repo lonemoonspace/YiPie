@@ -60,7 +60,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **列表记录**用 `createListRepo`（`platform/storage/list-repo.ts`）：一行通不过 schema、或者 id 与前面的行重复，就放进 `unrecognized`，不参与业务、界面不显示，写回时原样放在已识别的行之后。只有整个值不是数组才算 invalid。
 - **几条记录一起变**（列表与默认项）时，在一个 `queue(...)` 任务里依次调用各自的 `updateUnqueued`。在队列任务之外调用它，写入会交错、丢更新。
 - **删除整条记录**用 repo 的 `removeUnqueued`，只给扩展按设计管理寿命的记录（对话快照：被驱逐、随标签页关闭而删除）；用户自己的数据只由用户的显式操作删除。
-- **对话快照**（`platform/snapshot/store.ts`，`storage.session`）：每段对话一个键 `session:snapshot:<id>`，另有索引 `session:snapshots`，索引条目记下最后存下的那次保存来自哪个面板文档、序号多少。会话键先删后改索引、先改索引后写会话键：索引可以多出读不到的条目（读作「没有保存」），不能漏掉存在的键。快照只放回答与追问，不放正文、Prompt 和任何凭据。
+- **对话快照**（`platform/snapshot/store.ts`，`storage.session`）：每段对话一个键 `session:snapshot:<id>`，另有索引 `session:snapshots`：条目记下这一页的对话在哪个键、最后存下的那次保存来自哪个面板文档、序号多少，另有待删的键（`garbage`）。保存不碰它要替换的东西：先把新 id 记进待删、再写新键，然后一次索引写入把条目指向新键、把旧键和被驱逐的键记为待删，最后才删除。id 不复用。这样任何一步失败或 SW 停下，读到的都是保存前或保存后的完整状态，存储里的每个键都在索引里，下一次保存先清掉待删的键。改这里的写入顺序时，`store.test.ts` 里逐个写入点失败 / 停下的测试必须仍然通过。快照只放回答与追问，不放正文、Prompt 和任何凭据。`storage.session` 随扩展更新清空，这里的格式变了不需要升级函数。
 - **默认项**（`local:selection`）里的 id 找不到时，以列表首项为默认。只在一次变更会让默认项变化时才写它，规则是 `domain/list-mutations.ts` 的 `defaultAfterChange`；设置页删除前的确认也用它预告默认项的去向。
 - 扩展页面想知道存储变了，用 `platform/storage/watch.ts` 的 `onStoredChange` 当信号，值仍经 RPC 读：存储只由后台解读。
 
@@ -74,7 +74,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
 - 面板只拿它要用的东西：读模型用 `models.current`，只有菜单（名称）和正在用的那个模型的配置；`models.list` 带着全部 Key，只给设置页。给面板新增方法时同样收窄输出：不要直接复用存储 schema（`z.looseObject` 会让未知字段穿透），逐字段映射到专门的 `z.object`（如 `PanelModelConfig`），它会丢掉 handler 多塞的字段。
 - 面板唯一能调用的配置变更是 `models.choose`（计划 §8 的例外）；Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
-- 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的 `sender.url` 算出，`domain/page-key.ts`）。不要给它们加页面参数。
+- 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的标签页 URL `sender.tab.url` 算出，`domain/page-key.ts`；`sender.url` 是文档载入时的 URL，不随 `pushState` 变化，不能用来认页面）。不要给它们加页面参数。页面没有重新载入就换成了另一页（SPA），内容脚本关闭面板（`panel-host/host.ts`，Navigation API 的 `currententrychange`），挂载时也核对 `content.hello` 返回的页面键。
 - 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
 - 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
