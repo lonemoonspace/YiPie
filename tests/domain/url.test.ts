@@ -73,6 +73,8 @@ describe('isInjectableURL', () => {
     'https://example.com/article',
     'http://127.0.0.1:8080/page',
     'https://chrome.google.com/search',
+    'https://example.com/papers/pdf-tools.html',
+    'https://example.com/report.pdf.html',
   ])('accepts the web page %s', (url) => {
     expect(isInjectableURL(url)).toBe(true);
   });
@@ -90,6 +92,12 @@ describe('isInjectableURL', () => {
     'https://chromewebstore.google.com/detail/xyz',
     'https://chrome.google.com/webstore/detail/xyz',
     'https://microsoftedge.microsoft.com/addons/detail/xyz',
+    'chrome-search://local-ntp/local-ntp.html',
+    'devtools://devtools/bundled/inspector.html',
+    'blob:https://example.com/0f3c',
+    // The built-in PDF viewer
+    'https://arxiv.org/pdf/2401.00001.pdf',
+    'https://example.com/files/Report.PDF?download=1',
   ])('refuses %s', (url) => {
     expect(isInjectableURL(url)).toBe(false);
   });

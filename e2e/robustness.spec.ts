@@ -1,7 +1,16 @@
 import type { BrowserContext, Frame, Page } from '@playwright/test';
 import { NORMAL_ANSWER, REASONING, type RecordedRequest } from './fake-llm/llm';
 import type { FakeServer } from './fake-llm/server';
-import { expect, session, stored, test, useModel } from './fixtures';
+import {
+  expect,
+  openPanelWith,
+  reloadExtension,
+  session,
+  stored,
+  tabIdOf,
+  test,
+  useModel,
+} from './fixtures';
 
 /**
  * Phase 4 (docs/development-plan.md §4.5): what the panel does on its own when
@@ -18,6 +27,16 @@ async function openOn(
   await page.goto(`${server.origin}/article.html`);
   await openPanel(page);
   return { page, frame: await panelFrame(page) };
+}
+
+/** The hosts in the page, as the page sees them: children of <html> named yipie-panel-*. */
+function hosts(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      [...document.documentElement.children].filter((element) =>
+        element.tagName.toLowerCase().startsWith('yipie-panel-'),
+      ).length,
+  );
 }
 
 const requestsFor = (server: FakeServer, model: string): RecordedRequest[] =>
@@ -107,4 +126,105 @@ test('reasoning shows folded above the answer, and is never saved or copied', as
   await frame.getByRole('button', { name: '复制' }).click();
   await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(NORMAL_ANSWER.join(''));
+});
+
+test('after the extension is updated, triggering again mounts a working panel over no old host', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const { page, frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const tabId = await tabIdOf(serviceWorker, page);
+
+  // The update: the old content script and its host stay in the page, cut off.
+  const worker = await reloadExtension(context, serviceWorker);
+  expect(await hosts(page)).toBe(1);
+
+  const before = server.requests.length;
+  await openPanelWith(worker, tabId);
+
+  await expect.poll(() => hosts(page)).toBe(1);
+  const fresh = await panelFrame(page);
+  await expect(fresh.locator('main')).toHaveAttribute('data-phase', 'done');
+  // A new summary: the new content script reads the page again.
+  expect(server.requests).toHaveLength(before + 1);
+  expect(await hosts(page)).toBe(1);
+});
+
+test('a host cut off by an update removes itself once the page is in view again', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const { page, frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  await reloadExtension(context, serviceWorker);
+  expect(await hosts(page)).toBe(1);
+
+  // What the browser sends when the user comes back to the tab.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+  await expect.poll(() => hosts(page)).toBe(0);
+});
+
+/**
+ * Plants a host as the previous version leaves one: it puts itself back
+ * after it is removed, `tries` times (phase 3 gives up after 5 a minute).
+ */
+function plantLeftoverHost(page: Page, tries: number) {
+  return page.evaluate((limit) => {
+    const ghost = document.createElement('yipie-panel-0ld0ld00');
+    document.documentElement.append(ghost);
+    let count = 0;
+    new MutationObserver(() => {
+      if (ghost.isConnected || count >= limit) return;
+      count += 1;
+      document.documentElement.append(ghost);
+    }).observe(document.documentElement, { childList: true });
+  }, tries);
+}
+
+test('a host the previous version left gives way to the new one, however it fights back', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  await plantLeftoverHost(page, 5);
+
+  await openPanel(page);
+
+  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect.poll(() => hosts(page)).toBe(1);
+});
+
+test('a page that keeps putting such a host back is left alone, and the panel still works', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+  await plantLeftoverHost(page, Number.POSITIVE_INFINITY);
+
+  await openPanel(page);
+
+  await expect((await panelFrame(page)).locator('main')).toHaveAttribute('data-phase', 'done');
+  // We stopped removing it; the page goes on as it likes.
+  expect(await hosts(page)).toBe(2);
 });

@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   chromium,
@@ -43,31 +45,28 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
 
   // Extensions need a persistent context with a fresh profile per test. The
   // `chromium` channel runs the new headless mode, which (unlike the headless
-  // shell) can load extensions.
+  // shell) can load extensions. The profile is in developer mode: only then
+  // does Chromium load an unpacked extension again after `runtime.reload()`,
+  // as the test of what an update leaves in a page needs (§4.5).
   context: async ({}, use) => {
-    const context = await chromium.launchPersistentContext('', {
+    const profile = await mkdtemp(path.join(tmpdir(), 'yipie-e2e-'));
+    await mkdir(path.join(profile, 'Default'));
+    await writeFile(
+      path.join(profile, 'Default', 'Preferences'),
+      JSON.stringify({ extensions: { ui: { developer_mode: true } } }),
+    );
+    const context = await chromium.launchPersistentContext(profile, {
       channel: 'chromium',
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     await use(context);
     await context.close();
+    await rm(profile, { recursive: true, force: true });
   },
 
   serviceWorker: async ({ context }, use) => {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
-    // The worker can be reported before the browser has installed the extension
-    // APIs in it: `chrome` then holds only `csi` and `loadTimes` (about 1 run in
-    // 20). Wait for them, so a test that touches storage first does not race the
-    // worker's startup. A failed evaluate becomes a value, so polling continues.
-    await expect
-      .poll(() =>
-        worker
-          .evaluate(
-            () => typeof (globalThis as unknown as MaybeChromeGlobal).chrome?.storage?.local,
-          )
-          .catch((error: unknown) => String(error)),
-      )
-      .toBe('object');
+    await extensionReady(worker);
     await use(worker);
   },
 
@@ -98,6 +97,48 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
 });
 
 export { expect };
+
+/**
+ * Waits until the browser has installed the extension APIs in `worker`. It
+ * can be reported before that: `chrome` then holds only `csi` and
+ * `loadTimes` (about 1 run in 20). Waiting means a test that touches storage
+ * first does not race the worker's startup. A failed evaluate becomes a
+ * value, so polling continues.
+ */
+async function extensionReady(worker: Worker): Promise<void> {
+  await expect
+    .poll(() =>
+      worker
+        .evaluate(() => typeof (globalThis as unknown as MaybeChromeGlobal).chrome?.storage?.local)
+        .catch((error: unknown) => String(error)),
+    )
+    .toBe('object');
+}
+
+/**
+ * Reloads the extension, as an update does (`runtime.reload()`), and returns
+ * its new service worker. Content scripts already in pages stay, cut off.
+ */
+export async function reloadExtension(context: BrowserContext, worker: Worker): Promise<Worker> {
+  await worker.evaluate(() => {
+    // Answer first: the worker goes away with the extension.
+    setTimeout(() => (globalThis as unknown as ChromeRuntimeGlobal).chrome.runtime.reload(), 10);
+  });
+  let next: Worker | undefined;
+  await expect
+    .poll(() => (next = context.serviceWorkers().find((candidate) => candidate !== worker)))
+    .toBeDefined();
+  await extensionReady(next as Worker);
+  return next as Worker;
+}
+
+/** Does what a click on the toolbar icon does, with the given service worker. */
+export async function openPanelWith(worker: Worker, tabId: number): Promise<void> {
+  await worker.evaluate(
+    (id) => (globalThis as unknown as E2EGlobal).__yipieE2E.openPanel(id),
+    tabId,
+  );
+}
 
 /** The id of the tab showing `page`; the E2E build can read 127.0.0.1 tab URLs. */
 export async function tabIdOf(serviceWorker: Worker, page: Page): Promise<number> {
@@ -215,6 +256,10 @@ export async function session(serviceWorker: Worker): Promise<Record<string, unk
 /** The worker's global before the extension APIs are installed, as far as the fixture checks it. */
 interface MaybeChromeGlobal {
   chrome?: { storage?: { local?: unknown } };
+}
+
+interface ChromeRuntimeGlobal {
+  chrome: { runtime: { reload(): void } };
 }
 
 interface E2EGlobal {
