@@ -3,7 +3,7 @@ import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { PanelModelConfig } from '@/contract/rpc';
 import { t } from '@/domain/i18n';
-import { buildPromptMessages, promptValues } from '@/domain/prompt/messages';
+import { buildPromptMessages, pageContent, promptValues } from '@/domain/prompt/messages';
 import { streamChat } from '@/platform/llm/client';
 import { callRpc } from '@/platform/rpc/client';
 import { createModelSwitcher } from './model-switcher';
@@ -93,7 +93,10 @@ export function usePanel(): PanelControls {
     };
     const outcome = await streamChat({
       config,
-      messages: buildPromptMessages(prompt, promptValues(page, t('prompt.answerLanguage'))),
+      messages: buildPromptMessages(
+        prompt,
+        promptValues(page, pageContent(page), t('prompt.answerLanguage')),
+      ),
       signal: controller.signal,
       onText: (text) => {
         pending += text;

@@ -1,11 +1,14 @@
 /**
- * Error classification, version 0 (docs/development-plan.md §4.2). Phase 4
- * adds rate limits, quota, context length, bad requests and server errors as
- * their own kinds; until then they are `http` with the service's message.
+ * Error classification, version 0 (docs/development-plan.md §4.2), plus
+ * context length, which phase 3 needs to offer a cut-down retry. Phase 4 adds
+ * rate limits, quota, bad requests and server errors as their own kinds;
+ * until then they are `http` with the service's message.
  */
 export type LlmErrorKind =
   /** 401 / 403: the key is missing, wrong or not allowed to use the model. */
   | 'auth'
+  /** The request is longer than the model's context window. */
+  | 'context-length'
   /** The browser blocked the request: no host permission for this origin. */
   | 'unauthorized-access'
   /** The service could not be reached. */
@@ -31,16 +34,32 @@ export interface LlmError {
   detail: string;
 }
 
+/**
+ * How services say a request does not fit the model's context window: OpenAI
+ * and most compatibles (`context_length_exceeded`, "maximum context length is
+ * … tokens"), vLLM and OpenRouter (the same words), gateways in front of
+ * Anthropic models ("prompt is too long"), Gemini ("exceeds the maximum
+ * number of tokens"). A local server such as Ollama may instead cut the
+ * input without a word (docs/development-plan.md appendix D).
+ */
+const CONTEXT_LENGTH =
+  /context[ _-]?length|context window|maximum context|prompt is too long|input is too long|exceeds the maximum number of tokens/i;
+
+/** Statuses a context-length refusal comes with; a 429 that mentions tokens is a rate limit. */
+const CONTEXT_LENGTH_STATUSES = new Set([400, 413, 422]);
+
 export function fromHttpStatus(status: number, body: string): LlmError {
-  return {
-    kind: status === 401 || status === 403 ? 'auth' : 'http',
-    status,
-    detail: describeErrorBody(body),
-  };
+  const kind =
+    status === 401 || status === 403
+      ? 'auth'
+      : CONTEXT_LENGTH_STATUSES.has(status) && CONTEXT_LENGTH.test(body)
+        ? 'context-length'
+        : 'http';
+  return { kind, status, detail: describeErrorBody(body) };
 }
 
 export function fromStreamError(message: string): LlmError {
-  return { kind: 'stream', detail: message };
+  return { kind: CONTEXT_LENGTH.test(message) ? 'context-length' : 'stream', detail: message };
 }
 
 export interface FetchFailure {

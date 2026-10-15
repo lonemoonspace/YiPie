@@ -21,6 +21,13 @@ export const zh = {
   'settings.logLevel.warn': '警告',
   'settings.logLevel.error': '错误',
   'settings.logLevel.silent': '不记录',
+  'settings.trimming': '正文过长时',
+  'settings.trimming.back': '截掉结尾（保留开头）',
+  'settings.trimming.middle': '截掉中间（保留开头和结尾）',
+  'settings.trimming.front': '截掉开头（保留结尾）',
+  'settings.trimming.nothing': '不裁剪（原样发送）',
+  'settings.trimming.hint':
+    '按模型的上下文窗口估算要发送多少正文；模型没有填写上下文窗口时按 {window} tokens 估算。选「不裁剪」时，服务以超长拒绝后，面板里可以裁剪后重试。',
   'settings.saving': '保存中…',
   'settings.saved': '已保存',
   'settings.savedQuarantined': '已保存（无法识别的旧数据已备份）',
@@ -80,7 +87,8 @@ export const zh = {
   'model.extraBody.hint':
     '会合并进请求体，例如 {"temperature": 0.3}；model、messages、stream 不能被覆盖',
   'model.contextWindow': '上下文窗口（tokens）',
-  'model.contextWindow.hint': '可留空；只用于估算，不会发送给服务',
+  'model.contextWindow.hint':
+    '可留空，留空时按 {window} tokens 估算。用来决定发送多少正文，不会发送给服务；本地服务（如 Ollama）请如实填写，否则过长的正文可能被服务静默截断',
   'model.streamUsage': '在流式响应里请求用量（stream_options.include_usage）',
   'model.save': '保存',
   'model.saving': '保存中…',
@@ -163,6 +171,7 @@ export const zh = {
   'panel.emptyPage': '这个页面没有可总结的正文。',
 
   'error.auth': '鉴权失败（HTTP {status}）：请检查 API Key 是否正确、是否有权使用这个模型。',
+  'error.context-length': '请求超出了模型的上下文窗口，服务拒绝处理。',
   'error.unauthorized-access':
     '浏览器拦截了请求：还没有授权访问 {origin}。请在设置页重新保存这个模型，并在弹出的提示中允许。',
   'error.network': '无法连接到 {origin}：请检查服务是否在运行、地址是否正确。',

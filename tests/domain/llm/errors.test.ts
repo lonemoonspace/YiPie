@@ -17,6 +17,34 @@ describe('fromHttpStatus', () => {
     expect(fromHttpStatus(403, '').kind).toBe('auth');
   });
 
+  it.each([
+    [
+      400,
+      '{"error":{"message":"This model\'s maximum context length is 128000 tokens. However, your messages resulted in 130512 tokens.","type":"invalid_request_error","code":"context_length_exceeded"}}',
+    ],
+    [400, '{"error":{"message":"Request too large","code":"context_length_exceeded"}}'],
+    [400, '{"error":{"message":"prompt is too long: 210000 tokens > 200000 maximum"}}'],
+    [
+      400,
+      '{"error":{"message":"The input token count (1200000) exceeds the maximum number of tokens allowed (1048576)."}}',
+    ],
+    [413, 'Input is too long for the context window of this model.'],
+  ])('recognizes a refusal for context length (%i)', (status, body) => {
+    expect(fromHttpStatus(status, body).kind).toBe('context-length');
+  });
+
+  it('does not take a rate limit or another bad request for context length', () => {
+    expect(
+      fromHttpStatus(
+        429,
+        '{"error":{"message":"Rate limit reached on tokens per min; context length"}}',
+      ).kind,
+    ).toBe('http');
+    expect(fromHttpStatus(400, '{"error":{"message":"max_tokens is too large: 99999"}}').kind).toBe(
+      'http',
+    );
+  });
+
   it('keeps every other status as http with the service message', () => {
     expect(fromHttpStatus(404, '{"error":{"message":"model not found"}}')).toEqual({
       kind: 'http',
@@ -52,6 +80,12 @@ describe('fromFetchFailure', () => {
 describe('fromStreamError', () => {
   it('keeps the message', () => {
     expect(fromStreamError('overloaded')).toEqual({ kind: 'stream', detail: 'overloaded' });
+  });
+
+  it('recognizes a context-length failure reported inside the stream', () => {
+    expect(fromStreamError("This model's maximum context length is 8192 tokens.").kind).toBe(
+      'context-length',
+    );
   });
 });
 

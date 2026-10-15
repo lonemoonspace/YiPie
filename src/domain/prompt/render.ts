@@ -38,8 +38,14 @@ export function unknownPlaceholders(template: string): string[] {
 
 /** Whether `template` uses the variable `name`. */
 export function usesVariable(template: string, name: PromptVariable): boolean {
+  return countVariable(template, name) > 0;
+}
+
+/** How many times `template` uses the variable `name`: each use inserts its value again. */
+export function countVariable(template: string, name: PromptVariable): number {
+  let count = 0;
   for (const [, inner] of template.matchAll(PLACEHOLDER)) {
-    if ((inner ?? '').trim() === name) return true;
+    if ((inner ?? '').trim() === name) count += 1;
   }
-  return false;
+  return count;
 }

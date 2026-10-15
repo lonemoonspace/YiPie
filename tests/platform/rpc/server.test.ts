@@ -31,7 +31,7 @@ const attachedInTab1 = (tabId: number, documentId: string) =>
   Promise.resolve(tabId === 1 && documentId === 'DOC');
 
 const view: GeneralSettingsView = {
-  settings: { theme: 'dark', logLevel: 'info' },
+  settings: { theme: 'dark', logLevel: 'info', trimming: 'back' },
   status: 'ok',
   readOnly: false,
   quarantined: false,

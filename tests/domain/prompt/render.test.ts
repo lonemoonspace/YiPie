@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROMPT_VARIABLES,
+  countVariable,
   renderTemplate,
   unknownPlaceholders,
   usesVariable,
@@ -76,5 +77,12 @@ describe('usesVariable', () => {
   it('sees a variable however it is spaced', () => {
     expect(usesVariable('x {{ content }} y', 'content')).toBe(true);
     expect(usesVariable('{{contents}}', 'content')).toBe(false);
+  });
+});
+
+describe('countVariable', () => {
+  it('counts every use, since each one inserts the value again', () => {
+    expect(countVariable('{{content}} and {{ content }}, not {{contents}}', 'content')).toBe(2);
+    expect(countVariable('{{title}}', 'content')).toBe(0);
   });
 });
