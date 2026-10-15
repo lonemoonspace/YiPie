@@ -501,4 +501,44 @@ describe('listModels', () => {
     });
     expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'timeout' } });
   });
+
+  it('reports a timeout when the body never ends, not a missing list', async () => {
+    const stalled = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            // Part of a list, then nothing more: a body cut here parses as no list.
+            controller.enqueue(new TextEncoder().encode('{"data":[{"id":"gpt-'));
+          },
+        }),
+        { status: 200 },
+      );
+
+    const outcome = await listModels({ config, timeout: 5, fetch: fakeFetch(stalled) });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'timeout' } });
+  });
+
+  it('reports a cancel during the body as cancelled', async () => {
+    const caller = new AbortController();
+    const stalled = () => {
+      setTimeout(() => caller.abort(), 5);
+      return new Response(new ReadableStream<Uint8Array>(), { status: 200 });
+    };
+
+    const outcome = await listModels({ config, signal: caller.signal, fetch: fakeFetch(stalled) });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'aborted' } });
+  });
+
+  it('sends nothing when the signal is already cancelled', async () => {
+    const caller = new AbortController();
+    caller.abort();
+    const fetch = answers(json({ data: [{ id: 'gpt-test' }] }));
+
+    const outcome = await listModels({ config, signal: caller.signal, fetch });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'aborted' } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

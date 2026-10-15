@@ -272,14 +272,38 @@ export async function listModels(options: ModelListOptions): Promise<ModelListOu
     kind: 'error',
     error: { ...error, detail: redact(error.detail, secrets) },
   });
+  // Cancelled before it began (the test was started again, or its page
+  // left): no request at all. A listener added now would never fire.
+  if (options.signal?.aborted === true) {
+    return clean(
+      fromFetchFailure({ aborted: true, timedOut: false, hasOriginPermission: null, message: '' }),
+    );
+  }
   const controller = new AbortController();
-  const stop = () => controller.abort();
+  let cancelled = false;
+  const stop = () => {
+    cancelled = true;
+    controller.abort();
+  };
   options.signal?.addEventListener('abort', stop, { once: true });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, options.timeout ?? DEFAULT_MODEL_LIST_TIMEOUT);
+  // Ended by the timeout or the caller, during the request or its body.
+  const ended = () =>
+    clean(
+      fromFetchFailure({
+        aborted: cancelled,
+        timedOut,
+        hasOriginPermission: null,
+        message: '',
+      }),
+    );
+  const abortedWhile = new Promise<null>((resolve) =>
+    controller.signal.addEventListener('abort', () => resolve(null), { once: true }),
+  );
 
   try {
     let response: Response;
@@ -292,7 +316,7 @@ export async function listModels(options: ModelListOptions): Promise<ModelListOu
         cache: 'no-store',
       });
     } catch (error) {
-      const aborted = options.signal?.aborted === true;
+      const aborted = cancelled;
       const hasOriginPermission =
         aborted || timedOut
           ? null
@@ -307,10 +331,14 @@ export async function listModels(options: ModelListOptions): Promise<ModelListOu
       );
     }
     // Some lists are large (OpenRouter's runs to megabytes); an error is not.
-    const body = await readLimited(
-      response,
-      response.ok ? MODEL_LIST_BODY_LIMIT : ERROR_BODY_LIMIT,
-    );
+    // `readLimited` keeps what arrived when the body breaks off, so a body cut
+    // short by the timeout must not be read as a list, or as no list: the
+    // race also covers a body that ignores the abort.
+    const body = await Promise.race([
+      readLimited(response, response.ok ? MODEL_LIST_BODY_LIMIT : ERROR_BODY_LIMIT),
+      abortedWhile,
+    ]);
+    if (body === null || controller.signal.aborted) return ended();
     if (isModelListUnsupported(response.status)) {
       return { kind: 'unsupported', status: response.status };
     }
