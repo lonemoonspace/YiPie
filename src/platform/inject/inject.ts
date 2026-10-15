@@ -29,10 +29,10 @@ const browserDeps: InjectDeps = {
 };
 
 /**
- * Opens the panel in `tab`: what every trigger does (toolbar icon, shortcut;
- * the context menu from phase 3). The gesture granted `activeTab`, which is
- * what lets us inject; nothing runs in a page the user did not ask about
- * (D3 in docs/development-plan.md).
+ * Opens the panel in `tab`: what every trigger does (toolbar icon, shortcut,
+ * context menu). The gesture granted `activeTab`, which is what lets us
+ * inject; nothing runs in a page the user did not ask about (D3 in
+ * docs/development-plan.md).
  */
 export async function openPanelInTab(tab: TabLike, deps: InjectDeps = browserDeps): Promise<void> {
   const tabId = tab.id;

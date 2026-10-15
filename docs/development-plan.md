@@ -763,7 +763,7 @@ docs/            development-plan.md（本文）
 | `permissions: storage`                                                | 设置、模型、Prompt、快照                                          | 什么都存不了                       | 0        |
 | `permissions: activeTab`                                              | 用户触发时，临时获得当前标签页的访问权                            | 只能改用全站权限注入               | 1        |
 | `permissions: scripting`                                              | 用 `executeScript` 按需注入；用 `insertCSS` 注入高亮样式          | 面板无法注入                       | 1        |
-| `permissions: contextMenus`                                           | 右键「总结此页 / 总结选中内容」                                   | 只能通过图标或快捷键触发           | 3        |
+| `permissions: contextMenus`                                           | 右键菜单「用一瞥总结此页」（阶段 3）；「总结选中内容」在阶段 5 加入；菜单项在安装或更新时创建 | 只能通过图标或快捷键触发           | 3        |
 | `optional_host_permissions: https://*/*, http://*/*`                  | 按 origin 运行时申请模型服务的访问权，只申请用户配置过的 origin    | 只有本身允许浏览器跨域的服务可用   | 1        |
 | `web_accessible_resources: panel.html`（`use_dynamic_url: true`）     | 在页面里嵌入面板 iframe                                           | 面板无法出现在页面中               | 1        |
 | `action`（不设 `default_popup`）                                      | 点图标触发 `action.onClicked`，在页面里打开面板                   | 少了主要的触发方式                 | 1        |

@@ -220,5 +220,6 @@ export const zh = {
   'error.detail': '服务返回：{detail}',
 
   'host.unavailable': '此页面无法总结',
+  'menu.summarizePage': '用一瞥总结此页',
   'host.title': '一瞥：总结此页',
 } as const satisfies Record<string, string>;

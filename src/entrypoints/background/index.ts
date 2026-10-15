@@ -17,6 +17,7 @@ import { onTabClosed } from '@/platform/snapshot/tab-closed';
 import { ensureLocalStorageIsolated, getExtensionStore, writeQueue } from '@/platform/storage';
 import { onToolbarClick } from '@/platform/triggers/action';
 import { onShortcut } from '@/platform/triggers/commands';
+import { onContextMenu } from '@/platform/triggers/context-menu';
 
 const logger = createLogger('background');
 
@@ -117,6 +118,7 @@ export default defineBackground(() => {
   };
   onToolbarClick(open);
   onShortcut(open);
+  onContextMenu(open);
 
   // A closed tab's conversations and panel entry go with it (§4.4). This
   // wakes the worker on every tab close: the plan asks for deletion right
