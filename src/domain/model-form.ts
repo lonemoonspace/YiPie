@@ -1,4 +1,8 @@
-import { isForbiddenHeaderName, type ModelConfig } from '@/contract/model-config';
+import {
+  RESERVED_BODY_KEYS,
+  isForbiddenHeaderName,
+  type ModelConfig,
+} from '@/contract/model-config';
 import { t } from '@/domain/i18n';
 import { normalizeBaseURL } from '@/domain/url';
 
@@ -82,6 +86,9 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
   const extraBody = parseObject(fields.extraBody);
   if (extraBody === null) {
     errors.extraBody = t('model.error.json', { field: t('model.extraBody') });
+  } else {
+    const reserved = Object.keys(extraBody).find((key) => RESERVED_BODY_KEYS.includes(key));
+    if (reserved !== undefined) errors.extraBody = t('model.error.reserved', { name: reserved });
   }
 
   const contextWindow = parseContextWindow(fields.contextWindow);

@@ -80,7 +80,7 @@ export function PanelApp() {
       ) : null}
 
       {located !== null ? (
-        <p className="note" role="status" data-located={located.found ? 'found' : 'missing'}>
+        <p className="note" aria-live="polite" data-located={located.found ? 'found' : 'missing'}>
           {located.message}
         </p>
       ) : null}

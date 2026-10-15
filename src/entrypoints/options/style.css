@@ -279,3 +279,70 @@ button.secondary.danger {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.warning.flagged {
+  color: var(--color-danger);
+}
+
+/* Common services, to fill in the Base URL. */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 14px;
+}
+
+button.chip {
+  padding: 1px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.connection-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+
+.test-result {
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.test-result button {
+  margin-left: 8px;
+}
+
+.variables {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.variables div {
+  display: flex;
+  gap: 10px;
+}
+
+.variables dt {
+  min-width: 110px;
+}
+
+.variables dd {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.advanced h4 {
+  margin: 10px 0 0;
+  font-weight: normal;
+}

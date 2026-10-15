@@ -10,6 +10,9 @@ export interface RecordedRequest {
   aborted: boolean;
 }
 
+/** What `GET /v1/models` lists: a few of the scenarios. */
+export const MODEL_IDS = ['scenario:normal', 'scenario:chat', 'scenario:cite'];
+
 /** The answer of `scenario:normal`, in the pieces it is streamed in. */
 export const NORMAL_ANSWER = [
   '## 概要\n\n',

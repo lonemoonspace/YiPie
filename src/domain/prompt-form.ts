@@ -1,7 +1,13 @@
 import type { PromptConfig } from '@/contract/prompt-config';
 import { t } from '@/domain/i18n';
 import { SUMMARY_SYSTEM_TEMPLATE, SUMMARY_USER_TEMPLATE } from '@/domain/prompt/default-prompt';
-import { unknownPlaceholders, usesVariable } from '@/domain/prompt/render';
+import {
+  PROMPT_VARIABLES,
+  renderTemplate,
+  unknownPlaceholders,
+  usesVariable,
+  type PromptValues,
+} from '@/domain/prompt/render';
 
 /** The prompt form as the user typed it. */
 export interface PromptFormFields {
@@ -41,23 +47,51 @@ export function parsePromptForm(fields: PromptFormFields): PromptFormResult {
 }
 
 /**
- * Unknown placeholders are sent as written (docs/development-plan.md §4.3,
- * decision 3) and the editor points them out; so does a pair of templates
- * that never sends the page.
+ * Unknown placeholders, per template: sent as written (docs/development-plan.md
+ * §4.3, decision 3), and marked in red by the editor (§4.6) without blocking
+ * a save.
  */
-export function promptFormWarnings(fields: PromptFormFields): PromptFormWarnings {
-  const warnings: PromptFormWarnings = {};
+export function unknownVariableFlags(fields: PromptFormFields): PromptFormWarnings {
+  const flags: PromptFormWarnings = {};
   for (const field of ['system', 'user'] as const) {
     const unknown = unknownPlaceholders(fields[field]);
     if (unknown.length > 0) {
-      warnings[field] = [t('prompt.warning.unknown', { placeholders: unknown.join('、') })];
+      flags[field] = [t('prompt.warning.unknown', { placeholders: unknown.join('、') })];
     }
   }
-  if (!usesVariable(fields.system, 'content') && !usesVariable(fields.user, 'content')) {
-    warnings.user = [
-      ...(warnings.user ?? []),
-      t('prompt.warning.noContent', { placeholder: '{{content}}' }),
-    ];
-  }
-  return warnings;
+  return flags;
+}
+
+/** A pair of templates that never sends the page is worth a word too. */
+export function promptFormWarnings(fields: PromptFormFields): PromptFormWarnings {
+  return !usesVariable(fields.system, 'content') && !usesVariable(fields.user, 'content')
+    ? { user: [t('prompt.warning.noContent', { placeholder: '{{content}}' })] }
+    : {};
+}
+
+/** The variables a template may use, each with what it stands for, for the editor's hints. */
+export function variableHints(): { placeholder: string; meaning: string }[] {
+  return PROMPT_VARIABLES.map((name) => ({
+    placeholder: `{{${name}}}`,
+    meaning: t(`prompt.variable.${name}`),
+  }));
+}
+
+/**
+ * The templates as a model would get them for a made-up page, for the
+ * editor's preview: every variable filled with a sample, unknown
+ * placeholders left as written.
+ */
+export function previewPrompt(fields: PromptFormFields): { system: string; user: string } {
+  const sample: PromptValues = {
+    title: t('prompt.sample.title'),
+    url: 'https://example.com/notes/yipie',
+    content: t('prompt.sample.content'),
+    selection: t('prompt.sample.selection'),
+    language: t('prompt.answerLanguage'),
+  };
+  return {
+    system: renderTemplate(fields.system, sample),
+    user: renderTemplate(fields.user, sample),
+  };
 }

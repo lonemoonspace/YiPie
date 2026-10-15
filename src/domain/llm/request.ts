@@ -1,4 +1,4 @@
-import type { ModelConfig } from '@/contract/model-config';
+import { RESERVED_BODY_KEYS, type ModelConfig } from '@/contract/model-config';
 import { chatCompletionsURL } from '@/domain/url';
 
 export interface ChatMessage {
@@ -11,9 +11,6 @@ export interface ChatRequest {
   headers: Record<string, string>;
   body: Record<string, unknown>;
 }
-
-/** Body fields the protocol needs; `extraBody` cannot override them. */
-export const RESERVED_BODY_KEYS: readonly string[] = ['model', 'messages', 'stream'];
 
 /**
  * Builds a streaming chat completions request (docs/development-plan.md §4.2,

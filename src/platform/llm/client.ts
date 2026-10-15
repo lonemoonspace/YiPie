@@ -9,6 +9,7 @@ import {
   redact,
   type LlmError,
 } from '@/domain/llm/errors';
+import { buildModelsRequest, isModelListUnsupported, parseModelList } from '@/domain/llm/models';
 import { buildChatRequest, requestSecrets, type ChatMessage } from '@/domain/llm/request';
 import {
   createThinkSplitter,
@@ -236,6 +237,91 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
   } finally {
     clearTimeout(timer);
     signal.removeEventListener('abort', stop);
+  }
+}
+
+export type ModelListOutcome =
+  /** The service listed its models. */
+  | { kind: 'listed'; models: string[] }
+  /** The service has no model list (or answered with something else). */
+  | { kind: 'unsupported'; status: number }
+  | { kind: 'error'; error: LlmError };
+
+export interface ModelListOptions {
+  config: Pick<ModelConfig, 'baseURL' | 'apiKey' | 'headers'>;
+  signal?: AbortSignal;
+  /** How long the answer may take (ms). */
+  timeout?: number;
+  fetch?: typeof fetch;
+  hasAccess?: (baseURL: string) => Promise<boolean>;
+}
+
+export const DEFAULT_MODEL_LIST_TIMEOUT = 15_000;
+const MODEL_LIST_BODY_LIMIT = 16 * 1024 * 1024;
+
+/**
+ * Reads the service's model list (`GET {baseURL}/models`): the settings
+ * page's connection test, which spends no tokens (docs/development-plan.md
+ * §4.6). Never throws. Error details are redacted like a chat request's.
+ */
+export async function listModels(options: ModelListOptions): Promise<ModelListOutcome> {
+  const { config } = options;
+  const request = buildModelsRequest(config);
+  const secrets = requestSecrets(config);
+  const clean = (error: LlmError): ModelListOutcome => ({
+    kind: 'error',
+    error: { ...error, detail: redact(error.detail, secrets) },
+  });
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  options.signal?.addEventListener('abort', stop, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, options.timeout ?? DEFAULT_MODEL_LIST_TIMEOUT);
+
+  try {
+    let response: Response;
+    try {
+      response = await (options.fetch ?? fetch)(request.url, {
+        headers: request.headers,
+        signal: controller.signal,
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        cache: 'no-store',
+      });
+    } catch (error) {
+      const aborted = options.signal?.aborted === true;
+      const hasOriginPermission =
+        aborted || timedOut
+          ? null
+          : await (options.hasAccess ?? hasOriginAccess)(config.baseURL).catch(() => null);
+      return clean(
+        fromFetchFailure({
+          aborted,
+          timedOut,
+          hasOriginPermission,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+    // Some lists are large (OpenRouter's runs to megabytes); an error is not.
+    const body = await readLimited(
+      response,
+      response.ok ? MODEL_LIST_BODY_LIMIT : ERROR_BODY_LIMIT,
+    );
+    if (isModelListUnsupported(response.status)) {
+      return { kind: 'unsupported', status: response.status };
+    }
+    if (!response.ok) return clean(fromHttpStatus(response.status, body));
+    const models = parseModelList(body);
+    return models === null
+      ? { kind: 'unsupported', status: response.status }
+      : { kind: 'listed', models };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', stop);
   }
 }
 

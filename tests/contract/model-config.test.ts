@@ -97,6 +97,25 @@ describe('headers the browser will not send', () => {
   });
 });
 
+describe('extra body fields', () => {
+  it('may not replace what the request sets itself, in a draft or a patch', () => {
+    const draft = ModelConfigDraft.safeParse({
+      baseURL: 'http://x.test',
+      model: 'm',
+      extraBody: { temperature: 0.2, messages: [] },
+    });
+    expect(draft.success).toBe(false);
+    expect(draft.error?.issues).toMatchObject([{ path: ['extraBody', 'messages'] }]);
+    expect(ModelConfigPatch.safeParse({ extraBody: { model: 'x' } }).success).toBe(false);
+    expect(ModelConfigPatch.safeParse({ extraBody: { max_tokens: 100 } }).success).toBe(true);
+  });
+
+  it('are still read from storage; the request leaves a reserved one out', () => {
+    const stored = { id: 'a', baseURL: 'http://x.test', model: 'm', extraBody: { stream: false } };
+    expect(ModelConfig.safeParse(stored).success).toBe(true);
+  });
+});
+
 describe('displayName', () => {
   it('falls back to the model name', () => {
     expect(displayName({ name: '  ', model: 'gpt-4o-mini' })).toBe('gpt-4o-mini');

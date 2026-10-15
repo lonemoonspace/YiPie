@@ -368,3 +368,77 @@ test('backups: one taken by a save elsewhere on the page shows up without a relo
   await expect(backups.getByRole('listitem')).toHaveCount(1);
   await expect(backups.getByRole('listitem')).toContainText('通用设置');
 });
+
+test('models: a common service fills the Base URL, and reserved body fields are refused', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const form = section(page, '模型').getByRole('form', { name: '添加模型' });
+
+  await form.getByRole('button', { name: '填入 DeepSeek 的地址' }).click();
+  await expect(form.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/v1');
+
+  await form.getByLabel('模型名').fill('deepseek-chat');
+  await form.getByText('高级', { exact: true }).click();
+  await form.getByLabel('额外请求体字段（JSON 对象）').fill('{"stream": false}');
+  await form.getByRole('button', { name: '保存' }).click();
+
+  await expect(form.getByText('请求自己会设置 stream，额外请求体字段不能覆盖它')).toBeVisible();
+  expect(await stored(serviceWorker, 'model-configs')).toBeUndefined();
+});
+
+test('models: test connection reads the model list, or offers one real request', async ({
+  context,
+  extensionId,
+  server,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const form = section(page, '模型').getByRole('form', { name: '添加模型' });
+  const result = form.locator('.test-result');
+
+  await form.getByLabel('Base URL').fill(`${server.origin}/v1`);
+  await form.getByLabel('模型名').fill('scenario:normal');
+  await form.getByRole('button', { name: '测试连接' }).click();
+  await expect(result).toHaveText(/连接成功：服务列出了 3 个模型。其中有「scenario:normal」。/);
+
+  await form.getByLabel('模型名').fill('scenario:typo');
+  await form.getByRole('button', { name: '测试连接' }).click();
+  await expect(result).toContainText('列表里没有「scenario:typo」');
+
+  // A service without a model list: nothing is sent until the user asks.
+  await form.getByLabel('Base URL').fill(`${server.origin}/no-models/v1`);
+  await form.getByLabel('模型名').fill('scenario:normal');
+  const before = server.requests.length;
+  await form.getByRole('button', { name: '测试连接' }).click();
+  await expect(result).toContainText('服务没有提供模型列表');
+  expect(server.requests).toHaveLength(before);
+
+  await result.getByRole('button', { name: '发送测试请求' }).click();
+  await expect(result).toHaveText('连接成功：模型回答了。');
+  expect(server.requests.at(-1)?.path).toBe('/no-models/v1/chat/completions');
+});
+
+test('prompts: unknown variables are flagged in red, and the preview renders a sample page', async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const prompts = section(page, 'Prompt');
+  await prompts.getByRole('button', { name: '添加 Prompt' }).click();
+  const form = prompts.getByRole('form', { name: '添加 Prompt' });
+
+  await form.getByLabel('用户模板').fill('{{title}}：{{content}} {{foo}}');
+  await expect(form.locator('.warning.flagged')).toHaveText('未知变量 {{foo}} 会原样发送给模型。');
+
+  await form.getByText('预览（用一个示例页面渲染）').click();
+  await expect(form.locator('pre').last()).toHaveText(
+    '示例：一瞥的设计笔记：（这里是网页正文） {{foo}}',
+  );
+  await form.getByText('可用的变量').click();
+  await expect(form.getByText('{{selection}}', { exact: true })).toBeVisible();
+});

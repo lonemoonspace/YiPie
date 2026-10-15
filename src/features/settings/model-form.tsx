@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { ModelConfig } from '@/contract/model-config';
+import { BASE_URL_PRESETS } from '@/domain/base-url-presets';
 import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
 import { t } from '@/domain/i18n';
 import {
@@ -11,6 +12,7 @@ import {
   type ParsedModelForm,
 } from '@/domain/model-form';
 import { requestOriginAccess } from '@/platform/permissions/origin-access';
+import { ConnectionTest } from './connection-test';
 import { TextField } from './fields';
 
 interface ModelFormProps {
@@ -73,6 +75,21 @@ export function ModelForm(props: ModelFormProps) {
         inputMode="url"
         required
       />
+      <div className="presets" role="group" aria-label={t('model.presets')}>
+        <span className="hint">{t('model.presets')}</span>
+        {BASE_URL_PRESETS.map((preset) => (
+          <button
+            key={preset.name}
+            type="button"
+            className="chip"
+            title={preset.baseURL}
+            aria-label={t('model.presets.fill', { name: preset.name })}
+            onClick={() => set('baseURL', preset.baseURL)}
+          >
+            {preset.name}
+          </button>
+        ))}
+      </div>
       <TextField
         label={t('model.apiKey')}
         hint={t('model.apiKey.hint')}
@@ -139,6 +156,14 @@ export function ModelForm(props: ModelFormProps) {
           </p>
         </div>
       </details>
+
+      <ConnectionTest
+        check={() => {
+          const parsed = parseModelForm(fields);
+          setErrors(parsed.ok ? {} : parsed.errors);
+          return parsed.ok ? parsed.value : null;
+        }}
+      />
 
       <div className="actions">
         <button type="submit" disabled={props.readOnly || props.saving}>

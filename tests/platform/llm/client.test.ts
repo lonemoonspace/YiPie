@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ModelConfig } from '@/contract/model-config';
-import { streamChat, type ChatOptions } from '@/platform/llm/client';
+import { listModels, streamChat, type ChatOptions } from '@/platform/llm/client';
 
 const config = ModelConfig.parse({
   id: 'm',
@@ -439,5 +439,66 @@ describe('streamChat: a service that refuses stream_options (§4.5, decision 2)'
     expect(result.outcome).toMatchObject({ kind: 'error', error: { kind: 'bad-request' } });
     expect(fetch).toHaveBeenCalledOnce();
     expect(rejected).not.toHaveBeenCalled();
+  });
+});
+
+describe('listModels', () => {
+  const json =
+    (body: unknown, status = 200) =>
+    () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+  it('reads the list with the key, from {baseURL}/models', async () => {
+    const fetch = answers(json({ data: [{ id: 'gpt-test' }, { id: 'other' }] }));
+
+    const outcome = await listModels({ config, fetch, hasAccess: () => Promise.resolve(true) });
+
+    expect(outcome).toEqual({ kind: 'listed', models: ['gpt-test', 'other'] });
+    expect(fetch.mock.calls[0]?.[0]).toBe('http://localhost:11434/v1/models');
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: `Bearer ${config.apiKey}`,
+    });
+  });
+
+  it('says the service has no list on 404, or when the answer is no list', async () => {
+    expect(await listModels({ config, fetch: answers(json({ error: 'x' }, 404)) })).toEqual({
+      kind: 'unsupported',
+      status: 404,
+    });
+    expect(
+      await listModels({ config, fetch: answers(() => new Response('<html>hi</html>')) }),
+    ).toEqual({ kind: 'unsupported', status: 200 });
+  });
+
+  it('classifies a refusal, with the key taken out of what the service said', async () => {
+    const outcome = await listModels({
+      config,
+      fetch: answers(json({ error: { message: `bad key ${config.apiKey}` } }, 401)),
+    });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'auth', status: 401 } });
+    expect(JSON.stringify(outcome)).not.toContain(config.apiKey);
+  });
+
+  it('tells a blocked request from a network failure by the host permission', async () => {
+    const failing = () => answers(() => Promise.reject(new TypeError('Failed to fetch')));
+    expect(
+      await listModels({ config, fetch: failing(), hasAccess: () => Promise.resolve(false) }),
+    ).toMatchObject({ kind: 'error', error: { kind: 'unauthorized-access' } });
+    expect(
+      await listModels({ config, fetch: failing(), hasAccess: () => Promise.resolve(true) }),
+    ).toMatchObject({ kind: 'error', error: { kind: 'network' } });
+  });
+
+  it('gives up after the timeout', async () => {
+    const outcome = await listModels({
+      config,
+      timeout: 5,
+      fetch: fakeFetch(() => new Promise<Response>(() => {})),
+    });
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'timeout' } });
   });
 });

@@ -32,6 +32,12 @@ export function chatCompletionsURL(baseURL: string): string {
   return `${url.origin}${basePath(url.pathname)}/chat/completions${url.search}`;
 }
 
+/** `GET {baseURL}/models`: the model list, which the settings page's connection test reads. */
+export function modelsURL(baseURL: string): string {
+  const url = new URL(baseURL);
+  return `${url.origin}${basePath(url.pathname)}/models${url.search}`;
+}
+
 function basePath(pathname: string): string {
   return pathname
     .replace(/\/+$/, '')
