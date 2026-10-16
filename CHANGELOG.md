@@ -1,8 +1,12 @@
 # 更新日志
 
-格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。尚未发布任何版本。
+格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-10-16
+
+首个版本，以 GitHub Release 附件分发。
 
 ### 阶段 6：硬化与分发
 
