@@ -273,7 +273,7 @@ export const pages = {
   'panel.copy.title': 'Copy this answer (Markdown, with quotes written as “quote”)',
   'panel.copied': 'Copied',
   'panel.copyFailed': 'Copy failed',
-  'panel.copyPage': 'Copy page text',
+  'panel.copyPage': 'Copy text',
   'panel.copyPage.title': 'Copy the text the extension read from this page',
   'panel.stoppedMark': 'Stopped',
   'panel.usage.input': 'in {count}',

@@ -1,6 +1,6 @@
 # 一瞥 YiPie · 开发计划
 
-> **版本**：v4.6（2026-10-15），历次改动见附录 F
+> **版本**：v4.8（2026-10-16），历次改动见附录 F
 > **状态**：阶段 0、1、2、3 已完成（阶段 3 的手工冒烟待你跑）。阶段 4（兼容与健壮性）与阶段 5（阅读体验与设置完整化）的自动化验收全部通过（§4.5、§4.6），待你用 3–4 个真实服务各总结一次，并跑附录 H 中阶段 1、3、4、5 的手工冒烟（含阶段 1 留下的 Edge 与当前 Chrome 稳定版复核）。之后是阶段 6
 > **权威性**：本文档是路线图的唯一权威来源。`README.md` 的路线图表格、`CHANGELOG.md` 的条目都是摘要，与本文冲突时以本文为准。
 > **维护规则**：调整阶段划分、交付物、验收标准、§1.3 的技术决定或 §11 的已决事项，必须在本文内改，并在附录 F 记一行；不要只改 README。
@@ -16,7 +16,7 @@
 | 数据流向 | 浏览器 →（用户自己的）模型服务。没有中间服务器                                                                                                                                               |
 | 凭据     | API Key 只存在 `browser.storage.local`，且该存储区只对扩展自己的页面开放（内容脚本读不到）；不入日志、不入快照、导出时默认剔除                                                                |
 | 界面语言 | 中文与英文，设置里可切换                                                                                                                                                                     |
-| 分发     | 只发 GitHub Release 附件（zip），不上架应用商店                                                                                                                                              |
+| 分发     | GitHub Release 附件（zip）与 Chrome 应用商店，两处是同一个 zip；商店由你提交（v4.8 起）                                                                                                       |
 | 许可证   | MIT，公开仓库                                                                                                                                                                                |
 | 遥测     | 无。不埋点、不上报崩溃；错误只在面板与设置页可见                                                                                                                                             |
 | 成本     | 零服务端成本；token 由用户自付                                                                                                                                                               |
@@ -39,7 +39,7 @@
 - popup、浏览器侧边栏、多开面板：界面只有页面内的浮动面板（D4）
 - 常驻或全站的站点权限，以及依赖它们的「换页自动总结」「新页面自动打开面板」（D3）
 - Firefox、Safari
-- 应用商店上架
+- Edge 加载项商店（Edge 用户可以从 Chrome 应用商店安装）
 - 从其他扩展导入配置
 - 移动端 / 桌面端 / 浏览器以外的形态
 
@@ -614,7 +614,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 - **无障碍**：键盘走查 + 对比度检查 + `jsx-a11y` 全绿
 - **权限与体积终审**：逐条复核附录 C 与 §9，每一条都要能回答「去掉它会怎样」
 - **发版流程**：见下方固定步骤，写进 `AGENTS.md`
-- **分发**：只发 GitHub Release 附件
+- **分发**：GitHub Release 附件；同一个 zip 上架 Chrome 应用商店（v4.8 起，商店需要的图标、隐私政策 `PRIVACY.md` 在仓库里，商店文案与截图在项目文件 `store/`）
 
 **发版固定步骤**
 
@@ -630,6 +630,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
    - 不含 source map、`.env*`、E2E 钩子与测试构建才有的 host 权限。
 7. 跑一遍附录 H 的手工冒烟清单（Chrome 与 Edge 各一次）
 8. 提交、打 tag `v<version>`、推送，用 `gh release create` 发 Release，说明取自 `CHANGELOG.md`
+9. Chrome 应用商店：在开发者后台上传同一个 zip 并提交审核（你来做）；界面有变化时重拍截图
 
 **验收标准**
 
@@ -821,7 +822,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 | 请求客户端（D2）     | 自写（你没有偏好，按建议）                                                               |
 | 阶段 0               | 原型代码未保留，在本仓库重做                                                             |
 | 仓库与许可证         | 公开仓库，MIT                                                                            |
-| 分发                 | 只发 GitHub Release                                                                      |
+| 分发                 | GitHub Release 与 Chrome 应用商店（2026-10-16 改，原为只发 Release）                     |
 | 浏览器               | 只做 Chrome / Edge                                                                       |
 | 界面语言             | 中文 + 英文，设置里可切换                                                                |
 
@@ -916,6 +917,7 @@ public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名
 | `action`（不设 `default_popup`）                                      | 点图标触发 `action.onClicked`，在页面里打开面板                   | 少了主要的触发方式                 | 1        |
 | `commands`（manifest 键，不是权限）                                   | 快捷键触发，同时会授予 activeTab；默认 `Alt+Shift+Y`，可在 `chrome://extensions/shortcuts` 改 | 少一种触发方式                     | 1        |
 | `content_security_policy.extension_pages`                             | 纵深防御（§8）                                                    | 渲染管线出漏洞时没有第二道防线     | 1        |
+| `icons`（manifest 键，不是权限）：16 / 32 / 48 / 128 px，WXT 从 `public/icon/<尺寸>.png` 生成 | 工具栏、扩展管理页与商店里的图标；Chrome 应用商店要求包里有 128 px 的那张。`check:manifest` 核对每张都在构建里、像素与声明的尺寸一致 | 工具栏显示灰色字母；商店拒收     | 6        |
 | `default_locale: zh_CN`（manifest 键，不是权限）与 `_locales/{zh_CN,en}` | 名称、描述、图标标题与快捷键说明跟随浏览器语言；设置里的界面语言管不到浏览器自己显示的这几处。`check:manifest` 核对每个 `__MSG_*__` 在各语言里都有 | 浏览器里只能显示一种语言的名称     | 6        |
 
 **明确不要的**：
@@ -928,7 +930,7 @@ public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名
 - `externally_connectable`；
 - `unlimitedStorage`。
 
-**阶段 6 终审**（2026-10-15）：上表每一行都能回答「去掉它会怎样」，没有可以去掉的项。逐条复核：`storage` 存一切数据；`activeTab` 是唯一的页面访问来源（没有 `host_permissions`）；`scripting` 用于按需注入与高亮样式，`tabs` 不需要（标签页 URL 由 activeTab 授予后从 `sender.tab` 读）；`contextMenus` 两个菜单项；`optional_host_permissions` 只按用户配置的 origin 申请、无用即回收（§4.3）；`panel.html` 是唯一的 web 可访问资源并用动态 URL；`commands` 一条；CSP 不变；`default_locale` 与 `_locales` 只是文字。「明确不要的」一项都没有出现，`check:manifest` 与 `verify:release` 都在 CI 里看守。
+**阶段 6 终审**（2026-10-15）：上表每一行都能回答「去掉它会怎样」，没有可以去掉的项。逐条复核：`storage` 存一切数据；`activeTab` 是唯一的页面访问来源（没有 `host_permissions`）；`scripting` 用于按需注入与高亮样式，`tabs` 不需要（标签页 URL 由 activeTab 授予后从 `sender.tab` 读）；`contextMenus` 两个菜单项；`optional_host_permissions` 只按用户配置的 origin 申请、无用即回收（§4.3）；`panel.html` 是唯一的 web 可访问资源并用动态 URL；`commands` 一条；CSP 不变；`default_locale` 与 `_locales` 只是文字；`icons`（v4.8 加入）只是图片。「明确不要的」一项都没有出现，`check:manifest` 与 `verify:release` 都在 CI 里看守。
 
 E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, http://localhost/*`，只给测试用；生产构建里出现它，check-manifest 就会失败（§6）。
 
@@ -993,6 +995,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-10-15 | v4.5，阶段 4 自动化部分完成（待真实服务验证与手工冒烟）：<br>· **与交付物表的出入**（§4.5）：错误类别多了「模型或接口不存在」（404）；消息表按上下文拆成 `domain/i18n/zh/{background,content,pages}.ts`，每张表有只认自己键名的 `t`，ESLint 与 `check:bundle` 防止整张表进入 SW 与内容脚本；新增 RPC `models.disableStreamUsage`（面板的第二个例外，只能关掉）；语料在 `tests/fixtures/sse`；E2E 的浏览器配置改成开发者模式（`runtime.reload()` 需要）<br>· **定下的细节**（§4.5）：错误分 12 类，各给下一步，状态码与原话另起一行，本地 403 提示 `OLLAMA_ORIGINS`；自动重试只在没收到内容时、只一次，`Retry-After` 超过 10 秒交给用户，没给就等 2 秒；`stream_options` 被 400 / 422 拒绝时去掉重发，服务接受后记进配置；推理内容三种形态归一，`<think>` 只认回答开头的，折叠显示，不进快照、复制与追问，估算用量时算作输出；日志不记请求详情；`.pdf` 路径不注入；扩展更新后新宿主移除旧宿主（每分钟至多 10 次），旧实例在页面重新可见、获得焦点或被点到时自己退出<br>· **语料发现的问题**：首字节超时原来只管到响应头，很多服务立刻回响应头、第一个 token 要等很久，会被 60 秒的空闲超时打断；改为管到正文的第一个字节<br>· **E2E 发现的情况**：Playwright 默认带 `--disable-extensions`，全新配置也不在开发者模式，`runtime.reload()` 之后扩展直接消失；重新注入的内容脚本在新的隔离世界里，旧宿主还在页面里，会被新宿主叠住<br>· **体积**：`background.js` 140.27 → 128.71 kB，`injected.js` 53.16 → 41.39 kB（之后加了接管，42.07 kB），整包 614.26 kB；D2 的推翻条件按实测没有触发（客户端代码 622 行，含注释 898 行）<br>· **测试包**：不再只靠会话里发送的文件（你一度下载不到最新的），CI 在全部检查通过后把生产构建作为 artifact 上传（保留 14 天），写进 §12<br>· §1.3 D2、§3、§4.4 阶段小结、§9、§10 风险 4、§12、附录 D、H 同步更新 |
 | 2026-10-15 | v4.6，阶段 5 自动化部分完成（待手工冒烟）：<br>· **与交付物表的出入**（§4.6）：引用不用占位符替换，而是 Markdown 渲染器的行内扩展，只在文本上下文里识别；新增 RPC `page.locate`（面板）与 `config.import`（设置页）；定位代码 `platform/locate` 属内容脚本，受同样的 ESLint 规则；触发信息经 `executeScript` 的 `func` 写进隔离世界；通用设置新增面板字号与回答语言<br>· **定下的细节**（§4.6）：Readability 不足 200 字就改用启发式结果，仍不足再展开 shadow root 与同源 iframe（3 层、10 万节点）；选区对话不保存、不恢复，`{{selection}}` 是触发时的选区；引用照抄原文、最多 500 字，查找对空白、全半角、大小写不敏感，可跨元素、可用省略号；测试连接先读 `/models`，404 / 405 / 501 才提供真实请求；导入只追加、分配新 id，一条都认不出时整体拒绝；回答语言可跟随网页<br>· **E2E 发现的问题**：设置页列表加上「存储变了就重读」之后，正在编辑的表单会拿新读到的数据算改动，把别的标签页刚改的 Key 改回去（已有的 E2E 抓到）；改为编辑器保留打开时的那一版。再次触发换掉已开的面板时，Playwright 可能还列着旧的 iframe，测试先等它分离<br>· **体积**：测试连接让模型客户端进了扩展页面的共享 chunk（面板入口 75.59 → 64.87 kB，共享 chunk 335.58 → 356.84 kB），`background.js` 131.47 kB、`injected.js` 47.10 kB，整包 644.19 kB，预算不变；单测时长接近 10 秒的预算，记下 `isolate: false` 作为第一个办法<br>· §3、§4.6、§9、附录 H 同步更新 |
 | 2026-10-15 | v4.7，阶段 6 自动化部分完成（待发布前冒烟；Release 待你决定）：<br>· **与交付物表的出入**（§4.7）：界面语言的设置值多了 `auto`（跟随浏览器，默认），由后台解析，其它上下文只拿解析后的 `locale`；内置 Prompt 也有英文版；manifest 的名称等走 `_locales`（附录 C 新增 `default_locale`）；无障碍除 jsx-a11y、对比度与键盘走查外，另用 axe-core 扫描真实渲染出的页面（新增开发依赖 `@axe-core/playwright`）；`verify-release` 另核对 zip 与构建目录逐个相同，并进了 CI；发版步骤第 3 步补上 `build:e2e`（E2E 跑的是 E2E 构建）<br>· **查出并修掉的问题**：浅色强调色在卡片底色上只有 4.40:1；输入框边框约 1.3:1（WCAG 1.4.11 要求 3:1）<br>· **E2E 环境**：Playwright 的 `locale` 只管页面，SW 的 `getUILanguage()` 在 Linux 上读 `LANGUAGE`，fixture 两样都设，默认中文浏览器<br>· **闸门验证**：本地与 CI 各用故意违规的改动验证 `check:manifest` 与 `check:bundle` 会拦（CI 的那次在 PR #7 里，随后撤销）<br>· §3、§4.7、§6、§9、附录 A、C、H 同步更新 |
+| 2026-10-16 | v4.8，上架 Chrome 应用商店：<br>· §1、§1.2、§4.7、§11：分发改为 GitHub Release 与 Chrome 应用商店，用同一个 zip；商店由你提交，发版固定步骤加第 9 步。非目标里的「应用商店上架」改为「Edge 加载项商店」<br>· 附录 C 新增 `icons`（商店要求包里有 128 px 图标）；`check:manifest` 核对图标文件存在且尺寸正确<br>· 隐私政策 `PRIVACY.md`（中英），作为商店的隐私权政策链接 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 

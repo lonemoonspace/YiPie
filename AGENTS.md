@@ -51,6 +51,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **内容脚本可能比扩展活得久**：扩展更新或重载后，旧版本的内容脚本留在已注入的页面里、与扩展断开，再次注入的脚本在新的隔离世界里。挂在 `globalThis` 上的重复注入保护要记下创建它的 runtime，换了就重建；页面里旧版本留下的宿主由新宿主移除（`platform/panel-host/orphan.ts`）。
 - **内容脚本按需注入，不进 manifest**：入口文件叫 `injected.ts` 而不是 `content.ts`（WXT 会把 `content.ts` 当成 manifest 声明的内容脚本），由 `platform/inject/inject.ts` 在用户触发、隔离闸门通过之后 `executeScript`。触发信息（整页还是选区、菜单报告的选区文字）在注入文件之前经 `executeScript` 的 `func` 写进隔离世界的 `TRIGGER_SLOT`（`contract/rpc-wire.ts`），内容脚本读完即清。
 - **不用 `eslint-disable`、不用 `any`**：`noInlineConfig` 让 `eslint-disable` 注释无效并报告，`--max-warnings 0` 让它失败。
+- **图标**：`public/icon/{16,32,48,128}.png`，WXT 自动写进 manifest 的 `icons`；`check:manifest` 核对每张存在且像素等于声明的尺寸。128 px 那张四周各留 16 px 透明边（商店规范），小尺寸铺满。
 - **manifest 与计划附录 C 一致**：新增权限或 manifest 键，先改附录 C，再在同一提交里改 `scripts/lib/manifest-policy.ts`。
 - **体积预算**（计划 §9）：超出时先找原因，不要直接调高预算；确需调高，在计划附录 F 写明理由。
 
@@ -137,7 +138,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 
 ## 发版
 
-只发 GitHub Release 附件（计划 §11）。固定步骤（计划 §4.7），一步都不跳：
+GitHub Release 附件与 Chrome 应用商店，两处是同一个 zip（计划 §11）。固定步骤（计划 §4.7），一步都不跳：
 
 1. `npm version <版本> --no-git-tag-version`：同时改 `package.json` 与 `package-lock.json` 里的版本，不要手改。
 2. `CHANGELOG.md`：把 `[Unreleased]` 的内容移到新版本条目 `## [<版本>] - <日期>` 下，`[Unreleased]` 留空。
@@ -147,3 +148,4 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 6. `npm run verify:release`：zip 与 `.output/chrome-mv3` 的 manifest 版本都等于 `package.json`；权限与 `_locales` 符合附录 C；没有 source map、`.env*`、测试残留与 E2E 钩子；zip 里的文件与构建目录逐个相同。
 7. 附录 H 的手工冒烟清单，Chrome 与 Edge 各一次（用户执行）；另从零克隆 → `npm ci` → `npm run build` → 在干净的 Chrome 里加载 → 一次真实总结。
 8. 提交（`chore(release): v<版本>`）、打 tag `v<版本>`、推送，然后 `gh release create v<版本> .output/yipie-<版本>-chrome.zip --title v<版本> --notes-file <该版本的 CHANGELOG 段落>`。发 Release 由用户决定，Claude 不自行发布。
+9. Chrome 应用商店：用户在开发者后台上传同一个 zip、提交审核。商店文案、权限理由、截图与宣传图在项目文件 `store/`；界面有变化时重拍截图（`store/tools/` 里有截图用的 Playwright 脚本，临时放进 `e2e/` 跑完再移走）。隐私政策链接指向仓库里的 `PRIVACY.md`，数据处理方式变了要同步改它和商店后台的「隐私权」表单。
