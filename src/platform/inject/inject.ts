@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
-import { TRIGGER_SLOT, type TriggerWire } from '@/contract/rpc-wire';
-import { t } from '@/domain/i18n/background';
+import { TRIGGER_SLOT, type TriggerSlotWire, type TriggerWire } from '@/contract/rpc-wire';
+import { locale, t } from '@/domain/i18n/background';
 import { isInjectableURL } from '@/domain/url';
 import { createLogger } from '@/platform/logger';
 import { ensureLocalStorageIsolated } from '@/platform/storage';
@@ -30,10 +30,10 @@ const browserDeps: InjectDeps = {
     // cannot see or forge it.
     await browser.scripting.executeScript({
       target: { tabId },
-      func: (slot: string, value: TriggerWire) => {
-        (globalThis as unknown as Record<symbol, TriggerWire>)[Symbol.for(slot)] = value;
+      func: (slot: string, value: TriggerSlotWire) => {
+        (globalThis as unknown as Record<symbol, TriggerSlotWire>)[Symbol.for(slot)] = value;
       },
-      args: [TRIGGER_SLOT, trigger],
+      args: [TRIGGER_SLOT, { ...trigger, locale: locale() }],
     });
     return browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
   },

@@ -36,6 +36,7 @@ test('a setting saved through the background RPC survives a reload', async ({
         trimming: 'back',
         fontSize: 'medium',
         answerLanguage: 'interface',
+        interfaceLanguage: 'auto',
       },
     },
   });

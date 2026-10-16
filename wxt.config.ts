@@ -10,17 +10,20 @@ export default defineConfig({
   // rules in eslint.config.js can see (and police) all of them.
   imports: false,
   manifest: ({ mode }) => ({
-    name: '一瞥 YiPie',
-    description: '用你自己配置的 OpenAI 兼容模型服务，总结当前网页',
+    // Words the browser shows itself, in its own language (public/_locales):
+    // it cannot follow the interface language in the settings.
+    default_locale: 'zh_CN',
+    name: '__MSG_extName__',
+    description: '__MSG_extDescription__',
     permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
     // Granted per origin at runtime, when the user saves a model configuration.
     optional_host_permissions: ['https://*/*', 'http://*/*'],
     // No popup: a click goes straight to action.onClicked and opens the panel.
-    action: { default_title: '一瞥：总结此页' },
+    action: { default_title: '__MSG_actionTitle__' },
     commands: {
       [SUMMARIZE_COMMAND]: {
         suggested_key: { default: 'Alt+Shift+Y' },
-        description: '总结当前页',
+        description: '__MSG_summarizeCommand__',
       },
     },
     // The panel is the only page a website can load, and only through the

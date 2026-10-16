@@ -1,0 +1,8 @@
+{
+  "extName": { "message": "YiPie" },
+  "extDescription": {
+    "message": "Summarize the current web page with an OpenAI-compatible model service you set up yourself"
+  },
+  "actionTitle": { "message": "YiPie: summarize this page" },
+  "summarizeCommand": { "message": "Summarize the current page" }
+}

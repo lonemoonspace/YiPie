@@ -63,7 +63,7 @@ export const SHELL_CSS = `
   background: rgba(0, 0, 0, 0.08);
 }
 .close:focus-visible {
-  outline: 2px solid #2f6fdb;
+  outline: 2px solid #2b6ad6;
 }
 .body {
   position: relative;

@@ -20,6 +20,11 @@ import { startFakeServer, type FakeServer } from './fake-llm/server';
 const extensionPath = path.resolve(import.meta.dirname, '../.output/chrome-mv3-e2e');
 
 interface ExtensionFixtures {
+  /**
+   * The browser's own language, which an interface language of `auto`
+   * follows. Chinese unless a test says otherwise (`test.use`).
+   */
+  browserLanguage: string;
   context: BrowserContext;
   serviceWorker: Worker;
   extensionId: string;
@@ -48,15 +53,21 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
   // shell) can load extensions. The profile is in developer mode: only then
   // does Chromium load an unpacked extension again after `runtime.reload()`,
   // as the test of what an update leaves in a page needs (§4.5).
-  context: async ({}, use) => {
+  browserLanguage: ['zh-CN', { option: true }],
+
+  context: async ({ browserLanguage }, use) => {
     const profile = await mkdtemp(path.join(tmpdir(), 'yipie-e2e-'));
     await mkdir(path.join(profile, 'Default'));
     await writeFile(
       path.join(profile, 'Default', 'Preferences'),
       JSON.stringify({ extensions: { ui: { developer_mode: true } } }),
     );
+    // The browser's language: `locale` sets it for pages, and on Linux the
+    // service worker's `i18n.getUILanguage()` reads it from LANGUAGE.
     const context = await chromium.launchPersistentContext(profile, {
       channel: 'chromium',
+      locale: browserLanguage,
+      env: { ...process.env, LANGUAGE: browserLanguage.replace('-', '_') },
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     await use(context);
@@ -252,6 +263,7 @@ export async function storeSettings(
     theme?: 'system' | 'light' | 'dark';
     fontSize?: 'small' | 'medium' | 'large' | 'x-large';
     answerLanguage?: string;
+    interfaceLanguage?: 'auto' | 'zh-Hans' | 'en';
   },
 ) {
   await store(serviceWorker, {

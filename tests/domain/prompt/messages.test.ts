@@ -47,7 +47,7 @@ describe('promptValues', () => {
 
 describe('buildPromptMessages', () => {
   it('sends the built-in instructions as the system message and the page as data', () => {
-    const [system, user] = buildPromptMessages(builtinPrompt(), values);
+    const [system, user] = buildPromptMessages(builtinPrompt('zh-Hans'), values);
 
     expect(system?.role).toBe('system');
     expect(system?.content).toContain('请用简体中文写一份结构清晰的 Markdown 总结');

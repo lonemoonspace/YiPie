@@ -1,3 +1,5 @@
+import type { Locale } from '@/contract/rpc-wire';
+
 /**
  * Quotes of the page in model output (docs/development-plan.md §4.6). The
  * built-in prompt asks the model to back a point with a passage copied from
@@ -13,9 +15,13 @@ export const CITATION = new RegExp(`\\[\\[([^\\[\\]\\n]{1,${MAX_QUOTE_LENGTH}})\
 
 const CITATIONS = new RegExp(CITATION.source, 'g');
 
-/** The text with each quote written as plain 「passage」, for copying. */
-export function plainCitations(text: string): string {
-  return text.replace(CITATIONS, (_, passage: string) => `「${passage.trim()}」`);
+/**
+ * The text with each quote written as a plain quotation, for copying: 「passage」
+ * in Chinese, “passage” in English.
+ */
+export function plainCitations(text: string, locale: Locale = 'zh-Hans'): string {
+  const [open, close] = locale === 'en' ? ['“', '”'] : ['「', '」'];
+  return text.replace(CITATIONS, (_, passage: string) => `${open}${passage.trim()}${close}`);
 }
 
 /** Where a match starts or ends: an offset into one of the chunks searched. */

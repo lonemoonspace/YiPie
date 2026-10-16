@@ -23,6 +23,10 @@ export const MANIFEST_POLICY: ManifestPolicy = {
   // Requested per origin at runtime, only for the model services the user configures.
   optionalHostPermissions: ['https://*/*', 'http://*/*'],
   exact: {
+    // The browser's own words (name, description, icon title, shortcut) come
+    // from _locales, Chinese unless the browser speaks a language there is a
+    // table for.
+    default_locale: 'zh_CN',
     web_accessible_resources: [
       { resources: ['panel.html'], matches: ['http://*/*', 'https://*/*'], use_dynamic_url: true },
     ],
@@ -87,6 +91,43 @@ export function checkManifest(
     if (key in manifest) problems.push(`manifest 里不应出现 "${key}"（见附录 C）`);
   }
 
+  return problems;
+}
+
+/** `_locales/<locale>/messages.json`, by locale. */
+export type LocaleMessages = Record<string, Record<string, unknown>>;
+
+/**
+ * Every `__MSG_name__` in the manifest must be defined for every locale, and
+ * every locale must define the same names: the browser shows the raw
+ * placeholder, or falls back silently, otherwise.
+ */
+export function checkLocales(manifest: Record<string, unknown>, locales: LocaleMessages): string[] {
+  const problems: string[] = [];
+  const defaultLocale = manifest.default_locale;
+  if (typeof defaultLocale !== 'string' || !(defaultLocale in locales)) {
+    problems.push(`缺少默认语言 ${String(defaultLocale)} 的 _locales/*/messages.json`);
+  }
+  const used = [...JSON.stringify(manifest).matchAll(/__MSG_(\w+)__/g)].map(
+    (match) => match[1] ?? '',
+  );
+  const names = Object.keys(locales[String(defaultLocale)] ?? {}).sort();
+  for (const [locale, messages] of Object.entries(locales)) {
+    for (const name of used) {
+      const entry = messages[name];
+      const text =
+        typeof entry === 'object' && entry !== null
+          ? (entry as { message?: unknown }).message
+          : null;
+      if (typeof text !== 'string' || text.trim() === '') {
+        problems.push(`_locales/${locale} 缺少 manifest 用到的 ${name}`);
+      }
+    }
+    const own = Object.keys(messages).sort();
+    if (own.join() !== names.join()) {
+      problems.push(`_locales/${locale} 的条目与默认语言不一致：${own.join(', ')}`);
+    }
+  }
   return problems;
 }
 

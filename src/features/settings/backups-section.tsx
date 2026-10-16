@@ -6,7 +6,8 @@ import {
   type BackupsView,
 } from '@/contract/backups';
 import { withoutCredentials } from '@/domain/credentials';
-import { t, type MessageKey } from '@/domain/i18n';
+import { locale, t, type MessageKey } from '@/domain/i18n';
+import { htmlLang } from '@/domain/i18n/locale';
 import { callRpc } from '@/platform/rpc/client';
 import { quarantineKeyFor } from '@/platform/storage/quarantine';
 import { onStoredChange } from '@/platform/storage/watch';
@@ -28,7 +29,7 @@ function timeOf(backup: Backup): string {
   const time = new Date(backup.at);
   return Number.isNaN(time.getTime())
     ? t('backup.atUnknown')
-    : time.toLocaleString('zh-CN', { hour12: false });
+    : time.toLocaleString(htmlLang(locale()), { hour12: false });
 }
 
 function fileNameOf(backup: Backup): string {

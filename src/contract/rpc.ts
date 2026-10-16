@@ -20,7 +20,7 @@ import {
 import { ItemId, MoveInput, RemoveInput, SetDefaultInput, updateInput } from './mutations';
 import { PageContext } from './page-context';
 import { PromptConfig, PromptConfigDraft, PromptConfigPatch } from './prompt-config';
-import { PANEL_MODES, RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
+import { LOCALES, PANEL_MODES, RPC_CHANNEL, RPC_ERROR_CODES } from './rpc-wire';
 import { SnapshotMessage } from './snapshot';
 
 /**
@@ -46,6 +46,9 @@ export interface MethodDefinition {
 export const ReadStatus = z.enum(['ok', 'missing', 'invalid']);
 export type ReadStatus = z.infer<typeof ReadStatus>;
 
+/** The interface language, resolved: what `auto` in the settings means on this browser. */
+export const Locale = z.enum(LOCALES);
+
 /**
  * The general settings a panel uses, field by field: `GeneralSettings` keeps
  * fields it does not know (`z.looseObject`), and those have no business in
@@ -56,6 +59,7 @@ export const PanelSettings = z.object({
   theme: Theme,
   fontSize: FontSize,
   answerLanguage: AnswerLanguage,
+  locale: Locale,
 });
 export type PanelSettings = z.infer<typeof PanelSettings>;
 
@@ -67,6 +71,8 @@ export const GeneralSettingsView = z.object({
   readOnly: z.boolean(),
   /** This write replaced an unreadable value, which was backed up first. */
   quarantined: z.boolean(),
+  /** The interface language these settings resolve to on this browser. */
+  locale: Locale,
 });
 export type GeneralSettingsView = z.infer<typeof GeneralSettingsView>;
 
@@ -297,8 +303,8 @@ export const RPC_METHODS = {
   // `mode` says what the trigger asked for: the page, or the selection.
   'content.hello': {
     input: z.strictObject({ mode: z.enum(PANEL_MODES).optional() }),
-    // The theme lets the shell around the panel match it.
-    output: z.object({ nonce: z.string(), pageKey: z.string(), theme: Theme }),
+    // The theme and the language let the shell around the panel match it.
+    output: z.object({ nonce: z.string(), pageKey: z.string(), theme: Theme, locale: Locale }),
     callers: ['content'],
   },
   // A panel proves it was mounted by our content script in the same tab, and

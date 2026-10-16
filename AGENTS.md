@@ -18,10 +18,12 @@
 | `npm run build:e2e`      | E2E 构建到 `.output/chrome-mv3-e2e`：多了对 127.0.0.1 的主机权限与触发入口   |
 | `npm run check:manifest` | 比对构建产物的 manifest 与计划附录 C（先 build）                              |
 | `npm run check:bundle`   | 按入口检查计划 §9 的体积预算，写出 `.output/bundle-report.json`（先 build）   |
+| `npm run zip`            | 构建并打包到 `.output/yipie-<版本>-chrome.zip`（发版用）                      |
+| `npm run verify:release` | 按计划 §4.7 第 6 步检查发布包（先 zip）：版本、权限、无 source map / `.env` / 测试残留 / E2E 钩子，且 zip 与构建目录一致 |
 | `npm run test:e2e`       | Playwright 在真实 Chromium 里加载 E2E 构建（先 build:e2e）                   |
 | `npm run format`         | 用 Prettier 改写格式（Markdown 不在格式检查范围内）                           |
 
-CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → build:e2e → E2E。两项检查只针对生产构建，其中 check:manifest 会确认 E2E 专用的主机权限和触发入口没有混进来，check:bundle 还会确认 SW 与内容脚本里没有扩展页面的消息。全部通过后，生产构建作为测试包上传（运行页面上的 artifact `yipie-chrome-<提交>`，保留 14 天）：给用户的测试包从这里取，不必从会话里发文件。
+CI（`.github/workflows/quality.yml`）在每次 push / PR 上依次跑：gate → build → 两项检查 → zip + verify:release → build:e2e → E2E。两项检查只针对生产构建，其中 check:manifest 会确认 E2E 专用的主机权限和触发入口没有混进来，check:bundle 还会确认 SW 与内容脚本里没有扩展页面的消息。全部通过后，生产构建作为测试包上传（运行页面上的 artifact `yipie-chrome-<提交>`，保留 14 天）：给用户的测试包从这里取，不必从会话里发文件。
 
 ## 目录与分层
 
@@ -44,7 +46,8 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **单一写入口**：只有 `src/platform/storage/**` 能引用 `wxt-store.ts`。其它代码通过 repo（`createRepo(...).update`）写入，写入都在 SW 的唯一写队列里执行。扩展页面要改数据就发 RPC，不要自己写存储。
 - **SW 不含界面**：background 入口不能引用 `features/**`；contract / domain / platform / background 不能在运行时引用 `react`、`react-dom`（`import type` 可以）。React 只出现在 features 和扩展页面入口里。
 - **内容脚本只带外壳、提取与定位**：`src/entrypoints/injected.ts`、`platform/panel-host/**`、`platform/extract/**`、`platform/locate/**`、`platform/rpc/lite-client.ts` 不能在运行时引用 React、zod、`platform/storage`、`platform/llm`、`platform/settings`、`features`，也不能在运行时引用 contract 下定义 schema 的文件（一个常量就会把 zod 带进来）；只有 `@/contract/rpc-wire`、`@/contract/commands` 这两个纯常量文件例外，其余只能 `import type`。
-- **消息表按上下文拆分**（计划 §9、§4.5）：扩展页面用 `@/domain/i18n` 的 `t`（全部消息）；SW 会运行的代码用 `@/domain/i18n/background`，内容脚本用 `@/domain/i18n/content`，各自的 `t` 只认自己那张表的键名。新文案放进用到它的上下文的表（`domain/i18n/zh/{background,content,pages}.ts`）。ESLint 拦整张表进入 SW 会运行的代码（platform、background 入口、domain/prompt）与内容脚本；check:bundle 另查 `background.js`、`injected.js` 里有没有扩展页面的键名。
+- **消息表按上下文拆分**（计划 §9、§4.5）：扩展页面用 `@/domain/i18n` 的 `t`（全部消息）；SW 会运行的代码用 `@/domain/i18n/background`，内容脚本用 `@/domain/i18n/content`，各自的 `t` 只认自己那张表的键名。新文案放进用到它的上下文的表，中英文各一条（`domain/i18n/{zh,en}/{background,content,pages}.ts`；英文表用 `satisfies` 对齐中文表的键，单测另核对参数一致）。ESLint 拦整张表进入 SW 会运行的代码（platform、background 入口、domain/prompt）与内容脚本；check:bundle 另查 `background.js`、`injected.js` 里有没有扩展页面的键名。
+- **界面语言**（计划 §4.7）：设置里的 `interfaceLanguage` 可以是 `auto`，由后台按 `i18n.getUILanguage()` 解析成 `zh-Hans` / `en`（`domain/i18n/locale.ts`），其它上下文只拿解析后的 `locale`：设置页经 `settings.get`、面板经 `settings.current`、内容脚本经注入槽与 `content.hello`。每个上下文的 `t` 有自己的当前语言，由 `setLocale` 设置；SW 在第一次读完设置之前不处理 RPC，设置变了就换语言并改右键菜单标题。浏览器自己显示的名称、描述、图标标题与快捷键说明走 `public/_locales`，跟随浏览器语言，不受设置影响。
 - **内容脚本可能比扩展活得久**：扩展更新或重载后，旧版本的内容脚本留在已注入的页面里、与扩展断开，再次注入的脚本在新的隔离世界里。挂在 `globalThis` 上的重复注入保护要记下创建它的 runtime，换了就重建；页面里旧版本留下的宿主由新宿主移除（`platform/panel-host/orphan.ts`）。
 - **内容脚本按需注入，不进 manifest**：入口文件叫 `injected.ts` 而不是 `content.ts`（WXT 会把 `content.ts` 当成 manifest 声明的内容脚本），由 `platform/inject/inject.ts` 在用户触发、隔离闸门通过之后 `executeScript`。触发信息（整页还是选区、菜单报告的选区文字）在注入文件之前经 `executeScript` 的 `func` 写进隔离世界的 `TRIGGER_SLOT`（`contract/rpc-wire.ts`），内容脚本读完即清。
 - **不用 `eslint-disable`、不用 `any`**：`noInlineConfig` 让 `eslint-disable` 注释无效并报告，`--max-warnings 0` 让它失败。
@@ -97,12 +100,14 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
 - E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
-- E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels`（可带 `contextWindow`）/ `storePrompts` / `storeDefaults` / `storeSettings`（可带 `theme`、`fontSize`、`answerLanguage`），读回存储用 `stored`（`storage.local`）与 `session`（`storage.session`：面板登记与快照）。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
+- E2E 的浏览器默认说中文（fixture 选项 `browserLanguage`，默认 `zh-CN`；页面用 Playwright 的 `locale`，SW 的 `getUILanguage()` 在 Linux 上读 `LANGUAGE` 环境变量，fixture 两样都设），所以 `auto` 下界面是中文。要英文浏览器用 `test.use({ browserLanguage: 'en-US' })`，见 `e2e/language.spec.ts`。
+- E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels`（可带 `contextWindow`）/ `storePrompts` / `storeDefaults` / `storeSettings`（可带 `theme`、`fontSize`、`answerLanguage`、`interfaceLanguage`），读回存储用 `stored`（`storage.local`）与 `session`（`storage.session`：面板登记与快照）。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
 - Playwright 的视口模拟下，离视口底部约 100 px 以内对跨站 iframe 的鼠标点击会丢（普通跨站 iframe 也一样，与面板无关）。面板底部的追问框用键盘操作（`fill` 后 `press('Enter')`）；非点不可时先把视口调高。
 - 面板的对话逻辑在 `features/panel/conversation.ts`（不依赖 React，单测用假的 RPC 与流）；`use-panel.ts` 只负责接线。控制器里每个 `await` 之后的继续都要确认自己仍属于最新的那次操作（`action`），面板离开（`dispose`）后的结果不再派发；新增等待步骤照此办理，并补「中途用户做了别的 / 已经 dispose」的测试。假服务的场景：`scenario:chat`（追问的回答写出问题）、`scenario:no-usage`、`scenario:context-limit`（超过约 2,000 字就以超长拒绝）、`scenario:busy-once:<任意>`（同一个名字的第一次请求返回 429 与 `Retry-After: 1`，所以每条测试用自己的名字）、`scenario:no-stream-options`（带 `stream_options` 就 400）、`scenario:reasoning`（先推理再回答）、`scenario:cite`（带 `[[…]]` 引用，一处能在 `/article.html` 找到、一处找不到）；`GET /v1/models` 列出几个场景名，`/no-models/v1/models` 返回 404（测试连接的两条路）。长文页面是 `/long.html`，正文只在 open shadow root 里的是 `/shadow.html`。选区触发用 `openPanelOnSelection(serviceWorker, page, 菜单报告的文字?)`；再次触发会换掉已开的面板，取新 iframe 前先等旧的 `isDetached()`（`panelFrame` 跳过已分离的，但 Playwright 可能稍晚才知道）。
 - 模拟扩展更新用 `reloadExtension(context, serviceWorker)`，它返回新的 SW；之后用 `openPanelWith(worker, tabId)` 触发（`openPanel` 绑着旧的 SW）。
 - E2E 里通过 `serviceWorker` fixture 拿 SW，不要自己取 `context.serviceWorkers()`：Playwright 可能在浏览器装好扩展 API 之前就报告这个 worker（此时 `chrome` 里只有 `csi`、`loadTimes`，约 1/20 的概率），fixture 会等到 `chrome.storage.local` 可用再交给测试。
 - **模型请求**（`platform/llm/client.ts`）的错误分类在 `domain/llm/errors.ts`：每类带下一步建议（`adviceFor`），自动重试只在还没收到内容时、只一次（`automaticRetryWait`）。遇到新的兼容差异，先把服务的原样输出放进 `tests/fixtures/sse`（Prettier 不碰这里）、在 `tests/platform/llm/corpus.test.ts` 加一条，再改代码；那里有一条测试核对附录 D 的每一行都有语料。客户端（client.ts 与 domain/llm）的体量是计划 D2 推翻条件的一部分，加代码时留意。
+- **无障碍**（计划 §4.7）：文字颜色在所在底色上 ≥ 4.5:1，表单控件的边框与焦点框 ≥ 3:1；`tests/features/theme/contrast.test.ts` 逐对核对 `tokens.css`，加颜色或新的「文字 / 底色」组合时把它加进表里。控件的边框用 `--color-control-border`，`--color-border` 只分隔区域。`e2e/accessibility.spec.ts` 用 axe-core 扫设置页与面板（面板在 closed shadow root 里，axe 直接注入 iframe），并用 Tab 走一遍，断言每个控件都能到达、焦点框看得见。新增界面时它们必须仍然通过。
 - 模型输出只经 `src/features/markdown/render.ts` 变成 HTML，`dangerouslySetInnerHTML` 只用于它的结果。计划 §8 列出的注入回归用例在 `tests/features/markdown/render.test.ts` 里，改渲染器时它们必须仍然通过；要放行新的语法或属性，先补用例并更新测试里的白名单。
 
 ## 依赖版本约束
@@ -132,4 +137,13 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 
 ## 发版
 
-阶段 6 落地，固定步骤见计划 §4.7。
+只发 GitHub Release 附件（计划 §11）。固定步骤（计划 §4.7），一步都不跳：
+
+1. `npm version <版本> --no-git-tag-version`：同时改 `package.json` 与 `package-lock.json` 里的版本，不要手改。
+2. `CHANGELOG.md`：把 `[Unreleased]` 的内容移到新版本条目 `## [<版本>] - <日期>` 下，`[Unreleased]` 留空。
+3. 完整闸门：`npm run gate && npm run build && npm run check:manifest && npm run check:bundle && npm run build:e2e && npm run test:e2e`。
+4. 清掉旧包：`rm -f .output/*-chrome.zip`（`verify:release` 发现不止一个包也会失败）。
+5. `npm run zip`。
+6. `npm run verify:release`：zip 与 `.output/chrome-mv3` 的 manifest 版本都等于 `package.json`；权限与 `_locales` 符合附录 C；没有 source map、`.env*`、测试残留与 E2E 钩子；zip 里的文件与构建目录逐个相同。
+7. 附录 H 的手工冒烟清单，Chrome 与 Edge 各一次（用户执行）；另从零克隆 → `npm ci` → `npm run build` → 在干净的 Chrome 里加载 → 一次真实总结。
+8. 提交（`chore(release): v<版本>`）、打 tag `v<版本>`、推送，然后 `gh release create v<版本> .output/yipie-<版本>-chrome.zip --title v<版本> --notes-file <该版本的 CHANGELOG 段落>`。发 Release 由用户决定，Claude 不自行发布。

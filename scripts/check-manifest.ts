@@ -3,12 +3,25 @@
 // `npm run check:manifest`.
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkManifest, findTestHooks } from './lib/manifest-policy.ts';
+import {
+  checkLocales,
+  checkManifest,
+  findTestHooks,
+  type LocaleMessages,
+} from './lib/manifest-policy.ts';
 
 const buildDir = '.output/chrome-mv3';
 const manifestPath = path.join(buildDir, 'manifest.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
 const problems = checkManifest(manifest);
+
+const localesDir = path.join(buildDir, '_locales');
+const locales: LocaleMessages = {};
+for (const locale of await readdir(localesDir).catch(() => [])) {
+  const file = path.join(localesDir, locale, 'messages.json');
+  locales[locale] = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+}
+problems.push(...checkLocales(manifest, locales));
 
 const scripts = (await readdir(buildDir, { recursive: true }))
   .filter((file) => file.endsWith('.js'))

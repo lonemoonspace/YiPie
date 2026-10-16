@@ -37,10 +37,12 @@ const view: GeneralSettingsView = {
     trimming: 'back',
     fontSize: 'medium',
     answerLanguage: 'interface',
+    interfaceLanguage: 'auto',
   },
   status: 'ok',
   readOnly: false,
   quarantined: false,
+  locale: 'zh-Hans',
 };
 
 const panelModels: PanelModelsView = { choices: [{ id: 'a', name: 'A' }], current: null };
@@ -555,7 +557,12 @@ describe('RPC dispatcher: backups', () => {
 describe('RPC dispatcher: panel handshake', () => {
   it('lets only the content script ask for a nonce, telling the handler its page', async () => {
     const hello = vi.fn(() =>
-      Promise.resolve({ nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' as const }),
+      Promise.resolve({
+        nonce: 'n',
+        pageKey: 'https://example.com/app/2',
+        theme: 'dark' as const,
+        locale: 'en' as const,
+      }),
     );
     const { dispatch } = setup({ 'content.hello': hello });
     // A single-page app moved on: the tab's URL followed, the frame's did not.
@@ -563,7 +570,7 @@ describe('RPC dispatcher: panel handshake', () => {
 
     expect(await dispatch(request('content.hello'), moved)).toEqual({
       ok: true,
-      value: { nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark' },
+      value: { nonce: 'n', pageKey: 'https://example.com/app/2', theme: 'dark', locale: 'en' },
     });
     expect(hello).toHaveBeenCalledWith(
       {},
@@ -737,6 +744,7 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
         theme: 'dark' as const,
         fontSize: 'large' as const,
         answerLanguage: 'en' as const,
+        locale: 'en' as const,
         logLevel: 'debug',
         anything: 'else',
       }),
@@ -745,7 +753,13 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
 
     expect(await dispatch(request('settings.current'), PANEL)).toEqual({
       ok: true,
-      value: { trimming: 'middle', theme: 'dark', fontSize: 'large', answerLanguage: 'en' },
+      value: {
+        trimming: 'middle',
+        theme: 'dark',
+        fontSize: 'large',
+        answerLanguage: 'en',
+        locale: 'en',
+      },
     });
     for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
       expect(await dispatch(request('settings.current'), sender)).toMatchObject({

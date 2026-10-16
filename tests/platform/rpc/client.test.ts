@@ -14,10 +14,12 @@ const view: GeneralSettingsView = {
     trimming: 'back',
     fontSize: 'medium',
     answerLanguage: 'interface',
+    interfaceLanguage: 'auto',
   },
   status: 'ok',
   readOnly: false,
   quarantined: false,
+  locale: 'zh-Hans',
 };
 
 describe('callRpc', () => {
