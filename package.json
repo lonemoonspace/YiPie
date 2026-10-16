@@ -1,7 +1,7 @@
 {
   "name": "yipie",
   "description": "一瞥 YiPie：用你自己配置的 OpenAI 兼容模型服务总结当前网页的浏览器扩展",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "MIT",
   "type": "module",
