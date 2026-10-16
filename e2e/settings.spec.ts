@@ -423,6 +423,49 @@ test('models: test connection reads the model list, or offers one real request',
   expect(server.requests.at(-1)?.path).toBe('/no-models/v1/chat/completions');
 });
 
+test("models: the model name can be picked from the service's model list", async ({
+  context,
+  extensionId,
+  serviceWorker,
+  server,
+}) => {
+  const page = await context.newPage();
+  await page.goto(optionsUrl(extensionId));
+  const form = section(page, '模型').getByRole('form', { name: '添加模型' });
+  // Without an address there is nothing to ask: the field says so.
+  await form.getByRole('button', { name: '获取模型列表' }).click();
+  await expect(form.getByText('请填写 Base URL')).toBeVisible();
+
+  await form.getByLabel('Base URL').fill(`${server.origin}/v1`);
+  await form.getByRole('button', { name: '获取模型列表' }).click();
+  const picker = form.getByRole('combobox', { name: '从服务的模型列表里选择' });
+  await expect(picker.locator('option')).toHaveText([
+    '选择一个模型（共 3 个）',
+    'scenario:chat',
+    'scenario:cite',
+    'scenario:normal',
+  ]);
+
+  await picker.selectOption('scenario:chat');
+  await expect(form.getByLabel('模型名')).toHaveValue('scenario:chat');
+  await form.getByRole('button', { name: '保存' }).click();
+  await expect
+    .poll(
+      async () => ((await stored(serviceWorker, 'model-configs')) as StoredList | undefined)?.data,
+    )
+    .toEqual([expect.objectContaining({ model: 'scenario:chat' })]);
+
+  // A service without a model list: the name is typed instead.
+  await section(page, '模型').getByRole('button', { name: '添加模型' }).click();
+  const second = section(page, '模型').getByRole('form', { name: '添加模型' });
+  await second.getByLabel('Base URL').fill(`${server.origin}/no-models/v1`);
+  await second.getByRole('button', { name: '获取模型列表' }).click();
+  await expect(second.locator('.fetch-result')).toHaveText(
+    '服务没有提供模型列表（GET /models），请手动填写模型名。',
+  );
+  await expect(second.getByRole('combobox', { name: '从服务的模型列表里选择' })).toHaveCount(0);
+});
+
 test('prompts: unknown variables are flagged in red, and the preview renders a sample page', async ({
   context,
   extensionId,

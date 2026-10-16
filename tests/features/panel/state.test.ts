@@ -251,6 +251,14 @@ describe('reducePanel: a conversation', () => {
     expect(picked.turns).toHaveLength(1);
   });
 
+  it('stays ready for a model picked before the first summary', () => {
+    const picked = play([{ type: 'ready' }, { type: 'select', modelId: 'd', waiting: true }]);
+
+    expect(picked).toMatchObject({ phase: 'ready', modelId: 'd', turns: [] });
+    expect(isBusy(picked)).toBe(false);
+    expect(canAsk(picked)).toBe(false);
+  });
+
   it('leaves a finished turn alone when the menu then fails', () => {
     const state = play(
       [

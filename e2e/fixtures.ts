@@ -264,6 +264,7 @@ export async function storeSettings(
     fontSize?: 'small' | 'medium' | 'large' | 'x-large';
     answerLanguage?: string;
     interfaceLanguage?: 'auto' | 'zh-Hans' | 'en';
+    autoSummarize?: boolean;
   },
 ) {
   await store(serviceWorker, {

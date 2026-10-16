@@ -61,7 +61,7 @@ export function PanelApp() {
           <button type="button" onClick={stop}>
             {t('panel.stop')}
           </button>
-        ) : attached ? (
+        ) : attached && state.phase !== 'ready' ? (
           <button type="button" title={t('panel.retry.title')} onClick={summarize}>
             {t('panel.retry')}
           </button>
@@ -87,6 +87,14 @@ export function PanelApp() {
       ) : null}
 
       <div className="conversation" ref={conversation}>
+        {state.phase === 'ready' ? (
+          <div className="start">
+            <button type="button" onClick={summarize}>
+              {t('panel.summarize')}
+            </button>
+          </div>
+        ) : null}
+
         {state.turns.map((turn, index) => (
           // A new language renders the turn afresh: its quote markers carry labels.
           <TurnView
@@ -347,6 +355,8 @@ function describePhase(state: PanelState): string {
   switch (state.phase) {
     case 'attaching':
       return t('panel.status.attaching');
+    case 'ready':
+      return t('panel.status.ready');
     case 'restored':
       return t('panel.status.restored');
     case 'extracting':

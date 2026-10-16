@@ -38,6 +38,7 @@ const view: GeneralSettingsView = {
     fontSize: 'medium',
     answerLanguage: 'interface',
     interfaceLanguage: 'auto',
+    autoSummarize: true,
   },
   status: 'ok',
   readOnly: false,
@@ -744,6 +745,7 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
         theme: 'dark' as const,
         fontSize: 'large' as const,
         answerLanguage: 'en' as const,
+        autoSummarize: false,
         locale: 'en' as const,
         logLevel: 'debug',
         anything: 'else',
@@ -758,6 +760,7 @@ describe('RPC dispatcher: what the panel reads and keeps', () => {
         theme: 'dark',
         fontSize: 'large',
         answerLanguage: 'en',
+        autoSummarize: false,
         locale: 'en',
       },
     });

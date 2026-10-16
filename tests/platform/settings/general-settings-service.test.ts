@@ -21,6 +21,7 @@ describe('general settings service', () => {
         fontSize: 'medium',
         answerLanguage: 'interface',
         interfaceLanguage: 'auto',
+        autoSummarize: true,
       },
       status: 'missing',
       readOnly: false,
@@ -41,6 +42,7 @@ describe('general settings service', () => {
         fontSize: 'small',
         answerLanguage: 'en',
         interfaceLanguage: 'auto',
+        autoSummarize: true,
       },
     });
 
@@ -55,6 +57,7 @@ describe('general settings service', () => {
         fontSize: 'small',
         answerLanguage: 'en',
         interfaceLanguage: 'auto',
+        autoSummarize: true,
       },
     });
   });
@@ -69,6 +72,7 @@ describe('general settings service', () => {
         fontSize: 'x-large',
         answerLanguage: 'page',
         interfaceLanguage: 'auto',
+        autoSummarize: true,
       },
     };
     const { settings, store } = setup(stored);
@@ -95,6 +99,7 @@ describe('general settings service', () => {
       fontSize: 'large',
       answerLanguage: 'interface',
       interfaceLanguage: 'auto',
+      autoSummarize: true,
     });
   });
 
@@ -111,6 +116,7 @@ describe('general settings service', () => {
       fontSize: 'medium',
       answerLanguage: 'interface',
       interfaceLanguage: 'auto',
+      autoSummarize: true,
     });
 
     const saved = await settings.patch({ theme: 'dark' });
@@ -150,6 +156,7 @@ describe('general settings service', () => {
       theme: 'dark',
       fontSize: 'large',
       answerLanguage: 'en',
+      autoSummarize: true,
       locale: 'en',
     });
   });
@@ -162,6 +169,7 @@ describe('general settings service', () => {
       theme: 'system',
       fontSize: 'medium',
       answerLanguage: 'interface',
+      autoSummarize: true,
       locale: 'zh-Hans',
     });
   });

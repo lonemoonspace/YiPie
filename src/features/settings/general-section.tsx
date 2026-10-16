@@ -122,6 +122,21 @@ export function GeneralSection() {
             </p>
           </div>
 
+          <div className="field checkbox">
+            <input
+              id="auto-summarize"
+              type="checkbox"
+              checked={view.settings.autoSummarize}
+              disabled={disabled}
+              aria-describedby="auto-summarize-hint"
+              onChange={(event) => void update({ autoSummarize: event.target.checked })}
+            />
+            <label htmlFor="auto-summarize">{t('settings.autoSummarize')}</label>
+            <p id="auto-summarize-hint" className="hint">
+              {t('settings.autoSummarize.hint')}
+            </p>
+          </div>
+
           <div className="field">
             <label htmlFor="log-level">{t('settings.logLevel')}</label>
             <select

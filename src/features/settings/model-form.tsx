@@ -6,6 +6,7 @@ import { t } from '@/domain/i18n';
 import {
   EMPTY_MODEL_FORM,
   formFromConfig,
+  parseConnectionFields,
   parseModelForm,
   type ModelFormErrors,
   type ModelFormFields,
@@ -14,6 +15,7 @@ import {
 import { requestOriginAccess } from '@/platform/permissions/origin-access';
 import { ConnectionTest } from './connection-test';
 import { TextField } from './fields';
+import { ModelFetch } from './model-fetch';
 
 interface ModelFormProps {
   heading: string;
@@ -105,6 +107,15 @@ export function ModelForm(props: ModelFormProps) {
         value={fields.model}
         onChange={(value) => set('model', value)}
         required
+      />
+      <ModelFetch
+        model={fields.model}
+        onPick={(model) => set('model', model)}
+        check={() => {
+          const parsed = parseConnectionFields(fields);
+          setErrors(parsed.ok ? {} : parsed.errors);
+          return parsed.ok ? parsed.value : null;
+        }}
       />
       <TextField
         label={t('model.name')}

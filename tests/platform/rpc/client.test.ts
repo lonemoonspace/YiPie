@@ -15,6 +15,7 @@ const view: GeneralSettingsView = {
     fontSize: 'medium',
     answerLanguage: 'interface',
     interfaceLanguage: 'auto',
+    autoSummarize: true,
   },
   status: 'ok',
   readOnly: false,

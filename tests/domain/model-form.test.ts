@@ -3,6 +3,8 @@ import { ModelConfig } from '@/contract/model-config';
 import {
   EMPTY_MODEL_FORM,
   formFromConfig,
+  modelOptions,
+  parseConnectionFields,
   parseModelForm,
   type ModelFormFields,
 } from '@/domain/model-form';
@@ -132,5 +134,51 @@ describe('formFromConfig', () => {
   it('shows empty JSON fields as empty text', () => {
     const config = ModelConfig.parse({ id: 'a', baseURL: 'http://x.test', model: 'm' });
     expect(formFromConfig(config)).toMatchObject({ headers: '', extraBody: '', contextWindow: '' });
+  });
+});
+
+describe('parseConnectionFields', () => {
+  it('needs no model name, only what reaches the service', () => {
+    expect(
+      parseConnectionFields({
+        ...EMPTY_MODEL_FORM,
+        baseURL: ' https://api.example.com/v1/ ',
+        apiKey: ' sk-test ',
+        headers: '{"X-Org": "a"}',
+        extraBody: 'not json',
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        baseURL: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        headers: { 'X-Org': 'a' },
+      },
+    });
+  });
+
+  it('reports a bad address or bad headers next to their fields', () => {
+    const result = parseConnectionFields({ ...EMPTY_MODEL_FORM, baseURL: '', headers: '[1]' });
+    expect(result.ok).toBe(false);
+    expect(Object.keys(result.ok ? {} : result.errors).sort()).toEqual(['baseURL', 'headers']);
+  });
+
+  it('refuses headers the browser would not send', () => {
+    const result = parseConnectionFields({
+      ...EMPTY_MODEL_FORM,
+      baseURL: 'https://api.example.com/v1',
+      headers: '{"Cookie": "a"}',
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('modelOptions', () => {
+  it('lists each id once, in alphabetical order', () => {
+    expect(modelOptions(['gpt-4o', 'deepseek-chat', 'gpt-4o', 'claude'])).toEqual([
+      'claude',
+      'deepseek-chat',
+      'gpt-4o',
+    ]);
   });
 });

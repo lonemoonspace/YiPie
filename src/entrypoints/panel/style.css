@@ -30,6 +30,18 @@ body {
   padding-bottom: 14px;
 }
 
+/* Opened without a summary, as the settings ask: one button starts it. */
+.start {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.start button {
+  padding: 8px 20px;
+  font-size: 14px;
+}
+
 .toolbar {
   position: sticky;
   top: 0;
