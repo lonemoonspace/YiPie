@@ -181,8 +181,8 @@ test('the settings page can be used by keyboard alone, with focus always visible
   await useModel(serviceWorker, server, 'scenario:normal');
   const page = await context.newPage();
   await page.goto(optionsUrl(extensionId));
-  // The model and the built-in prompt.
-  await expect(page.locator('.item')).toHaveCount(2);
+  // The model and the built-in prompts.
+  await expect(page.locator('.item')).toHaveCount(4);
 
   const reached = await tabThrough(page, page);
 
@@ -218,7 +218,7 @@ test('the panel can be used by keyboard alone, with focus always visible', async
   await frame.locator('select.model').focus();
   const first = await focusedIn(frame);
   const reached = await tabThrough(page, frame);
-  await frame.getByRole('button', { name: '复制正文' }).focus();
+  await frame.getByRole('combobox', { name: 'Prompt' }).focus();
   await page.keyboard.press('Shift+Tab');
 
   expect(await focusedIn(frame)).toEqual({ name: first?.name, visible: true });

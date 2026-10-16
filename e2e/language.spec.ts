@@ -65,7 +65,7 @@ test('switching the interface to English changes the settings page, the panel an
   await expect(frame.getByRole('button', { name: 'Summarize again' })).toBeVisible();
   await expect(frame.locator('html')).toHaveAttribute('lang', 'en');
   const messages = (server.requests.at(-1)?.body as { messages: { content: string }[] }).messages;
-  expect(messages[0]?.content).toContain('Write a well-structured Markdown summary in English');
+  expect(messages[0]?.content).toContain('Write an easy-to-scan Markdown summary in English');
   expect(messages[1]?.content).toContain(`Address: ${server.origin}/article.html`);
 
   // So does the worker, for what it shows itself.

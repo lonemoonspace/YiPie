@@ -1,10 +1,21 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  memo,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import type { Locale } from '@/contract/rpc-wire';
 import type { TurnUsage } from '@/contract/snapshot';
 import { plainCitations } from '@/domain/citation';
 import { t } from '@/domain/i18n';
 import { adviceFor, isLocalOriginRefusal, type LlmError } from '@/domain/llm/errors';
 import { renderMarkdown } from '@/features/markdown/render';
+import { CheckIcon, CopyIcon, RefreshIcon, StopIcon } from '@/features/ui/icons';
+import { MoreMenu } from '@/features/ui/more-menu';
 import { openSettingsPage } from '@/platform/runtime/settings-page';
 import { copyText } from './clipboard';
 import type { Conversation } from './conversation';
@@ -22,11 +33,23 @@ import {
 import { usePanel } from './use-panel';
 
 export function PanelApp() {
-  const { state, locale, stop, summarize, ask, retry, switchModel, pageText, locate } = usePanel();
+  const {
+    state,
+    locale,
+    stop,
+    summarize,
+    ask,
+    retry,
+    switchModel,
+    switchPrompt,
+    pageText,
+    locate,
+  } = usePanel();
   const busy = isBusy(state);
   const attached = state.phase !== 'attaching' && state.problem?.kind !== 'attach';
   const conversation = useRef<HTMLDivElement>(null);
   const located = useQuoteLocator(conversation, locate);
+  const preview = useQuotePreview(conversation);
 
   useFollowConversation(state);
 
@@ -35,8 +58,9 @@ export function PanelApp() {
       <div className="toolbar">
         {state.models.length > 0 ? (
           <select
-            className="model"
+            className="menu model"
             aria-label={t('panel.model')}
+            title={modelName(state)}
             value={state.modelId ?? ''}
             onChange={(event) => switchModel(event.target.value)}
           >
@@ -47,24 +71,69 @@ export function PanelApp() {
             ))}
           </select>
         ) : null}
-        <p className="status" role="status">
+        {state.prompts.length > 1 ? (
+          <select
+            className="menu prompt"
+            aria-label={t('panel.prompt')}
+            title={t('panel.prompt.title')}
+            value={state.promptId ?? ''}
+            onChange={(event) => switchPrompt(event.target.value)}
+          >
+            {state.prompts.map((prompt) => (
+              <option key={prompt.id} value={prompt.id}>
+                {prompt.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {/* Said aloud always; shown only while something is going on or went wrong. */}
+        <p className="status" role="status" data-quiet={quietPhase(state)}>
+          {busy ? <span className="pulse" aria-hidden="true" /> : null}
           {describePhase(state)}
         </p>
-        {attached ? (
-          <CopyButton
-            text={pageText}
-            label={t('panel.copyPage')}
-            title={t('panel.copyPage.title')}
-          />
-        ) : null}
         {busy ? (
-          <button type="button" onClick={stop}>
-            {t('panel.stop')}
+          <button
+            type="button"
+            className="icon-button outlined"
+            aria-label={t('panel.stop')}
+            title={t('panel.stop')}
+            onClick={stop}
+          >
+            <StopIcon />
           </button>
         ) : attached && state.phase !== 'ready' ? (
-          <button type="button" title={t('panel.retry.title')} onClick={summarize}>
-            {t('panel.retry')}
+          <button
+            type="button"
+            className="icon-button outlined"
+            aria-label={t('panel.retry')}
+            title={t('panel.retry.title')}
+            onClick={summarize}
+          >
+            <RefreshIcon />
           </button>
+        ) : null}
+        {attached ? (
+          <MoreMenu label={t('panel.more')}>
+            {(close) => (
+              <>
+                <CopyButton
+                  text={pageText}
+                  label={t('panel.copyPage')}
+                  title={t('panel.copyPage.title')}
+                />
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => {
+                    close();
+                    void openSettingsPage();
+                  }}
+                >
+                  {t('panel.openSettings')}
+                </button>
+              </>
+            )}
+          </MoreMenu>
         ) : null}
       </div>
 
@@ -109,6 +178,18 @@ export function PanelApp() {
           <Problem problem={state.problem} origin={state.origin} retry={retry} />
         ) : null}
       </div>
+
+      {preview !== null ? (
+        <div
+          className="quote-preview"
+          aria-hidden="true"
+          data-above={preview.above}
+          style={{ top: preview.top, left: preview.left }}
+        >
+          <p>{preview.quote}</p>
+          <small>{t('panel.cite.hint')}</small>
+        </div>
+      ) : null}
 
       {attached ? <AskForm enabled={canAsk(state)} ask={ask} /> : null}
     </main>
@@ -166,6 +247,65 @@ function useQuoteLocator(
   return located;
 }
 
+interface QuotePreview {
+  quote: string;
+  /** Its top edge, or its bottom edge when it is `above` the marker. */
+  top: number;
+  left: number;
+  above: boolean;
+}
+
+/** Room the preview needs below a marker before it goes above instead. */
+const PREVIEW_ROOM = 140;
+const PREVIEW_WIDTH = 280;
+
+/**
+ * Shows the passage a quote marker stands for while the pointer is on it or
+ * it has focus, below it (or above, near the bottom), kept inside the panel.
+ * Screen readers get the marker's own label; the preview is for the eye.
+ */
+function useQuotePreview(container: RefObject<HTMLElement | null>): QuotePreview | null {
+  const [preview, setPreview] = useState<QuotePreview | null>(null);
+
+  useEffect(() => {
+    const element = container.current;
+    if (element === null) return;
+    const show = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest('button.cite') : null;
+      if (!(target instanceof HTMLElement) || target.dataset.quote === undefined) return;
+      const rect = target.getBoundingClientRect();
+      const width = Math.min(PREVIEW_WIDTH, window.innerWidth - 16);
+      const left = Math.min(Math.max(8, rect.left - 24), window.innerWidth - width - 8);
+      const below = rect.bottom + PREVIEW_ROOM < window.innerHeight;
+      setPreview({
+        quote: target.dataset.quote,
+        top: below ? rect.bottom + 6 : rect.top - 6,
+        left,
+        above: !below,
+      });
+    };
+    const hide = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest('button.cite') : null;
+      if (target !== null) setPreview(null);
+    };
+    const away = () => setPreview(null);
+    element.addEventListener('mouseover', show);
+    element.addEventListener('focusin', show);
+    element.addEventListener('mouseout', hide);
+    element.addEventListener('focusout', hide);
+    window.addEventListener('scroll', away, { passive: true });
+    return () => {
+      element.removeEventListener('mouseover', show);
+      element.removeEventListener('focusin', show);
+      element.removeEventListener('mouseout', hide);
+      element.removeEventListener('focusout', hide);
+      window.removeEventListener('scroll', away);
+    };
+  }, [container]);
+
+  return preview;
+}
+
 /**
  * Keeps the latest follow-up in view: a question just asked or a restored
  * conversation scrolls to the end, and an answer coming in stays in view
@@ -219,6 +359,14 @@ const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) 
           <p>{turn.reasoning}</p>
         </details>
       ) : null}
+      {streaming && turn.text === '' && turn.reasoning === '' ? (
+        // Nothing has arrived yet: lines where the answer will be.
+        <div className="placeholder" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      ) : null}
       {turn.text !== '' ? (
         // Built by renderMarkdown, which escapes raw HTML and drops unsafe
         // links and every image (docs/development-plan.md §8).
@@ -233,6 +381,7 @@ const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) 
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
           <CopyButton
+            icon
             text={() => plainCitations(turn.text, locale)}
             label={t('panel.copy')}
             title={t('panel.copy.title')}
@@ -278,9 +427,11 @@ interface CopyButtonProps {
   text: () => string | Promise<string>;
   label: string;
   title: string;
+  /** An icon, its words in its name, rather than words. */
+  icon?: boolean;
 }
 
-function CopyButton({ text, label, title }: CopyButtonProps) {
+function CopyButton({ text, label, title, icon = false }: CopyButtonProps) {
   const [result, setResult] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
@@ -289,26 +440,32 @@ function CopyButton({ text, label, title }: CopyButtonProps) {
     return () => clearTimeout(timer);
   }, [result]);
 
-  return (
+  const words =
+    result === 'copied' ? t('panel.copied') : result === 'failed' ? t('panel.copyFailed') : label;
+  const copy = () => {
+    Promise.resolve()
+      .then(text)
+      .then(copyText)
+      .then(
+        () => setResult('copied'),
+        () => setResult('failed'),
+      );
+  };
+
+  return icon ? (
     <button
       type="button"
-      className="quiet"
-      title={title}
-      onClick={() => {
-        Promise.resolve()
-          .then(text)
-          .then(copyText)
-          .then(
-            () => setResult('copied'),
-            () => setResult('failed'),
-          );
-      }}
+      className="icon-button"
+      aria-label={words}
+      title={result === 'idle' ? title : words}
+      data-result={result}
+      onClick={copy}
     >
-      {result === 'copied'
-        ? t('panel.copied')
-        : result === 'failed'
-          ? t('panel.copyFailed')
-          : label}
+      {result === 'copied' ? <CheckIcon /> : <CopyIcon />}
+    </button>
+  ) : (
+    <button type="button" className="quiet" title={title} onClick={copy}>
+      {words}
     </button>
   );
 }
@@ -316,6 +473,7 @@ function CopyButton({ text, label, title }: CopyButtonProps) {
 function AskForm({ enabled, ask }: { enabled: boolean; ask: Conversation['ask'] }) {
   const [question, setQuestion] = useState('');
   const ready = enabled && question.trim() !== '';
+  const hintId = useId();
   const send = () => {
     if (!ready) return;
     ask(question);
@@ -332,8 +490,9 @@ function AskForm({ enabled, ask }: { enabled: boolean; ask: Conversation['ask'] 
     >
       <textarea
         aria-label={t('panel.ask')}
+        aria-describedby={hintId}
         placeholder={t('panel.ask.placeholder')}
-        rows={2}
+        rows={1}
         value={question}
         onChange={(event) => setQuestion(event.target.value)}
         onKeyDown={(event) => {
@@ -346,8 +505,16 @@ function AskForm({ enabled, ask }: { enabled: boolean; ask: Conversation['ask'] 
       <button type="submit" disabled={!ready}>
         {t('panel.send')}
       </button>
+      <p className="ask-hint" id={hintId}>
+        {t('panel.ask.hint')}
+      </p>
     </form>
   );
+}
+
+/** A finished summary needs no words above it: the answer says it is done. */
+function quietPhase(state: PanelState): boolean {
+  return state.phase === 'done';
 }
 
 function describePhase(state: PanelState): string {

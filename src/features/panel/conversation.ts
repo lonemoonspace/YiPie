@@ -23,8 +23,16 @@ import {
 import { countVariable } from '@/domain/prompt/render';
 import { estimateTokens } from '@/domain/token-estimate';
 import type { ChatOutcome } from '@/platform/llm/client';
+import { createLatestOnly } from './latest-only';
 import { createModelSwitcher } from './model-switcher';
-import type { BudgetWindow, CutNote, Exchange, PanelEvent, PanelProblem } from './state';
+import type {
+  BudgetWindow,
+  CutNote,
+  Exchange,
+  PanelEvent,
+  PanelProblem,
+  PromptChoice,
+} from './state';
 
 /** What a run reads before it starts: always fresh, so the panel follows the settings. */
 export interface RunSetup {
@@ -34,6 +42,10 @@ export interface RunSetup {
   config: PanelModelConfig | null;
   /** The default prompt; null when there is none. */
   prompt: Pick<PromptConfig, 'system' | 'user'> | null;
+  /** The prompt menu: names only. */
+  prompts: PromptChoice[];
+  /** The default prompt's id; null when there is none. */
+  promptId: string | null;
   trimming: TrimmingStrategy;
   answerLanguage: AnswerLanguage;
   /** Opening the panel on the page summarizes it right away; off, it waits for `summarize`. */
@@ -66,6 +78,8 @@ export interface ConversationDeps {
   save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   /** Makes a model the default (`models.choose`). */
   choose: (id: string) => Promise<unknown>;
+  /** Makes a prompt the default (`prompts.choose`). */
+  choosePrompt: (id: string) => Promise<unknown>;
   /** The service of a model refused `stream_options` (`models.disableStreamUsage`). */
   disableStreamUsage: (id: string) => Promise<unknown>;
   dispatch: (event: PanelEvent) => void;
@@ -97,6 +111,8 @@ export interface Conversation {
   stop: () => void;
   /** Makes `id` the default model, then runs the latest turn again with it. */
   switchModel: (id: string) => void;
+  /** Makes `id` the default prompt, then starts over with a new summary that uses it. */
+  switchPrompt: (id: string) => void;
   /**
    * The panel is going away: the request in flight ends, and nothing still
    * on its way is shown or acted on (a save's result, a model pick, a
@@ -127,9 +143,9 @@ export function createConversation(deps: ConversationDeps): Conversation {
   /** The turn in flight, or the latest one if it failed or stopped empty. Not in `history`. */
   let pending: { question: string | null } | null = null;
   let run: AbortController | null = null;
-  /** Counts actions (open, a request, a model pick, dispose): a waiting step checks it is still the latest. */
+  /** Counts actions (open, a request, a pick from a menu, dispose): a waiting step checks it is still the latest. */
   let action = 0;
-  /** The action of the newest model pick. */
+  /** The action of the newest pick from either menu; 0 once a pick failed. */
   let picked = 0;
   /** Bumped by `dispose`: a save answered after it is not shown. */
   let generation = 0;
@@ -139,6 +155,12 @@ export function createConversation(deps: ConversationDeps): Conversation {
   let mode: PanelMode = 'page';
   /** Opened without a summary, as the settings ask: a model pick only changes the default. */
   let waiting = false;
+
+  /** Fills both menus from what the settings say now. */
+  const menus = (setup: RunSetup) => {
+    deps.dispatch({ type: 'models', models: setup.choices, modelId: setup.config?.id ?? null });
+    deps.dispatch({ type: 'prompts', prompts: setup.prompts, promptId: setup.promptId });
+  };
 
   const drop = () => {
     run?.abort();
@@ -202,7 +224,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
       return;
     }
     if (!current()) return;
-    deps.dispatch({ type: 'models', models: setup.choices, modelId: setup.config?.id ?? null });
+    menus(setup);
     const { config, prompt } = setup;
     if (config === null) return fail({ kind: 'no-model' });
     if (prompt === null) return fail({ kind: 'no-prompt' });
@@ -342,17 +364,60 @@ export function createConversation(deps: ConversationDeps): Conversation {
     void start(last?.question ?? null, options);
   }
 
-  // Only the newest pick reports (createModelSwitcher), and only while the
-  // user has done nothing else since and the panel is still there.
-  const pick = createModelSwitcher({
+  /** Starts over: the saved conversation is cleared now, as the panel shows it. */
+  function restart() {
+    const cleared = history.length > 0;
+    history = [];
+    pending = null;
+    if (cleared) persist();
+    void start(null);
+  }
+
+  // A model pick and a prompt pick go out on their own queues. What follows
+  // them waits until neither is still on its way, so the run reads both new
+  // defaults: a new summary if the prompt changed, otherwise the latest turn
+  // again with the new model. Only the newest pick of each menu reports
+  // (createLatestOnly), and nothing follows once the user has done something
+  // else or the panel has gone away.
+  let modelPicking = false;
+  let promptPicking = false;
+  let promptPicked = false;
+  const follow = () => {
+    if (modelPicking || promptPicking) return;
+    const fresh = promptPicked;
+    promptPicked = false;
+    if (picked !== action || waiting) return;
+    if (fresh) restart();
+    else retry();
+  };
+  const pickFailed = (error: unknown) => {
+    if (picked !== action) return;
+    // The other menu's pick, if still on its way, starts nothing after this.
+    picked = 0;
+    promptPicked = false;
+    drop();
+    deps.dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } });
+  };
+  const pickModel = createModelSwitcher({
     choose: deps.choose,
     chosen: () => {
-      if (picked === action && !waiting) retry();
+      modelPicking = false;
+      follow();
     },
     failed: (error) => {
-      if (picked !== action) return;
-      drop();
-      deps.dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } });
+      modelPicking = false;
+      pickFailed(error);
+    },
+  });
+  const pickPrompt = createLatestOnly({
+    send: deps.choosePrompt,
+    settled: () => {
+      promptPicking = false;
+      follow();
+    },
+    failed: (error) => {
+      promptPicking = false;
+      pickFailed(error);
     },
   });
 
@@ -389,10 +454,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
         deps.dispatch({ type: 'restored', exchanges, truncated: saved.truncated });
         try {
           const setup = await deps.setup();
-          if (current()) {
-            const modelId = setup.config?.id ?? null;
-            deps.dispatch({ type: 'models', models: setup.choices, modelId });
-          }
+          if (current()) menus(setup);
         } catch {
           // The menu fills in with the next request.
         }
@@ -412,22 +474,16 @@ export function createConversation(deps: ConversationDeps): Conversation {
       if (!current()) return;
       if (setup !== null && !setup.autoSummarize) {
         waiting = true;
-        deps.dispatch({ type: 'models', models: setup.choices, modelId: setup.config?.id ?? null });
+        menus(setup);
         deps.dispatch({ type: 'ready' });
         return;
       }
       void start(null);
     },
 
-    summarize() {
-      // Starting over clears the saved conversation now, as the panel does,
-      // rather than when the new summary is done.
-      const cleared = history.length > 0;
-      history = [];
-      pending = null;
-      if (cleared) persist();
-      void start(null);
-    },
+    // Starting over clears the saved conversation now, as the panel does,
+    // rather than when the new summary is done.
+    summarize: restart,
 
     ask(question) {
       const text = question.trim();
@@ -445,7 +501,17 @@ export function createConversation(deps: ConversationDeps): Conversation {
       picked = ++action;
       drop();
       deps.dispatch({ type: 'select', modelId: id, waiting });
-      pick(id);
+      modelPicking = true;
+      pickModel(id);
+    },
+
+    switchPrompt(id) {
+      picked = ++action;
+      drop();
+      deps.dispatch({ type: 'selectPrompt', promptId: id, waiting });
+      promptPicking = true;
+      promptPicked = true;
+      pickPrompt(id);
     },
 
     dispose() {

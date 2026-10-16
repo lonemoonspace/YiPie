@@ -14,6 +14,7 @@
   color-scheme: light;
   --color-bg: #ffffff;
   --color-surface: #f5f6f8;
+  --color-tint: #eef3fc;
   --color-text: #1d2129;
   --color-muted: #5c6370;
   --color-border: #d6dae0;
@@ -46,6 +47,7 @@
   color-scheme: dark;
   --color-bg: #15171c;
   --color-surface: #1f2228;
+  --color-tint: #1b2538;
   --color-text: #e6e8eb;
   --color-muted: #a2a8b3;
   --color-border: #343a44;
@@ -62,6 +64,7 @@
     color-scheme: dark;
     --color-bg: #15171c;
     --color-surface: #1f2228;
+    --color-tint: #1b2538;
     --color-text: #e6e8eb;
     --color-muted: #a2a8b3;
     --color-border: #343a44;

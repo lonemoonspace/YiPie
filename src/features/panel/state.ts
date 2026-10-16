@@ -4,6 +4,12 @@ import type { TurnUsage } from '@/contract/snapshot';
 import type { CutStrategy } from '@/domain/budget';
 import type { LlmError } from '@/domain/llm/errors';
 
+/** A prompt in the panel's menu: its name, never its templates. */
+export interface PromptChoice {
+  id: string;
+  name: string;
+}
+
 /** The context window a request was budgeted for. */
 export interface BudgetWindow {
   contextWindow: number;
@@ -96,6 +102,10 @@ export interface PanelState {
   models: ModelChoice[];
   /** The model in use: the global default, or the one just picked from the menu. */
   modelId: string | null;
+  /** What the prompt menu offers (names only), as last read. */
+  prompts: PromptChoice[];
+  /** The prompt summaries use: the global default, or the one just picked from the menu. */
+  promptId: string | null;
   /** Origin of the model service, for error messages. */
   origin: string | null;
   /**
@@ -125,6 +135,7 @@ export type PanelEvent =
   /** A new turn begins after the first `keep` turns; the others are gone. */
   | { type: 'start'; question: string | null; keep: number }
   | { type: 'models'; models: ModelChoice[]; modelId: string | null }
+  | { type: 'prompts'; prompts: PromptChoice[]; promptId: string | null }
   /** The panel was opened on the selection. */
   | { type: 'mode'; mode: PanelMode }
   /**
@@ -132,6 +143,11 @@ export type PanelEvent =
    * the panel is `waiting` for the user to ask for a summary.
    */
   | { type: 'select'; modelId: string; waiting?: boolean }
+  /**
+   * A prompt picked from the menu: a new summary starts with it once the
+   * pick is stored, unless the panel is `waiting` for the user to ask for one.
+   */
+  | { type: 'selectPrompt'; promptId: string; waiting?: boolean }
   | { type: 'requesting'; origin: string; cut: CutNote | null }
   /** The request is sent once more after `seconds`. */
   | { type: 'retrying'; seconds: number }
@@ -149,6 +165,8 @@ export const INITIAL_PANEL_STATE: PanelState = {
   mode: 'page',
   models: [],
   modelId: null,
+  prompts: [],
+  promptId: null,
   origin: null,
   retrying: null,
   turns: [],
@@ -217,8 +235,20 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       };
     case 'models':
       return { ...state, models: event.models, modelId: event.modelId };
+    case 'prompts':
+      return { ...state, prompts: event.prompts, promptId: event.promptId };
     case 'mode':
       return { ...state, mode: event.mode };
+    case 'selectPrompt':
+      if (event.waiting === true) return { ...state, phase: 'ready', promptId: event.promptId };
+      // What is on screen stays until the new summary starts.
+      return {
+        ...state,
+        phase: 'extracting',
+        promptId: event.promptId,
+        retrying: null,
+        problem: null,
+      };
     case 'select':
       if (event.waiting === true) return { ...state, phase: 'ready', modelId: event.modelId };
       // The run in flight is dropped; the turn starts again once the pick is stored.

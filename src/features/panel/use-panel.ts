@@ -47,6 +47,8 @@ export function usePanel(): PanelControls {
           choices: models.choices,
           config: models.current,
           prompt: prompts.items.find((item) => item.id === prompts.defaultId) ?? null,
+          prompts: prompts.items.map(({ id, name }) => ({ id, name })),
+          promptId: prompts.defaultId,
           trimming: settings.trimming,
           answerLanguage: settings.answerLanguage,
           autoSummarize: settings.autoSummarize,
@@ -57,6 +59,7 @@ export function usePanel(): PanelControls {
       stream: (request) => streamChat(request),
       save: (messages, revision) => callRpc('snapshot.save', { messages, revision }),
       choose: (id) => callRpc('models.choose', { id }),
+      choosePrompt: (id) => callRpc('prompts.choose', { id }),
       disableStreamUsage: (id) => callRpc('models.disableStreamUsage', { id }),
       dispatch,
       language: answerLanguageName,
@@ -103,6 +106,17 @@ export function usePanel(): PanelControls {
     };
   }, [conversation]);
 
-  const { summarize, ask, retry, stop, switchModel } = conversation;
-  return { state, locale, summarize, ask, retry, stop, switchModel, pageText, locate };
+  const { summarize, ask, retry, stop, switchModel, switchPrompt } = conversation;
+  return {
+    state,
+    locale,
+    summarize,
+    ask,
+    retry,
+    stop,
+    switchModel,
+    switchPrompt,
+    pageText,
+    locate,
+  };
 }

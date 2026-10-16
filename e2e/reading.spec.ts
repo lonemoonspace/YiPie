@@ -67,6 +67,8 @@ test('the page text the extension read can be copied from the panel', async ({
   );
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
 
+  // Kept behind "⋯", with opening the settings.
+  await frame.getByRole('button', { name: '更多', exact: true }).click();
   await frame.getByRole('button', { name: '复制正文' }).click();
 
   await expect(frame.getByRole('button', { name: '已复制' })).toBeVisible();

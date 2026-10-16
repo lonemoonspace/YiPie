@@ -17,9 +17,72 @@ body {
   padding: 32px 16px;
 }
 
+/* The name and the links to each section, at the top while the page scrolls. */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -32px -16px 24px;
+  padding: 20px 16px 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.masthead .title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  display: block;
+  flex: none;
+}
+
+.app-name {
+  font-size: 20px;
+  font-weight: 650;
+}
+
 h1 {
-  margin: 0 0 24px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.sections {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.sections a {
+  flex: none;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+.sections a:hover {
+  color: var(--color-text);
+}
+
+.sections a[aria-current='location'] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.sections a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* A section reached from the navigation lands below it. */
+h2 {
+  scroll-margin-top: 120px;
 }
 
 h2 {
@@ -31,7 +94,7 @@ h2 {
   margin-bottom: 20px;
   padding: 20px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--color-surface);
 }
 
@@ -85,7 +148,7 @@ summary:focus-visible {
 button {
   padding: 6px 18px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-accent);
   color: var(--color-on-accent);
   font: inherit;
@@ -160,10 +223,10 @@ button:disabled {
 }
 
 button.secondary {
-  padding: 3px 10px;
-  border: 1px solid var(--color-border);
+  padding: 3px 12px;
+  border: 1px solid var(--color-control-border);
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-text);
   font-size: 13px;
 }
 
@@ -171,8 +234,83 @@ button.secondary.danger {
   color: var(--color-danger);
 }
 
+/* A button that is only an icon; its name is in its label. */
+button.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+}
+
+button.icon-button:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+button.icon-button:disabled {
+  opacity: 0.35;
+}
+
+.icon {
+  display: block;
+}
+
+/* The "⋯" button of a row and what it shows. */
+.more {
+  position: relative;
+}
+
+.more-items {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+button.menu-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+button.menu-item:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+button.menu-item.danger {
+  color: var(--color-danger);
+}
+
+/* Adds an item: a dashed row below the list. */
 .add {
+  width: 100%;
   margin-top: 4px;
+  padding: 10px;
+  border: 1.5px dashed var(--color-control-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.add::before {
+  content: '+ ';
 }
 
 .items {
@@ -184,12 +322,25 @@ button.secondary.danger {
 }
 
 .item {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
+  padding: 12px 12px 12px 16px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--color-bg);
+}
+
+/* The name and details at the start, the actions at the end. */
+.item-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.item-text {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 2px;
+  min-width: 0;
 }
 
 .item-main {
@@ -215,15 +366,17 @@ button.secondary.danger {
 .item-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
 
 .badge {
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--color-tint);
+  color: var(--color-accent);
   font-size: 12px;
+  font-weight: 600;
   line-height: 1.6;
 }
 

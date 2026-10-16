@@ -11,6 +11,7 @@ import {
   removeLeftoverHosts,
   watchForOrphaning,
 } from './orphan';
+import { createLogo } from './logo';
 import { SHELL_CSS } from './shell-css';
 
 const logger = createLogger('host');
@@ -91,7 +92,10 @@ function createPanelHost(): PanelHost {
   const bar = node('div', { class: 'bar' });
   const close = node('button', { class: 'close', type: 'button' });
   close.textContent = '×';
+  // The brand at the left end of the bar is what the panel is dragged by.
+  const brand = node('div', { class: 'brand' });
   const title = node('span', { class: 'title' });
+  brand.append(createLogo(), title);
   /** Words of the shell, in the interface language of the moment. */
   function label(): void {
     frame.setAttribute('aria-label', t('app.name'));
@@ -101,7 +105,7 @@ function createPanelHost(): PanelHost {
   }
   label();
   const body = node('div', { class: 'body' });
-  bar.append(title, close);
+  bar.append(brand, close);
   frame.append(bar, body);
   shadow.append(frame);
 
@@ -224,7 +228,7 @@ function createPanelHost(): PanelHost {
   }
 
   close.addEventListener('click', hide);
-  makeDraggable(element, bar, frame, close);
+  makeDraggable(element, brand, frame, close);
   // Once the extension is updated or reloaded, this host is dead: it goes
   // as soon as someone could see it (orphan.ts).
   watchForOrphaning(element, hide);

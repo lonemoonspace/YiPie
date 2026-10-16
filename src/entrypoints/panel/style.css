@@ -8,26 +8,42 @@ body,
   height: 100%;
 }
 
+/*
+ * The shell's bar lies over the two ends of the toolbar
+ * (platform/panel-host/shell-css.ts): the brand at the start, the close
+ * button at the end. Narrow, the brand is the logo alone.
+ */
+:root {
+  --shell-start: 84px;
+  --shell-end: 40px;
+}
+
+@media (max-width: 359px) {
+  :root {
+    --shell-start: 44px;
+  }
+}
+
 body {
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--font-size-reading);
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 .panel {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding: 10px 14px 0;
+  padding: 0 18px;
 }
 
 /* Takes the room left, so the follow-up box sits at the bottom of the panel. */
 .conversation {
   flex: 1 0 auto;
-  padding-bottom: 14px;
+  padding: 16px 0 16px;
 }
 
 /* Opened without a summary, as the settings ask: one button starts it. */
@@ -45,29 +61,76 @@ body {
 .toolbar {
   position: sticky;
   top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: -10px -14px 10px;
-  padding: 8px 14px;
+  gap: 6px;
+  height: 44px;
+  margin: 0 -18px;
+  padding: 0 var(--shell-end) 0 var(--shell-start);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
 
+/* A model or prompt menu: a quiet pill that keeps its name short. */
+.menu {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.menu:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Said for screen readers always; shown while something goes on or went wrong. */
 .status {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   margin: 0;
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status[data-quiet='true'] {
+  color: transparent;
+}
+
+.pulse {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 button {
   padding: 4px 14px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-accent);
   color: var(--color-on-accent);
   font: inherit;
@@ -76,16 +139,45 @@ button {
 }
 
 button:disabled {
-  opacity: 0.5;
   cursor: default;
 }
 
 button.quiet {
-  padding: 2px 8px;
-  border: 1px solid var(--color-border);
+  padding: 3px 10px;
+  border: 1px solid var(--color-control-border);
   background: transparent;
   color: var(--color-muted);
   font-size: 12px;
+}
+
+/* A button that is only an icon; its name is in its label. */
+button.icon-button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+}
+
+button.icon-button.outlined {
+  border-color: var(--color-control-border);
+}
+
+button.icon-button:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+button.icon-button[data-result='copied'] {
+  color: var(--color-accent);
+}
+
+.icon {
+  display: block;
 }
 
 button:focus-visible {
@@ -93,8 +185,42 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+/* The "⋯" button and what it shows. */
+.more {
+  position: relative;
+  flex: none;
+}
+
+.more-items {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+
+.more-items button.quiet {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: 13px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.more-items button.quiet:hover {
+  background: var(--color-surface);
+}
+
 .note {
-  margin: 0 0 10px;
+  margin: 10px 0 0;
   color: var(--color-muted);
   font-size: 12px;
 }
@@ -102,7 +228,7 @@ button:focus-visible {
 .problem {
   margin-top: 12px;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-notice-bg);
   color: var(--color-notice-text);
 }
@@ -121,15 +247,18 @@ button:focus-visible {
 
 /* One question and its answer. */
 .turn + .turn {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--color-border);
 }
 
+/* The user's question, on the right, as in a chat. */
 .question {
-  margin: 0 0 10px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  width: fit-content;
+  max-width: 88%;
+  margin: 0 0 10px auto;
+  padding: 7px 12px;
+  border-radius: 12px 12px 4px 12px;
   background: var(--color-surface);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -139,9 +268,43 @@ button:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-top: 2px;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 11px;
+}
+
+/* The copy button sits at the end of the line. */
+.meta .icon-button {
+  width: 26px;
+  height: 26px;
+  margin-inline-start: auto;
+}
+
+/* Lines where the answer will be, until its first words arrive. */
+.placeholder {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0 8px;
+}
+
+.placeholder span {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.placeholder span:nth-child(1) {
+  width: 92%;
+}
+
+.placeholder span:nth-child(2) {
+  width: 76%;
+}
+
+.placeholder span:nth-child(3) {
+  width: 54%;
 }
 
 /* The follow-up box stays at the bottom of the panel. */
@@ -149,10 +312,11 @@ button:focus-visible {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
-  margin: 0 -14px;
-  padding: 8px 14px 10px;
+  gap: 4px 8px;
+  margin: 0 -18px;
+  padding: 10px 12px 8px;
   border-top: 1px solid var(--color-border);
   background: var(--color-bg);
 }
@@ -160,20 +324,49 @@ button:focus-visible {
 .ask textarea {
   flex: 1;
   min-width: 0;
+  min-height: 36px;
   max-height: 30vh;
-  padding: 4px 8px;
+  padding: 7px 12px;
   border: 1px solid var(--color-control-border);
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
+  line-height: 1.5;
   resize: vertical;
 }
 
 .ask textarea:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+.ask button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+}
+
+/* Nothing to send: an outline, not a faded blue that looks broken. */
+.ask button:disabled {
+  border: 1px solid var(--color-control-border);
+  background: transparent;
+  color: var(--color-muted);
+}
+
+/* How to send, once the box has focus. */
+.ask-hint {
+  flex-basis: 100%;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.ask:focus-within .ask-hint {
+  height: auto;
 }
 
 /* The model's reasoning, folded above its answer. */
@@ -208,21 +401,21 @@ button:focus-visible {
 .answer h2,
 .answer h3,
 .answer h4 {
-  margin: 1.1em 0 0.5em;
-  line-height: 1.35;
+  margin: 0.9em 0 0.45em;
+  line-height: 1.4;
 }
 
 .answer h1 {
-  font-size: 1.3em;
+  font-size: 1.25em;
 }
 
 .answer h2 {
-  font-size: 1.18em;
+  font-size: 1.12em;
 }
 
 .answer h3,
 .answer h4 {
-  font-size: 1.05em;
+  font-size: 1em;
 }
 
 .answer p,
@@ -236,17 +429,43 @@ button:focus-visible {
 
 .answer ul,
 .answer ol {
-  padding-left: 1.4em;
+  padding-left: 1.3em;
 }
 
 .answer li + li {
-  margin-top: 0.25em;
+  margin-top: 0.45em;
+}
+
+.answer li::marker {
+  color: var(--color-accent);
+}
+
+.answer strong {
+  font-weight: 650;
 }
 
 .answer blockquote {
   padding-left: 0.9em;
   border-left: 3px solid var(--color-border);
   color: var(--color-muted);
+}
+
+/*
+ * The conclusion the built-in prompts open with, as a `> ` line: a card that
+ * reads first. A quote further down stays a plain quote.
+ */
+.answer > blockquote:first-child {
+  margin-bottom: 1em;
+  padding: 10px 14px;
+  border-left-color: var(--color-accent);
+  border-radius: 8px;
+  background: var(--color-tint);
+  color: var(--color-text);
+  font-size: 1.04em;
+}
+
+.answer > blockquote:first-child > :last-child {
+  margin-bottom: 0;
 }
 
 .answer code {
@@ -260,7 +479,7 @@ button:focus-visible {
 .answer pre {
   overflow-x: auto;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-surface);
 }
 
@@ -288,40 +507,82 @@ button:focus-visible {
   border-top: 1px solid var(--color-border);
 }
 
-.model {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 45%;
-  padding: 2px 4px;
-  border: 1px solid var(--color-control-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13px;
-  text-overflow: ellipsis;
-}
-
-.model:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+/* The answer coming in ends in a cursor. */
+.answer[aria-busy='true'] > :last-child:not(ul, ol)::after,
+.answer[aria-busy='true'] > :is(ul, ol):last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  vertical-align: -0.15em;
+  animation: pulse 1s steps(2) infinite;
 }
 
 /* A quote of the page (features/markdown): finds the passage when pressed. */
 .answer .cite {
-  display: inline-block;
-  min-width: 1.5em;
-  margin: 0 0.15em;
-  padding: 0 0.35em;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 26px;
+  height: 20px;
+  margin: 0 0.2em;
+  padding: 0 6px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 6px;
+  background: var(--color-bg);
   color: var(--color-accent);
-  font-size: 0.75em;
-  line-height: 1.5;
-  vertical-align: super;
+  font-size: 11px;
+  line-height: 1;
+  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+
+.answer .cite::before {
+  content: '↗';
 }
 
 .answer .cite:hover {
   border-color: var(--color-accent);
+  background: var(--color-tint);
+}
+
+/* The passage of the quote marker under the pointer or in focus. */
+.quote-preview {
+  position: fixed;
+  z-index: 2;
+  width: min(280px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: 12px;
+  line-height: 1.55;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+  pointer-events: none;
+}
+
+.quote-preview[data-above='true'] {
+  transform: translateY(-100%);
+}
+
+.quote-preview p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.quote-preview p::before {
+  content: '“';
+}
+
+.quote-preview p::after {
+  content: '”';
+}
+
+.quote-preview small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
 }

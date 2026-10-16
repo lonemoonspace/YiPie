@@ -55,6 +55,11 @@ const PAIRS: [string, string, number][] = [
   ['danger', 'bg', 4.5],
   ['danger', 'surface', 4.5],
   ['notice-text', 'notice-bg', 4.5],
+  // The conclusion card, and a quote marker under the pointer.
+  ['text', 'tint', 4.5],
+  ['accent', 'tint', 4.5],
+  // A quote's preview is the page's colours the other way round.
+  ['bg', 'text', 4.5],
   // The edges of inputs and selects, and the focus ring.
   ['control-border', 'bg', 3],
   ['control-border', 'surface', 3],

@@ -80,9 +80,9 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 新增方法的顺序：方法表登记 → background 的 handlers 里实现（类型会强制补齐）→ 给 dispatcher 写测试，尤其是应被拒绝的调用方。
 - 列表只暴露变更面（add / update / remove / move / setDefault），没有「把整个数组存回去」。返回的视图（`contract/rpc.ts` 的 `listView`）带着全部判断：默认项、认不出的行数、读取状态、这次是否回退了默认项。界面只渲染，判断放在 domain。
 - 面板只拿它要用的东西：读模型用 `models.current`，只有菜单（名称）和正在用的那个模型的配置；`models.list` 带着全部 Key，只给设置页。给面板新增方法时同样收窄输出：不要直接复用存储 schema（`z.looseObject` 会让未知字段穿透），逐字段映射到专门的 `z.object`（如 `PanelModelConfig`），它会丢掉 handler 多塞的字段。
-- 面板能调用的配置变更只有两个（计划 §8 的例外）：`models.choose`（换默认模型）与 `models.disableStreamUsage`（服务拒绝 `stream_options` 后关掉这个模型的用量请求，只能关）。Prompt 的一切变更、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
+- 面板能调用的配置变更只有三个（计划 §8 的例外）：`models.choose`（换默认模型）、`prompts.choose`（换默认 Prompt）与 `models.disableStreamUsage`（服务拒绝 `stream_options` 后关掉这个模型的用量请求，只能关）。Prompt 的增删改、备份的读取与删除只接受设置页。面板读通用设置用 `settings.current`（只有裁剪策略），`settings.get` 只给设置页。
 - 面板的对话快照经 `snapshot.get` / `snapshot.save`，参数里没有标签页和页面：后台按发送方的标签页、登记表里挂载时的页面键取（页面键在 `content.hello` 时由浏览器报告的标签页 URL `sender.tab.url` 算出，`domain/page-key.ts`；`sender.url` 是文档载入时的 URL，不随 `pushState` 变化，不能用来认页面）。不要给它们加页面参数。页面没有重新载入就换成了另一页（SPA），内容脚本关闭面板（`panel-host/host.ts`，Navigation API 的 `currententrychange`），挂载时也核对 `content.hello` 返回的页面键。
-- 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
+- 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型与默认 Prompt，各一个队列，两边都存好才开始请求）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
 - 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。来自另一个面板文档的保存，只在写队列里轮到时它仍是这个标签页接上的面板才存（`createSnapshotStore` 的 `attached`）：调度器的核对发生在请求排队之前，排队期间新面板可能已经接上。以后新增「以面板已接上为前提」的写入，同样在队列任务里再核对一次。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
 - 引用定位经 `page.locate`（只给已接上的面板）：后台请内容脚本在页面里查找（`platform/locate/scroll-to-text.ts`），高亮用 CSS Custom Highlight API，样式经 `scripting.insertCSS` 注入，不改页面 DOM。
 - 导入经 `config.import`（只接受设置页）：文件在设置页里读、按表单的规则逐条校验（`domain/config-transfer.ts`），只把认得的条目发给后台，后台用 `addAll` 一次追加、分配新 id。
@@ -100,7 +100,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 单测在 node 环境跑，不加载浏览器 API；存储用 `tests/helpers/memory-store.ts`，它每次操作都让出事件循环，能复现并发交错。
 - 新增行为必须有测试。测自己的语义，不重复测 zod、React 这些第三方库本身。
 - E2E 要断言存储里的数据或刷新后的状态，不能只看界面。
-- E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。
+- E2E 跑的是 E2E 构建；打开面板用 `openPanel` fixture（等同点工具栏图标），本地页面与假服务由 `e2e/fake-llm/` 提供。面板的宿主是 closed shadow root，Playwright 的定位器进不去：面板内容通过 `panelFrame` 拿到 iframe 再找，宿主外壳的按钮按坐标点。外壳的标题栏浮在面板工具栏两端，工具栏用 `--shell-start` / `--shell-end` 给它留位置，改外壳宽度时两边一起改（`platform/panel-host/shell-css.ts`、`entrypoints/panel/style.css`）。面板的「复制正文」「打开设置」和设置页列表行的「设为默认」「删除」在「⋯」按钮后面，E2E 先点开它。
 - E2E 的浏览器默认说中文（fixture 选项 `browserLanguage`，默认 `zh-CN`；页面用 Playwright 的 `locale`，SW 的 `getUILanguage()` 在 Linux 上读 `LANGUAGE` 环境变量，fixture 两样都设），所以 `auto` 下界面是中文。要英文浏览器用 `test.use({ browserLanguage: 'en-US' })`，见 `e2e/language.spec.ts`。
 - E2E 里预置数据用 `e2e/fixtures.ts` 的 `storeModels`（可带 `contextWindow`）/ `storePrompts` / `storeDefaults` / `storeSettings`（可带 `theme`、`fontSize`、`answerLanguage`、`interfaceLanguage`），读回存储用 `stored`（`storage.local`）与 `session`（`storage.session`：面板登记与快照）。删除前的确认框用 `page.once('dialog', …)` 接受或拒绝。
 - Playwright 的视口模拟下，离视口底部约 100 px 以内对跨站 iframe 的鼠标点击会丢（普通跨站 iframe 也一样，与面板无关）。面板底部的追问框用键盘操作（`fill` 后 `press('Enter')`）；非点不可时先把视口调高。

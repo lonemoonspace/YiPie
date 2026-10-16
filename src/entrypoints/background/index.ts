@@ -103,6 +103,7 @@ export default defineBackground(() => {
       'prompts.remove': ({ id }) => prompts.remove(id),
       'prompts.move': ({ id, direction }) => prompts.move(id, direction),
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
+      'prompts.choose': ({ id }) => prompts.setDefault(id),
       // One list after the other: each is appended in one change, and a list
       // with nothing to add is left unwritten.
       'config.import': async (input) => ({

@@ -66,6 +66,7 @@ function harness(options: {
   page?: PageContext;
   save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   choose?: (id: string) => Promise<unknown>;
+  choosePrompt?: (id: string) => Promise<unknown>;
   disableStreamUsage?: (id: string) => Promise<unknown>;
 }) {
   const scripts = [...(options.scripts ?? [])];
@@ -76,6 +77,7 @@ function harness(options: {
   let state = INITIAL_PANEL_STATE;
   const extract = vi.fn(() => Promise.resolve(options.page ?? page));
   const choose = vi.fn(options.choose ?? (() => Promise.resolve({})));
+  const choosePrompt = vi.fn(options.choosePrompt ?? (() => Promise.resolve({})));
   const disableStreamUsage = vi.fn(options.disableStreamUsage ?? (() => Promise.resolve({})));
 
   const conversation = createConversation({
@@ -89,6 +91,11 @@ function harness(options: {
             ],
             config,
             prompt,
+            prompts: [
+              { id: 'p1', name: '网页总结' },
+              { id: 'p2', name: '速读' },
+            ],
+            promptId: 'p1',
             trimming: 'back',
             answerLanguage: 'interface',
             autoSummarize: true,
@@ -122,6 +129,7 @@ function harness(options: {
       return options.save ? options.save(messages, revision) : { truncated: false };
     },
     choose,
+    choosePrompt,
     disableStreamUsage,
     dispatch: (event) => {
       events.push(event);
@@ -147,6 +155,7 @@ function harness(options: {
     events,
     extract,
     choose,
+    choosePrompt,
     disableStreamUsage,
     state: () => state,
     /** The messages of request `index`, as sent. */
@@ -812,6 +821,116 @@ describe('conversation: the model menu', () => {
       problem: { kind: 'switch', detail: 'read-only' },
     });
     expect(h.requests).toHaveLength(1);
+  });
+});
+
+describe('conversation: the prompt menu', () => {
+  it('fills the menu with the prompt names and the default', async () => {
+    const h = harness({ scripts: [answer('总结')] });
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state()).toMatchObject({
+      prompts: [
+        { id: 'p1', name: '网页总结' },
+        { id: 'p2', name: '速读' },
+      ],
+      promptId: 'p1',
+    });
+  });
+
+  it('makes the pick the default, then starts over with a new summary', async () => {
+    const h = harness({ scripts: [answer('总结'), answer('回答'), answer('速读的总结')] });
+    await h.conversation.open();
+    await settle();
+    h.conversation.ask('问');
+    await settle();
+
+    h.conversation.switchPrompt('p2');
+    await settle();
+
+    expect(h.choosePrompt).toHaveBeenCalledWith('p2');
+    expect(h.sent(2)).toHaveLength(2);
+    expect(h.state()).toMatchObject({ phase: 'done' });
+    expect(h.state().turns.map((turn) => [turn.question, turn.text])).toEqual([
+      [null, '速读的总结'],
+    ]);
+    // The conversation saved for the page is the new summary alone.
+    expect(h.saves.at(-1)).toMatchObject([{ role: 'assistant', content: '速读的总结' }]);
+  });
+
+  it('only changes the default while the panel waits for the user to ask', async () => {
+    const h = harness({ setup: { autoSummarize: false } });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchPrompt('p2');
+    await settle();
+
+    expect(h.choosePrompt).toHaveBeenCalledWith('p2');
+    expect(h.requests).toHaveLength(0);
+    expect(h.state()).toMatchObject({ phase: 'ready', promptId: 'p2' });
+  });
+
+  it('waits for both picks, then starts over once with the new prompt and model', async () => {
+    let storePrompt: () => void = () => {};
+    const h = harness({
+      scripts: [answer('总结'), answer('新的')],
+      choosePrompt: () => new Promise((resolve) => (storePrompt = () => resolve({}))),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchPrompt('p2');
+    h.conversation.switchModel('m2');
+    await settle();
+    // The model is stored, the prompt not yet: nothing runs.
+    expect(h.requests).toHaveLength(1);
+
+    storePrompt();
+    await settle();
+
+    expect(h.requests).toHaveLength(2);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['新的']);
+  });
+
+  it('reports a pick that could not be stored, and keeps the conversation', async () => {
+    const h = harness({
+      scripts: [answer('总结')],
+      choosePrompt: () => Promise.reject(new Error('read-only')),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchPrompt('p2');
+    await settle();
+
+    expect(h.state()).toMatchObject({
+      phase: 'error',
+      problem: { kind: 'switch', detail: 'read-only' },
+    });
+    expect(h.requests).toHaveLength(1);
+    expect(h.saves).toHaveLength(1);
+  });
+
+  it('goes no further with a prompt pick stored after the user asked something else', async () => {
+    let stored: () => void = () => {};
+    const h = harness({
+      scripts: [answer('总结'), answer('重新的总结')],
+      choosePrompt: () => new Promise((resolve) => (stored = () => resolve({}))),
+    });
+    await h.conversation.open();
+    await settle();
+    h.conversation.switchPrompt('p2');
+    await settle();
+
+    h.conversation.summarize();
+    await settle();
+    stored();
+    await settle();
+
+    expect(h.requests).toHaveLength(2);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['重新的总结']);
   });
 });
 

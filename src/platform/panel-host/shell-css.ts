@@ -17,37 +17,71 @@ export const SHELL_CSS = `
   min-height: 240px;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
+  position: relative;
   overflow: hidden;
   resize: both;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  border-radius: 10px;
+  container-type: inline-size;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
   background: #ffffff;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 10px 30px rgba(20, 30, 50, 0.16), 0 1px 3px rgba(20, 30, 50, 0.08);
   color-scheme: light;
   font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #1d2129;
 }
+/*
+ * The bar lies over the top of the panel, whose toolbar keeps the two ends
+ * free for it (entrypoints/panel/style.css, --shell-start and --shell-end):
+ * the brand at the left, which the panel is dragged by, and the close button
+ * at the right. Between them, presses reach the panel's own toolbar.
+ */
 .bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: none;
-  height: 34px;
-  padding: 0 6px 0 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  background: #f5f6f8;
-  cursor: grab;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 6px 0 0;
+  pointer-events: none;
   user-select: none;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 80px;
+  height: 100%;
+  padding-left: 12px;
+  pointer-events: auto;
+  cursor: grab;
   touch-action: none;
 }
-.bar:active {
+.brand:active {
   cursor: grabbing;
 }
+.logo {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
 .title {
-  flex: 1;
+  overflow: hidden;
   font-weight: 600;
+  white-space: nowrap;
+}
+/* Narrow: the logo alone, as the panel's toolbar expects. */
+@container (max-width: 359px) {
+  .brand {
+    width: 44px;
+  }
+  .title {
+    display: none;
+  }
 }
 .close {
+  pointer-events: auto;
   width: 26px;
   height: 26px;
   border: 0;
@@ -60,7 +94,7 @@ export const SHELL_CSS = `
   cursor: pointer;
 }
 .close:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.06);
 }
 .close:focus-visible {
   outline: 2px solid #2b6ad6;
@@ -69,6 +103,7 @@ export const SHELL_CSS = `
   position: relative;
   flex: 1;
 }
+
 iframe {
   position: absolute;
   inset: 0;
@@ -80,19 +115,16 @@ iframe {
   pointer-events: none;
 }
 .message {
-  margin: 16px;
+  margin: 56px 16px 16px;
 }
 /* The panel's theme, as the background reported it; until then, and for
    "system", the system's. */
 .frame[data-theme='dark'] {
   border-color: rgba(255, 255, 255, 0.16);
   background: #15171c;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
   color: #e6e8eb;
-}
-.frame[data-theme='dark'] .bar {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
-  background: #1f2228;
 }
 .frame[data-theme='dark'] .close:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -101,12 +133,9 @@ iframe {
   .frame:not([data-theme='light']) {
     border-color: rgba(255, 255, 255, 0.16);
     background: #15171c;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
     color: #e6e8eb;
-  }
-  .frame:not([data-theme='light']) .bar {
-    border-bottom-color: rgba(255, 255, 255, 0.1);
-    background: #1f2228;
   }
   .frame:not([data-theme='light']) .close:hover {
     background: rgba(255, 255, 255, 0.1);

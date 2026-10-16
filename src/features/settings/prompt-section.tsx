@@ -1,6 +1,7 @@
 import { PROMPT_CONFIGS_KEY, type PromptConfig } from '@/contract/prompt-config';
 import { t } from '@/domain/i18n';
 import { changedFields } from '@/domain/patch';
+import { distinctiveLine } from '@/domain/prompt-form';
 import { callRpc } from '@/platform/rpc/client';
 import { EditableList, type ListCalls } from './editable-list';
 import { PromptForm } from './prompt-form';
@@ -15,12 +16,6 @@ const calls: ListCalls<PromptConfig> = {
 };
 
 const nameOf = (prompt: PromptConfig) => prompt.name.trim() || t('prompt.unnamed');
-
-/** The first line worth reading, to tell prompts apart in the list. */
-function preview(prompt: PromptConfig): string {
-  const text = prompt.system.trim() || prompt.user.trim();
-  return text.split('\n', 1)[0] ?? '';
-}
 
 /** Prompts: a list with a default, edited only here (docs/development-plan.md §4.3). */
 export function PromptSection() {
@@ -46,7 +41,14 @@ export function PromptSection() {
           busy={busy}
           calls={calls}
           nameOf={nameOf}
-          details={(prompt) => <span className="preview">{preview(prompt)}</span>}
+          details={(prompt) => (
+            <span className="preview">
+              {distinctiveLine(
+                prompt,
+                view.items.filter((other) => other.id !== prompt.id),
+              )}
+            </span>
+          )}
           editor={(prompt, { focusOnOpen, close, cancel }) => (
             <PromptForm
               key={prompt?.id ?? 'new'}

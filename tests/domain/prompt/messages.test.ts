@@ -50,7 +50,7 @@ describe('buildPromptMessages', () => {
     const [system, user] = buildPromptMessages(builtinPrompt('zh-Hans'), values);
 
     expect(system?.role).toBe('system');
-    expect(system?.content).toContain('请用简体中文写一份结构清晰的 Markdown 总结');
+    expect(system?.content).toContain('请用简体中文写一份便于快速阅读的 Markdown 总结');
     expect(user).toEqual({
       role: 'user',
       content: [
