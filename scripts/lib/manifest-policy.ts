@@ -34,6 +34,9 @@ export const MANIFEST_POLICY: ManifestPolicy = {
       extension_pages:
         "script-src 'self'; object-src 'none'; img-src 'self' data:; frame-src 'none'; form-action 'none'; base-uri 'none'",
     },
+    // WXT picks these up from public/icon/<size>.png. The Chrome Web Store
+    // requires the 128 px one inside the package; the toolbar uses the small ones.
+    icons: { '16': 'icon/16.png', '32': 'icon/32.png', '48': 'icon/48.png', '128': 'icon/128.png' },
   },
   present: {
     // A popup would swallow the click that opens the panel.
@@ -126,6 +129,42 @@ export function checkLocales(manifest: Record<string, unknown>, locales: LocaleM
     const own = Object.keys(messages).sort();
     if (own.join() !== names.join()) {
       problems.push(`_locales/${locale} 的条目与默认语言不一致：${own.join(', ')}`);
+    }
+  }
+  return problems;
+}
+
+/** A built file's PNG header, or null when the file is missing or not a PNG. */
+export type PngSize = { width: number; height: number } | null;
+
+/** Reads the width and height from a PNG's IHDR chunk. */
+export function pngSize(bytes: Uint8Array): PngSize {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 24 || signature.some((byte, index) => bytes[index] !== byte)) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+/**
+ * Every icon the manifest declares must be in the build, as a square PNG of
+ * the size it is declared for: the browser shows a grey letter otherwise, and
+ * the Chrome Web Store rejects a package without its 128 px icon.
+ */
+export function checkIcons(
+  manifest: Record<string, unknown>,
+  sizeOf: (file: string) => PngSize,
+): string[] {
+  const icons = manifest.icons;
+  if (typeof icons !== 'object' || icons === null) return [];
+  const problems: string[] = [];
+  for (const [declared, file] of Object.entries(icons)) {
+    const size = sizeOf(String(file));
+    if (size === null) {
+      problems.push(`图标 ${String(file)} 不在构建里，或不是 PNG`);
+    } else if (size.width !== Number(declared) || size.height !== Number(declared)) {
+      problems.push(
+        `图标 ${String(file)} 是 ${size.width}×${size.height}，manifest 写的是 ${declared}`,
+      );
     }
   }
   return problems;

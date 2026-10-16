@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- 扩展有了自己的图标（工具栏、扩展管理页与商店里不再是灰色字母）。Chrome 应用商店要求安装包里有 128 px 图标，`npm run check:manifest` 现在会核对每张图标都在、尺寸正确
+- 准备上架 Chrome 应用商店：新增隐私政策 [PRIVACY.md](PRIVACY.md)（中英）；以后每个版本同时发 GitHub Release 与商店，两处是同一个安装包
+- 英文界面：面板里的「Copy page text」改为「Copy text」，原来的长按钮把状态（如「Done」）挤成「D..」
+
 ## [0.1.0] - 2026-10-16
 
 首个版本，以 GitHub Release 附件分发。

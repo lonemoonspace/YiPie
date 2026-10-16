@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { checkLocales, checkManifest, findTestHooks } from '../../scripts/lib/manifest-policy';
+import {
+  checkIcons,
+  checkLocales,
+  checkManifest,
+  findTestHooks,
+  pngSize,
+} from '../../scripts/lib/manifest-policy';
 
 const valid = {
   manifest_version: 3,
@@ -18,6 +24,7 @@ const valid = {
       "script-src 'self'; object-src 'none'; img-src 'self' data:; frame-src 'none'; form-action 'none'; base-uri 'none'",
   },
   background: { service_worker: 'background.js' },
+  icons: { '16': 'icon/16.png', '32': 'icon/32.png', '48': 'icon/48.png', '128': 'icon/128.png' },
 };
 
 describe('checkManifest', () => {
@@ -84,6 +91,12 @@ describe('checkManifest', () => {
     expect(checkManifest({ ...valid, content_scripts: [] })[0]).toContain('content_scripts');
   });
 
+  it('requires every icon size, the 128 px one the store needs included', () => {
+    const small = { '16': 'icon/16.png', '32': 'icon/32.png', '48': 'icon/48.png' };
+    expect(checkManifest({ ...valid, icons: small })[0]).toContain('icons');
+    expect(checkManifest({ ...valid, icons: undefined })[0]).toContain('icons');
+  });
+
   it('catches a manifest that is not MV3', () => {
     expect(checkManifest({ ...valid, manifest_version: 2 })).toHaveLength(1);
   });
@@ -121,5 +134,45 @@ describe('checkLocales', () => {
   it('catches locales that define different names', () => {
     const extra = { ...en, other: { message: 'x' } };
     expect(checkLocales(valid, { zh_CN: zh, en: extra }).join()).toContain('不一致');
+  });
+});
+
+describe('checkIcons', () => {
+  const square = (file: string) => {
+    const size = Number(/(\d+)\.png$/.exec(file)?.[1]);
+    return { width: size, height: size };
+  };
+
+  it('accepts icons that are PNGs of their declared size', () => {
+    expect(checkIcons(valid, square)).toEqual([]);
+  });
+
+  it('names an icon that is missing from the build', () => {
+    const problems = checkIcons(valid, (file) => (file === 'icon/128.png' ? null : square(file)));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('icon/128.png');
+  });
+
+  it('names an icon whose pixels do not match its declared size', () => {
+    const problems = checkIcons(valid, (file) =>
+      file === 'icon/16.png' ? { width: 32, height: 32 } : square(file),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('32×32');
+  });
+});
+
+describe('pngSize', () => {
+  it('reads the size from the IHDR chunk', () => {
+    const header = new Uint8Array(24);
+    header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const view = new DataView(header.buffer);
+    view.setUint32(16, 128);
+    view.setUint32(20, 96);
+    expect(pngSize(header)).toEqual({ width: 128, height: 96 });
+  });
+
+  it('rejects bytes that are not a PNG', () => {
+    expect(pngSize(new TextEncoder().encode('GIF89a and some more bytes here'))).toBeNull();
   });
 });

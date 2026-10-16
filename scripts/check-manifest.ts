@@ -1,12 +1,15 @@
 // Fails when the production build drifts from appendix C of the plan, or
 // still carries the E2E build's test hook. Run after `npm run build`:
 // `npm run check:manifest`.
+import { readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  checkIcons,
   checkLocales,
   checkManifest,
   findTestHooks,
+  pngSize,
   type LocaleMessages,
 } from './lib/manifest-policy.ts';
 
@@ -22,6 +25,16 @@ for (const locale of await readdir(localesDir).catch(() => [])) {
   locales[locale] = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
 }
 problems.push(...checkLocales(manifest, locales));
+
+problems.push(
+  ...checkIcons(manifest, (file) => {
+    try {
+      return pngSize(readFileSync(path.join(buildDir, file)));
+    } catch {
+      return null;
+    }
+  }),
+);
 
 const scripts = (await readdir(buildDir, { recursive: true }))
   .filter((file) => file.endsWith('.js'))

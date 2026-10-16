@@ -18,6 +18,7 @@ const manifest = (version: string, extra: Record<string, unknown> = {}) =>
       extension_pages:
         "script-src 'self'; object-src 'none'; img-src 'self' data:; frame-src 'none'; form-action 'none'; base-uri 'none'",
     },
+    icons: { '16': 'icon/16.png', '32': 'icon/32.png', '48': 'icon/48.png', '128': 'icon/128.png' },
     ...extra,
   });
 
