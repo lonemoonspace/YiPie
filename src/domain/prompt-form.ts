@@ -1,6 +1,6 @@
 import type { PromptConfig } from '@/contract/prompt-config';
 import { locale, t } from '@/domain/i18n';
-import { summaryTemplates } from '@/domain/prompt/default-prompt';
+import { builtinPrompts, summaryTemplates } from '@/domain/prompt/default-prompt';
 import {
   PROMPT_VARIABLES,
   renderTemplate,
@@ -30,6 +30,34 @@ export type PromptFormResult =
  */
 export function newPromptForm(): PromptFormFields {
   return { name: '', ...summaryTemplates(locale()) };
+}
+
+/**
+ * The built-in prompts, in the interface language, as forms a new prompt can
+ * start from: the way to get a preset back once the list is the user's own.
+ */
+export function presetForms(): PromptFormFields[] {
+  return builtinPrompts(locale()).map(({ name, system, user }) => ({ name, system, user }));
+}
+
+/**
+ * A line that tells `prompt` apart in a list: the first line of its system
+ * template (or else its user template) that the other prompts do not all
+ * share. The built-in prompts open with the same sentence, and their next
+ * line says what each one writes.
+ */
+export function distinctiveLine(
+  prompt: Pick<PromptConfig, 'system' | 'user'>,
+  others: readonly Pick<PromptConfig, 'system' | 'user'>[],
+): string {
+  const text = prompt.system.trim() || prompt.user.trim();
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const shared = (line: string) =>
+    others.length > 0 && others.every((other) => other.system.includes(line));
+  return lines.find((line) => !shared(line)) ?? lines[0] ?? '';
 }
 
 export function formFromPrompt(config: PromptConfig): PromptFormFields {

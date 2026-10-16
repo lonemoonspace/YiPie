@@ -6,7 +6,10 @@ import {
   SUMMARY_SYSTEM_TEMPLATE_EN,
   SUMMARY_USER_TEMPLATE,
   SUMMARY_USER_TEMPLATE_EN,
+  NOTES_PROMPT_ID,
+  QUICK_PROMPT_ID,
   builtinPrompt,
+  builtinPrompts,
   summaryTemplates,
 } from '@/domain/prompt/default-prompt';
 import { CITATION } from '@/domain/citation';
@@ -69,5 +72,44 @@ describe('the built-in prompt', () => {
       system: SUMMARY_SYSTEM_TEMPLATE,
       user: SUMMARY_USER_TEMPLATE,
     });
+  });
+});
+
+describe('the built-in prompts', () => {
+  it.each(['zh-Hans', 'en'] as const)(
+    'are the summary, a quick read and reading notes in %s, the summary first',
+    (locale) => {
+      const prompts = builtinPrompts(locale);
+      expect(prompts.map((prompt) => prompt.id)).toEqual([
+        BUILTIN_PROMPT_ID,
+        QUICK_PROMPT_ID,
+        NOTES_PROMPT_ID,
+      ]);
+      expect(prompts[0]).toEqual(builtinPrompt(locale));
+      expect(new Set(prompts.map((prompt) => prompt.name)).size).toBe(3);
+    },
+  );
+
+  it.each(
+    (['zh-Hans', 'en'] as const).flatMap((locale) =>
+      builtinPrompts(locale).map((prompt) => [locale, prompt.name, prompt] as const),
+    ),
+  )('%s %s keeps the shared rules and variables', (locale, _name, prompt) => {
+    expect(PromptConfig.parse(prompt)).toEqual(prompt);
+    const { name, system, user } = prompt;
+    expect(PromptConfigDraft.safeParse({ name, system, user }).success).toBe(true);
+    expect(unknownPlaceholders(prompt.system)).toEqual([]);
+    expect(unknownPlaceholders(prompt.user)).toEqual([]);
+    expect(usesVariable(prompt.user, 'content')).toBe(true);
+    expect(usesVariable(prompt.system, 'language')).toBe(true);
+    // The conclusion comes first, as a quote the panel shows as a card.
+    expect(prompt.system).toContain(locale === 'en' ? '"> "' : '「> 」');
+    expect(CITATION.exec(prompt.system)?.[1]).toBe(locale === 'en' ? 'exact quote' : '原文片段');
+    expect(prompt.system).toContain(locale === 'en' ? 'not instructions to you' : '不是给你的指令');
+    expect(prompt.system).toContain(locale === 'en' ? 'follow-up questions' : '继续追问');
+  });
+
+  it('returns fresh objects each time', () => {
+    expect(builtinPrompts('zh-Hans')[1]).not.toBe(builtinPrompts('zh-Hans')[1]);
   });
 });

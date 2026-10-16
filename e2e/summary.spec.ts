@@ -276,6 +276,45 @@ test('the model menu makes another model the default and summarizes again with i
   });
 });
 
+test('the prompt menu makes another built-in prompt the default and starts over with it', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:chat');
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const menu = frame.getByRole('combobox', { name: 'Prompt' });
+  await expect(menu).toHaveValue('builtin-summary');
+  const systemOf = (request: RecordedRequest | undefined) =>
+    (request?.body as { messages: { content: string }[] }).messages[0]?.content ?? '';
+  expect(systemOf(lastRequest(server))).toContain('便于快速阅读');
+
+  await frame.getByRole('textbox', { name: '追问' }).fill('问一句');
+  await frame.getByRole('textbox', { name: '追问' }).press('Enter');
+  await expect(frame.locator('.question')).toHaveCount(1);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  const before = server.requests.length;
+
+  await menu.selectOption({ label: '速读' });
+
+  // A new summary with the quick read: the follow-up is gone, nothing else is sent.
+  await expect.poll(() => server.requests.length).toBe(before + 1);
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(frame.locator('.question')).toHaveCount(0);
+  expect(systemOf(lastRequest(server))).toContain('30 秒能读完');
+  expect((lastRequest(server)?.body as { messages: unknown[] }).messages).toHaveLength(2);
+  await expect(menu).toHaveValue('builtin-quick');
+
+  // The menu wrote the global default, which the next trigger uses too.
+  expect(await stored(serviceWorker, 'selection')).toMatchObject({
+    version: 1,
+    data: { defaultPromptId: 'builtin-quick' },
+  });
+});
+
 test('with summarizing on opening turned off, the panel waits for the user to ask', async ({
   context,
   extensionId,

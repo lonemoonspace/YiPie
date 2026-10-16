@@ -246,12 +246,20 @@ export const RPC_METHODS = {
     output: PanelModelsView,
     callers: ['panel'],
   },
-  // The panel reads the default prompt; prompts change only in the settings
-  // page (docs/development-plan.md §4.3, decision 7).
+  // The panel reads the prompts for its menu and the default it summarizes
+  // with; it can only pick the default, through `prompts.choose`.
   'prompts.list': {
     input: z.strictObject({}),
     output: PromptConfigsView,
     callers: ['options', 'panel'],
+  },
+  // The panel's prompt menu sets the global default, as its model menu does
+  // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
+  // Everything else about prompts changes only in the settings page.
+  'prompts.choose': {
+    input: SetDefaultInput,
+    output: PromptConfigsView,
+    callers: ['panel'],
   },
   'prompts.add': {
     input: PromptConfigDraft,

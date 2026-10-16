@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { MODEL_CONFIGS_KEY } from '@/contract/model-config';
 import { PROMPT_CONFIGS_KEY, PromptConfigDraft } from '@/contract/prompt-config';
 import { SELECTION_KEY } from '@/contract/selection';
-import { BUILTIN_PROMPT_ID, builtinPrompt } from '@/domain/prompt/default-prompt';
+import {
+  BUILTIN_PROMPT_ID,
+  NOTES_PROMPT_ID,
+  QUICK_PROMPT_ID,
+  builtinPrompt,
+  builtinPrompts,
+} from '@/domain/prompt/default-prompt';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
 import { ReadOnlyRecordError, createQueue, readQuarantine } from '@/platform/storage';
@@ -19,15 +25,20 @@ function setup(stored: Record<string, unknown> = {}) {
 const draft = (fields: Record<string, unknown>) => PromptConfigDraft.parse(fields);
 const terse = { id: 'terse', name: '一句话', system: '', user: '一句话总结：{{content}}' };
 
-describe('prompts: the built-in prompt', () => {
+describe('prompts: the built-in prompts', () => {
   it('is the list, and the default, until the list is first written', async () => {
     const { prompts, store } = setup();
 
     expect(await prompts.list()).toMatchObject({
-      items: [builtinPrompt('zh-Hans')],
+      items: builtinPrompts('zh-Hans'),
       defaultId: BUILTIN_PROMPT_ID,
       status: 'missing',
     });
+    expect((await prompts.list()).items.map((item) => item.id)).toEqual([
+      BUILTIN_PROMPT_ID,
+      QUICK_PROMPT_ID,
+      NOTES_PROMPT_ID,
+    ]);
     expect(store.dump()).toEqual({});
   });
 
@@ -39,7 +50,7 @@ describe('prompts: the built-in prompt', () => {
     expect(store.dump()[PROMPT_CONFIGS_KEY]).toEqual({
       version: 1,
       data: [
-        builtinPrompt('zh-Hans'),
+        ...builtinPrompts('zh-Hans'),
         { id: 'p-1', name: '一句话', system: '', user: '一句话总结：{{content}}' },
       ],
     });
@@ -53,11 +64,11 @@ describe('prompts: the built-in prompt', () => {
       locale: () => locale,
     });
 
-    expect((await prompts.list()).items).toEqual([builtinPrompt('en')]);
+    expect((await prompts.list()).items).toEqual(builtinPrompts('en'));
     await prompts.add(draft({ name: 'Terse', user: '{{content}}' }));
 
     locale = 'zh-Hans';
-    expect((await prompts.list()).items[0]).toEqual(builtinPrompt('en'));
+    expect((await prompts.list()).items.slice(0, 3)).toEqual(builtinPrompts('en'));
   });
 
   it('can be edited like any other prompt', async () => {
@@ -65,11 +76,14 @@ describe('prompts: the built-in prompt', () => {
 
     const view = await prompts.update(BUILTIN_PROMPT_ID, { user: '{{content}}' });
 
-    expect(view.items).toEqual([{ ...builtinPrompt('zh-Hans'), user: '{{content}}' }]);
+    expect(view.items[0]).toEqual({ ...builtinPrompt('zh-Hans'), user: '{{content}}' });
+    expect(view.items.slice(1)).toEqual(builtinPrompts('zh-Hans').slice(1));
   });
 
   it('does not come back once the user has removed every prompt', async () => {
     const { prompts, store } = setup();
+    await prompts.remove(QUICK_PROMPT_ID);
+    await prompts.remove(NOTES_PROMPT_ID);
 
     expect(await prompts.remove(BUILTIN_PROMPT_ID)).toMatchObject({
       items: [],
@@ -86,7 +100,7 @@ describe('prompts: the built-in prompt', () => {
 
     expect(await prompts.list()).toMatchObject({
       status: 'invalid',
-      items: [builtinPrompt('zh-Hans')],
+      items: builtinPrompts('zh-Hans'),
       defaultId: BUILTIN_PROMPT_ID,
     });
 
@@ -182,7 +196,7 @@ describe('models and prompts share the default record', () => {
 });
 
 describe('prompts: importing', () => {
-  it('appends after the built-in prompt, which stays the default', async () => {
+  it('appends after the built-in prompts, the default staying as it was', async () => {
     const { prompts } = setup();
 
     const view = await prompts.addAll([
@@ -190,7 +204,13 @@ describe('prompts: importing', () => {
       draft({ name: '要点', user: '列出要点：{{content}}' }),
     ]);
 
-    expect(view.items.map((item) => item.id)).toEqual([BUILTIN_PROMPT_ID, 'p-1', 'p-2']);
+    expect(view.items.map((item) => item.id)).toEqual([
+      BUILTIN_PROMPT_ID,
+      QUICK_PROMPT_ID,
+      NOTES_PROMPT_ID,
+      'p-1',
+      'p-2',
+    ]);
     expect(view.defaultId).toBe(BUILTIN_PROMPT_ID);
   });
 });

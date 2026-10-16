@@ -89,7 +89,7 @@ const markdown = new Marked({
         quotes += 1;
         const passage = escapeHtml((token as CitationToken).passage);
         const label = escapeHtml(t('panel.cite.label', { number: quotes }));
-        return `<button type="button" class="cite" data-quote="${passage}" title="${passage}" aria-label="${label}">${quotes}</button>`;
+        return `<button type="button" class="cite" data-quote="${passage}" aria-label="${label}">${quotes}</button>`;
       },
     },
   ],

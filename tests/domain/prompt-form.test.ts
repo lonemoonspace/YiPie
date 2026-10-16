@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { SUMMARY_SYSTEM_TEMPLATE, SUMMARY_USER_TEMPLATE } from '@/domain/prompt/default-prompt';
+import {
+  SUMMARY_SYSTEM_TEMPLATE,
+  SUMMARY_USER_TEMPLATE,
+  builtinPrompts,
+} from '@/domain/prompt/default-prompt';
 import {
   formFromPrompt,
+  distinctiveLine,
   newPromptForm,
   parsePromptForm,
+  presetForms,
   previewPrompt,
   promptFormWarnings,
   unknownVariableFlags,
@@ -88,11 +94,40 @@ describe('the form for a new prompt', () => {
     });
   });
 
+  it('can start from any built-in prompt, its name included, without an id', () => {
+    expect(presetForms()).toEqual(
+      builtinPrompts('zh-Hans').map(({ name, system, user }) => ({ name, system, user })),
+    );
+    for (const preset of presetForms()) {
+      expect(parsePromptForm(preset).ok).toBe(true);
+      expect(promptFormWarnings(preset)).toEqual({});
+    }
+  });
+
   it('shows a stored prompt as it is', () => {
     expect(formFromPrompt({ id: 'p', name: '要点', system: 's', user: 'u' })).toEqual({
       name: '要点',
       system: 's',
       user: 'u',
     });
+  });
+});
+
+describe('distinctiveLine', () => {
+  it('skips the opening the other prompts share, to what this one writes', () => {
+    const [summary, quick, notes] = builtinPrompts('zh-Hans');
+    if (!summary || !quick || !notes) throw new Error('three presets');
+    expect(distinctiveLine(quick, [summary, notes])).toContain('30 秒能读完');
+    expect(distinctiveLine(summary, [quick, notes])).toContain('便于快速阅读');
+  });
+
+  it('is the first line when the prompt is alone, or nothing is shared', () => {
+    expect(distinctiveLine({ system: '\n第一行\n第二行', user: '' }, [])).toBe('第一行');
+    expect(distinctiveLine({ system: '', user: '列出要点：{{content}}' }, [])).toBe(
+      '列出要点：{{content}}',
+    );
+    expect(distinctiveLine({ system: '甲\n乙', user: '' }, [{ system: '丙', user: '' }])).toBe(
+      '甲',
+    );
   });
 });

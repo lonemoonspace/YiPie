@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { Download, Page } from '@playwright/test';
+import type { Download, Locator, Page } from '@playwright/test';
 import {
   E2E_KEY,
   expect,
@@ -40,7 +40,7 @@ test('models: choose a default, reorder, and remove the default with a fallback'
   await expect(models.getByRole('listitem')).toHaveCount(2);
   await expect(modelRow(page, '主力').getByText('默认', { exact: true })).toBeVisible();
 
-  await modelRow(page, '备用').getByRole('button', { name: '设为默认' }).click();
+  await rowAction(modelRow(page, '备用'), '设为默认');
   await expect(models.getByRole('status')).toHaveText('已将「备用」设为默认');
   await expect(modelRow(page, '备用').getByText('默认', { exact: true })).toBeVisible();
   expect(await stored(serviceWorker, 'selection')).toEqual({
@@ -59,7 +59,7 @@ test('models: choose a default, reorder, and remove the default with a fallback'
     questions.push(dialog.message());
     void dialog.dismiss();
   });
-  await modelRow(page, '备用').getByRole('button', { name: '删除' }).click();
+  await rowAction(modelRow(page, '备用'), '删除');
   await expect.poll(() => questions.length).toBe(1);
   expect(await storedIds()).toEqual(['spare', 'main']);
 
@@ -67,7 +67,7 @@ test('models: choose a default, reorder, and remove the default with a fallback'
     questions.push(dialog.message());
     void dialog.accept();
   });
-  await modelRow(page, '备用').getByRole('button', { name: '删除' }).click();
+  await rowAction(modelRow(page, '备用'), '删除');
   await expect(models.getByRole('status')).toHaveText('已删除「备用」。默认模型改为「主力」。');
   expect(questions).toEqual([
     '删除模型「备用」？它是默认模型，删除后默认模型改为「主力」。',
@@ -195,10 +195,16 @@ test('models: a service we hold no access to is marked, with a way to grant it',
   await expect(row.getByRole('button', { name: '授权访问' })).toBeVisible();
 });
 
+/** Presses one of the actions a row keeps behind its "⋯" button. */
+async function rowAction(row: Locator, name: string): Promise<void> {
+  await row.getByRole('button', { name: '更多操作' }).click();
+  await row.getByRole('button', { name }).click();
+}
+
 const promptRow = (page: Page, name: string) =>
   section(page, 'Prompt').getByRole('listitem').filter({ hasText: name });
 
-test('prompts: the built-in one is there from the start, and an edit to it is stored', async ({
+test('prompts: the built-in ones are there from the start, and an edit to one is stored', async ({
   context,
   extensionId,
   serviceWorker,
@@ -208,7 +214,8 @@ test('prompts: the built-in one is there from the start, and an edit to it is st
   const prompts = section(page, 'Prompt');
   const row = promptRow(page, '网页总结');
 
-  await expect(prompts.getByRole('listitem')).toHaveCount(1);
+  await expect(prompts.getByRole('listitem')).toHaveCount(3);
+  await expect(prompts.getByRole('listitem')).toContainText(['网页总结', '速读', '深度笔记']);
   await expect(row.getByText('默认', { exact: true })).toBeVisible();
   // Shown, not stored: nothing is written until the user changes something.
   expect(await stored(serviceWorker, 'prompt-configs')).toBeUndefined();
@@ -231,6 +238,8 @@ test('prompts: the built-in one is there from the start, and an edit to it is st
         name: '网页总结',
         user: '标题：{{title}}\n{{ foo }}\n{{content}}',
       }),
+      expect.objectContaining({ id: 'builtin-quick', name: '速读' }),
+      expect.objectContaining({ id: 'builtin-notes', name: '深度笔记' }),
     ],
   });
 });
@@ -253,14 +262,19 @@ test('prompts: a new one starts from the built-in templates, needs a name, and c
   await expect(form.getByText('请填写名称')).toBeVisible();
   expect(await stored(serviceWorker, 'prompt-configs')).toBeUndefined();
 
+  // A preset fills the whole form, its name included.
+  await form.getByRole('button', { name: '用预设「速读」填写' }).click();
+  await expect(form.getByLabel('名称')).toHaveValue('速读');
+  await expect(form.getByLabel('系统模板')).toHaveValue(/30 秒能读完/);
+
   await form.getByLabel('名称').fill('要点');
   await form.getByLabel('系统模板').fill('');
   await form.getByLabel('用户模板').fill('列出要点：{{content}}');
   await form.getByRole('button', { name: '保存' }).click();
   await expect(prompts.getByRole('status')).toHaveText('已保存');
-  await expect(prompts.getByRole('listitem')).toHaveCount(2);
+  await expect(prompts.getByRole('listitem')).toHaveCount(4);
 
-  await promptRow(page, '要点').getByRole('button', { name: '设为默认' }).click();
+  await rowAction(promptRow(page, '要点'), '设为默认');
   await expect(prompts.getByRole('status')).toHaveText('已将「要点」设为默认');
 
   const list = (await stored(serviceWorker, 'prompt-configs')) as StoredList;
@@ -509,10 +523,10 @@ test('transfer: export without keys unless asked, then import appends with new i
   };
 
   const plain = await exportFile();
-  await expect(transfer.getByRole('status')).toHaveText('已导出 2 个模型、1 个 Prompt（不含凭据）');
+  await expect(transfer.getByRole('status')).toHaveText('已导出 2 个模型、3 个 Prompt（不含凭据）');
   expect(JSON.stringify(plain.file)).not.toContain(E2E_KEY);
   expect(plain.file.models.map((model) => model.name)).toEqual(['主力', '备用']);
-  expect(plain.file.prompts.map((prompt) => prompt.name)).toEqual(['网页总结']);
+  expect(plain.file.prompts.map((prompt) => prompt.name)).toEqual(['网页总结', '速读', '深度笔记']);
 
   await transfer.getByLabel('文件里带上凭据').check();
   const full = await exportFile();
@@ -529,10 +543,10 @@ test('transfer: export without keys unless asked, then import appends with new i
 
   await transfer.getByLabel('选择要导入的文件').setInputFiles(full.path);
   await expect(transfer.locator('[data-import-preview]')).toContainText(
-    '将新增 2 个模型、1 个 Prompt；跳过 0 条无法识别的条目。',
+    '将新增 2 个模型、3 个 Prompt；跳过 0 条无法识别的条目。',
   );
   await transfer.getByRole('button', { name: '导入', exact: true }).click();
-  await expect(transfer.getByRole('status')).toHaveText('已导入 2 个模型、1 个 Prompt');
+  await expect(transfer.getByRole('status')).toHaveText('已导入 2 个模型、3 个 Prompt');
 
   // The models section reads the list again without a reload.
   await expect(modelRow(page, '备用')).toHaveCount(2);
@@ -547,7 +561,14 @@ test('transfer: export without keys unless asked, then import appends with new i
     ['scenario:slow', E2E_KEY],
   ]);
   const prompts = (await stored(serviceWorker, 'prompt-configs')) as StoredList;
-  expect(prompts.data.map((prompt) => prompt.name)).toEqual(['网页总结', '网页总结']);
+  expect(prompts.data.map((prompt) => prompt.name)).toEqual([
+    '网页总结',
+    '速读',
+    '深度笔记',
+    '网页总结',
+    '速读',
+    '深度笔记',
+  ]);
   // The default stays where it was: the first model.
   await page.reload();
   await expect(modelRow(page, '主力').first()).toContainText('默认');

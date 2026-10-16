@@ -273,6 +273,43 @@ describe('reducePanel: a conversation', () => {
   });
 });
 
+describe('reducePanel: the prompt menu', () => {
+  const menu = {
+    type: 'prompts',
+    prompts: [
+      { id: 'p1', name: '网页总结' },
+      { id: 'p2', name: '速读' },
+    ],
+    promptId: 'p1',
+  } as const;
+
+  it('keeps the names and the default as last read', () => {
+    expect(play([{ ...menu, prompts: [...menu.prompts] }])).toMatchObject({ promptId: 'p1' });
+  });
+
+  it('marks the panel busy for a prompt picked from the menu, keeping what is on screen', () => {
+    const picked = play(
+      [
+        { ...menu, prompts: [...menu.prompts] },
+        { type: 'selectPrompt', promptId: 'p2' },
+      ],
+      play(answered('总结')),
+    );
+
+    expect(picked).toMatchObject({ phase: 'extracting', promptId: 'p2', problem: null });
+    expect(picked.turns).toHaveLength(1);
+  });
+
+  it('stays ready for a prompt picked before the first summary', () => {
+    const picked = play([
+      { type: 'ready' },
+      { type: 'selectPrompt', promptId: 'p2', waiting: true },
+    ]);
+
+    expect(picked).toMatchObject({ phase: 'ready', promptId: 'p2', turns: [] });
+  });
+});
+
 describe('reducePanel: the saved copy', () => {
   it('keeps a saving problem until a later save goes through in full', () => {
     const failed = play([{ type: 'snapshot', note: { kind: 'save-failed', detail: 'quota' } }]);

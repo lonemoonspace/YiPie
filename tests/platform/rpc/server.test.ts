@@ -448,12 +448,30 @@ describe('RPC dispatcher: prompts', () => {
     }
   });
 
+  it('lets the attached panel choose the default prompt, and nothing more', async () => {
+    const handler = vi.fn(() => Promise.resolve(prompts));
+    const { dispatch } = setup({ 'prompts.choose': handler });
+    const choose = request('prompts.choose', { id: 'p' });
+
+    expect(await dispatch(choose, PANEL)).toEqual({ ok: true, value: prompts });
+    for (const sender of [OPTIONS, STRAY_PANEL, CONTENT]) {
+      expect(await dispatch(choose, sender)).toMatchObject({
+        ok: false,
+        error: { code: 'forbidden' },
+      });
+    }
+    expect(handler).toHaveBeenCalledOnce();
+    expect(
+      await dispatch(request('prompts.choose', { id: 'p', system: 'x' }), PANEL),
+    ).toMatchObject({ ok: false, error: { code: 'bad-request' } });
+  });
+
   it.each([
     ['prompts.add', { name: 'n', user: '{{content}}' }],
     ['prompts.update', { id: 'p', patch: { name: 'n' } }],
     ['prompts.remove', { id: 'p' }],
     ['prompts.move', { id: 'p', direction: 'down' }],
-    // Unlike the model, the panel may not change the default prompt.
+    // The panel picks the default through `prompts.choose` instead.
     ['prompts.setDefault', { id: 'p' }],
   ] as const)('accepts %s only from the settings page', async (method, input) => {
     const handler = vi.fn(() => Promise.resolve(prompts));
@@ -634,6 +652,7 @@ describe('RPC dispatcher: a panel is served only once attached', () => {
     ['models.choose', { id: 'a' }],
     ['models.disableStreamUsage', { id: 'a' }],
     ['prompts.list', {}],
+    ['prompts.choose', { id: 'p' }],
     ['page.getContext', {}],
     ['page.locate', { quote: '原文' }],
     ['snapshot.get', {}],

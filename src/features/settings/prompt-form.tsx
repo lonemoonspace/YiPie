@@ -5,6 +5,7 @@ import {
   formFromPrompt,
   newPromptForm,
   parsePromptForm,
+  presetForms,
   previewPrompt,
   promptFormWarnings,
   unknownVariableFlags,
@@ -64,6 +65,22 @@ export function PromptForm(props: PromptFormProps) {
   return (
     <form ref={form} className="editor" onSubmit={onSubmit} noValidate aria-labelledby={headingId}>
       <h3 id={headingId}>{props.heading}</h3>
+      {initial === null ? (
+        <div className="presets" role="group" aria-label={t('prompt.presets')}>
+          <span className="hint">{t('prompt.presets')}</span>
+          {presetForms().map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              className="chip"
+              aria-label={t('prompt.presets.fill', { name: preset.name })}
+              onClick={() => setFields(preset)}
+            >
+              {preset.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <TextField
         label={t('prompt.name')}
         hint={t('prompt.name.hint')}
