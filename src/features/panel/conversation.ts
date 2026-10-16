@@ -36,6 +36,8 @@ export interface RunSetup {
   prompt: Pick<PromptConfig, 'system' | 'user'> | null;
   trimming: TrimmingStrategy;
   answerLanguage: AnswerLanguage;
+  /** Opening the panel on the page summarizes it right away; off, it waits for `summarize`. */
+  autoSummarize: boolean;
 }
 
 export interface StreamRequest {
@@ -76,7 +78,8 @@ export interface ConversationDeps {
 export interface Conversation {
   /**
    * Once attached: restores this page's conversation, or summarizes the
-   * page. A panel opened on the selection summarizes that instead, and keeps
+   * page; with `autoSummarize` off, it waits for `summarize` instead. A
+   * panel opened on the selection always summarizes that, and keeps
    * its conversation to itself: nothing is restored or saved, so the page's
    * own conversation stays as it was (docs/development-plan.md §4.6).
    */
@@ -134,6 +137,8 @@ export function createConversation(deps: ConversationDeps): Conversation {
   let revision = 0;
   /** What the panel works on; a selection conversation is never saved. */
   let mode: PanelMode = 'page';
+  /** Opened without a summary, as the settings ask: a model pick only changes the default. */
+  let waiting = false;
 
   const drop = () => {
     run?.abort();
@@ -176,6 +181,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
   async function start(question: string | null, options: { cut?: boolean } = {}) {
     action += 1;
+    waiting = false;
     drop();
     const controller = new AbortController();
     run = controller;
@@ -341,7 +347,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
   const pick = createModelSwitcher({
     choose: deps.choose,
     chosen: () => {
-      if (picked === action) retry();
+      if (picked === action && !waiting) retry();
     },
     failed: (error) => {
       if (picked !== action) return;
@@ -395,6 +401,21 @@ export function createConversation(deps: ConversationDeps): Conversation {
       if (saved.status === 'evicted') {
         deps.dispatch({ type: 'snapshot', note: { kind: 'evicted' } });
       }
+      // The settings may ask the panel to wait for the user. If they cannot
+      // be read, the summary goes ahead and reports why it could not run.
+      let setup: RunSetup | null = null;
+      try {
+        setup = await deps.setup();
+      } catch {
+        // `start` reads them again and says what went wrong.
+      }
+      if (!current()) return;
+      if (setup !== null && !setup.autoSummarize) {
+        waiting = true;
+        deps.dispatch({ type: 'models', models: setup.choices, modelId: setup.config?.id ?? null });
+        deps.dispatch({ type: 'ready' });
+        return;
+      }
       void start(null);
     },
 
@@ -423,7 +444,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
     switchModel(id) {
       picked = ++action;
       drop();
-      deps.dispatch({ type: 'select', modelId: id });
+      deps.dispatch({ type: 'select', modelId: id, waiting });
       pick(id);
     },
 

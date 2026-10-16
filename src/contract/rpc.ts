@@ -59,6 +59,7 @@ export const PanelSettings = z.object({
   theme: Theme,
   fontSize: FontSize,
   answerLanguage: AnswerLanguage,
+  autoSummarize: z.boolean(),
   locale: Locale,
 });
 export type PanelSettings = z.infer<typeof PanelSettings>;

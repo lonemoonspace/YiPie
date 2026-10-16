@@ -138,17 +138,20 @@ function describe(state: TestState): string {
       return t('model.test.unsupported');
     case 'answered':
       return t('model.test.chatOk');
-    case 'failed': {
-      const { error, origin } = state;
-      const detail =
-        error.status !== undefined
-          ? error.detail === ''
-            ? t('error.status', { status: error.status })
-            : t('error.statusDetail', { status: error.status, detail: error.detail })
-          : error.detail === ''
-            ? ''
-            : t('error.browserDetail', { detail: error.detail });
-      return `${t('model.test.failed')}${t(`error.${error.kind}`, { origin })}${detail === '' ? '' : ` ${detail}`}`;
-    }
+    case 'failed':
+      return `${t('model.test.failed')}${describeFailure(state.error, state.origin)}`;
   }
+}
+
+/** What went wrong reaching the service, with its own words (already redacted). */
+export function describeFailure(error: LlmError, origin: string): string {
+  const detail =
+    error.status !== undefined
+      ? error.detail === ''
+        ? t('error.status', { status: error.status })
+        : t('error.statusDetail', { status: error.status, detail: error.detail })
+      : error.detail === ''
+        ? ''
+        : t('error.browserDetail', { detail: error.detail });
+  return `${t(`error.${error.kind}`, { origin })}${detail === '' ? '' : ` ${detail}`}`;
 }

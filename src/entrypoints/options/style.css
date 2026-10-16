@@ -302,6 +302,29 @@ button.chip {
   font-size: 12px;
 }
 
+/* Fetches the service's models, to pick the model name from. */
+.model-fetch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+}
+
+.model-fetch select {
+  max-width: 100%;
+}
+
+.fetch-result {
+  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fetch-result:empty {
+  display: none;
+}
+
 .connection-test {
   display: flex;
   flex-wrap: wrap;

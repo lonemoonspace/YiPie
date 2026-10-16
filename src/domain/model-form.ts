@@ -58,6 +58,27 @@ export function formFromConfig(config: ModelConfig): ModelFormFields {
   };
 }
 
+/** What reaching the service takes: enough to read its model list. */
+export type ParsedConnection = Pick<ParsedModelForm, 'baseURL' | 'apiKey' | 'headers'>;
+
+export type ConnectionResult =
+  | { ok: true; value: ParsedConnection }
+  | { ok: false; errors: Pick<ModelFormErrors, 'baseURL' | 'headers'> };
+
+/**
+ * Checks only the fields that reach the service (address, key, headers), so
+ * the model list can be fetched before a model name is typed.
+ */
+export function parseConnectionFields(fields: ModelFormFields): ConnectionResult {
+  const errors: ModelFormErrors = {};
+  const baseURL = checkBaseURL(fields, errors);
+  const headers = checkHeaders(fields, errors);
+  if (baseURL === null || headers === null || Object.keys(errors).length > 0) {
+    return { ok: false, errors };
+  }
+  return { ok: true, value: { baseURL, apiKey: fields.apiKey.trim(), headers } };
+}
+
 /**
  * Checks the form before anything is sent, so every error shows next to its
  * field. The background validates again with the contract schemas.
@@ -65,23 +86,12 @@ export function formFromConfig(config: ModelConfig): ModelFormFields {
 export function parseModelForm(fields: ModelFormFields): ModelFormResult {
   const errors: ModelFormErrors = {};
 
-  const baseURL = normalizeBaseURL(fields.baseURL);
-  if (!baseURL.ok) errors.baseURL = t(`model.error.baseURL.${baseURL.reason}`);
+  const baseURL = checkBaseURL(fields, errors);
 
   const model = fields.model.trim();
   if (model === '') errors.model = t('model.error.model');
 
-  const headers = parseObject(fields.headers);
-  if (headers === null) {
-    errors.headers = t('model.error.json', { field: t('model.headers') });
-  } else {
-    const bad = Object.entries(headers).find(([, value]) => typeof value !== 'string');
-    const forbidden = Object.keys(headers).find(isForbiddenHeaderName);
-    if (bad) errors.headers = t('model.error.headers', { name: bad[0] });
-    else if (forbidden !== undefined) {
-      errors.headers = t('model.error.headerForbidden', { name: forbidden });
-    }
-  }
+  const headers = checkHeaders(fields, errors);
 
   const extraBody = parseObject(fields.extraBody);
   if (extraBody === null) {
@@ -95,7 +105,7 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
   if (contextWindow === undefined) errors.contextWindow = t('model.error.contextWindow');
 
   if (
-    !baseURL.ok ||
+    baseURL === null ||
     headers === null ||
     extraBody === null ||
     contextWindow === undefined ||
@@ -108,15 +118,47 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
     ok: true,
     value: {
       name: fields.name.trim(),
-      baseURL: baseURL.value,
+      baseURL,
       apiKey: fields.apiKey.trim(),
       model,
-      headers: headers as Record<string, string>,
+      headers,
       extraBody,
       contextWindow,
       streamUsage: fields.streamUsage,
     },
   };
+}
+
+/** A service's model list as the picker offers it: each id once, in alphabetical order. */
+export function modelOptions(ids: readonly string[]): string[] {
+  return [...new Set(ids)].sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+/** The normalized address, or null with its error recorded. */
+function checkBaseURL(fields: ModelFormFields, errors: ModelFormErrors): string | null {
+  const baseURL = normalizeBaseURL(fields.baseURL);
+  if (baseURL.ok) return baseURL.value;
+  errors.baseURL = t(`model.error.baseURL.${baseURL.reason}`);
+  return null;
+}
+
+/** The headers as an object; null when the field is not one (its error recorded). */
+function checkHeaders(
+  fields: ModelFormFields,
+  errors: ModelFormErrors,
+): Record<string, string> | null {
+  const headers = parseObject(fields.headers);
+  if (headers === null) {
+    errors.headers = t('model.error.json', { field: t('model.headers') });
+    return null;
+  }
+  const bad = Object.entries(headers).find(([, value]) => typeof value !== 'string');
+  const forbidden = Object.keys(headers).find(isForbiddenHeaderName);
+  if (bad) errors.headers = t('model.error.headers', { name: bad[0] });
+  else if (forbidden !== undefined) {
+    errors.headers = t('model.error.headerForbidden', { name: forbidden });
+  }
+  return headers as Record<string, string>;
 }
 
 /** An empty field means `{}`; anything else must be a JSON object. */

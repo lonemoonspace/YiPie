@@ -36,6 +36,9 @@ export const pages = {
   'settings.trimming.nothing': 'Do not cut (send it as it is)',
   'settings.trimming.hint':
     'How much page text to send is estimated from the model’s context window; a model without one is assumed to have {window} tokens. With “Do not cut”, if the service refuses the text as too long, the panel offers to cut it and retry.',
+  'settings.autoSummarize': 'Summarize when the panel opens',
+  'settings.autoSummarize.hint':
+    'When off, the panel opens with a “Summarize this page” button and asks the model only once you press it. A conversation already on the page is restored as usual, and summarizing a selection from the context menu still starts right away.',
   'settings.fontSize': 'Panel text size',
   'settings.fontSize.small': 'Small',
   'settings.fontSize.medium': 'Medium (default)',
@@ -139,6 +142,13 @@ export const pages = {
     'The service does not provide a model list (GET /models). You can test with one real request, which uses a few tokens.',
   'model.test.chat': 'Send a test request',
   'model.test.chatOk': 'Connected: the model answered.',
+  'model.fetch': 'Fetch models',
+  'model.fetch.fetching': 'Fetching…',
+  'model.fetch.pick': 'Pick from the service’s models',
+  'model.fetch.choose': 'Choose a model ({count} in all)',
+  'model.fetch.empty': 'The service’s model list is empty; type the model name.',
+  'model.fetch.unsupported': 'The service has no model list (GET /models); type the model name.',
+  'model.fetch.failed': 'Could not fetch the list: ',
   'model.test.failed': 'Connection failed: ',
 
   'prompt.section': 'Prompts',
@@ -248,6 +258,8 @@ export const pages = {
   'panel.retryTurn': 'Retry',
   'panel.cutRetry': 'Cut and retry',
   'panel.openSettings': 'Open settings',
+  'panel.summarize': 'Summarize this page',
+  'panel.status.ready': 'Press “Summarize this page” to start',
   'panel.status.attaching': 'Connecting…',
   'panel.status.restored': 'Restored the last conversation',
   'panel.status.extracting': 'Reading the page…',

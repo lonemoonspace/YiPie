@@ -62,7 +62,7 @@ type Script = (
 function harness(options: {
   scripts?: Script[];
   saved?: SnapshotView | Error | (() => Promise<SnapshotView>);
-  setup?: Partial<RunSetup>;
+  setup?: Partial<RunSetup> | Error;
   page?: PageContext;
   save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   choose?: (id: string) => Promise<unknown>;
@@ -80,17 +80,20 @@ function harness(options: {
 
   const conversation = createConversation({
     setup: () =>
-      Promise.resolve({
-        choices: [
-          { id: 'm1', name: '主力' },
-          { id: 'm2', name: '备用' },
-        ],
-        config,
-        prompt,
-        trimming: 'back',
-        answerLanguage: 'interface',
-        ...options.setup,
-      }),
+      options.setup instanceof Error
+        ? Promise.reject(options.setup)
+        : Promise.resolve({
+            choices: [
+              { id: 'm1', name: '主力' },
+              { id: 'm2', name: '备用' },
+            ],
+            config,
+            prompt,
+            trimming: 'back',
+            answerLanguage: 'interface',
+            autoSummarize: true,
+            ...options.setup,
+          }),
     restore: () =>
       typeof options.saved === 'function'
         ? options.saved()
@@ -329,6 +332,105 @@ describe('conversation: summary and follow-ups', () => {
       [],
       ['新总结'],
     ]);
+  });
+});
+
+describe('conversation: without summarizing on opening', () => {
+  const off = { autoSummarize: false };
+
+  it('waits for the user with the model menu filled, then summarizes when asked', async () => {
+    const h = harness({ setup: off, scripts: [answer('总结')] });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.requests).toHaveLength(0);
+    expect(h.extract).not.toHaveBeenCalled();
+    expect(h.saves).toEqual([]);
+    expect(h.state()).toMatchObject({ phase: 'ready', modelId: 'm1', turns: [] });
+    expect(h.state().models).toHaveLength(2);
+
+    h.conversation.summarize();
+    await settle();
+
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
+    expect(h.saves).toEqual([[expect.objectContaining({ content: '总结' })]]);
+  });
+
+  it('still restores a saved conversation', async () => {
+    const h = harness({
+      setup: off,
+      saved: {
+        status: 'found',
+        messages: [{ role: 'assistant', content: '旧总结', stopped: false, usage: null }],
+        truncated: false,
+      },
+    });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state().phase).toBe('restored');
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['旧总结']);
+  });
+
+  it('still summarizes a selection right away: the user asked for that', async () => {
+    const h = harness({
+      setup: off,
+      page: { ...page, selection: '选中的这一句。' },
+      scripts: [answer('选区总结')],
+    });
+
+    await h.conversation.open('selection');
+    await settle();
+
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['选区总结']);
+  });
+
+  it('only changes the default on a model pick while waiting', async () => {
+    const h = harness({ setup: off, scripts: [answer('总结')] });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel('m2');
+    await settle();
+
+    expect(h.choose).toHaveBeenCalledWith('m2');
+    expect(h.requests).toHaveLength(0);
+    expect(h.state()).toMatchObject({ phase: 'ready', modelId: 'm2' });
+  });
+
+  it('goes ahead when the settings cannot be read, and reports why it could not run', async () => {
+    const h = harness({ setup: new Error('background gone') });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state()).toMatchObject({
+      phase: 'error',
+      problem: { kind: 'config', detail: 'background gone' },
+    });
+  });
+
+  it('does not wait once the user started something meanwhile', async () => {
+    let restore: (view: SnapshotView) => void = () => {};
+    const h = harness({
+      setup: off,
+      saved: () => new Promise((resolve) => (restore = resolve)),
+      scripts: [answer('总结')],
+    });
+    const opening = h.conversation.open();
+
+    h.conversation.summarize();
+    await settle();
+    restore({ status: 'none' });
+    await opening;
+    await settle();
+
+    expect(h.state().phase).toBe('done');
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
   });
 });
 

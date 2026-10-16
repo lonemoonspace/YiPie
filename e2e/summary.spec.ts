@@ -275,3 +275,36 @@ test('the model menu makes another model the default and summarizes again with i
     data: { defaultModelId: 'spare', defaultPromptId: null },
   });
 });
+
+test('with summarizing on opening turned off, the panel waits for the user to ask', async ({
+  context,
+  extensionId,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${extensionId}/options.html`);
+  await settings.getByLabel('打开面板时自动总结').uncheck();
+  await expect(settings.getByRole('region', { name: '通用' }).getByRole('status')).toHaveText(
+    '已保存',
+  );
+  expect(await stored(serviceWorker, 'general-settings')).toMatchObject({
+    data: { autoSummarize: false },
+  });
+  const before = server.requests.length;
+
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'ready');
+  await expect(frame.getByRole('status')).toHaveText('点「总结此页」开始');
+  await expect(frame.getByRole('combobox', { name: '模型' })).toBeVisible();
+  expect(server.requests).toHaveLength(before);
+
+  await frame.getByRole('button', { name: '总结此页' }).click();
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(frame.locator('article.answer')).toContainText('这篇文章介绍了');
+  expect(server.requests).toHaveLength(before + 1);
+});

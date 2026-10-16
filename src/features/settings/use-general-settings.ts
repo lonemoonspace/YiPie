@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GeneralSettingsPatch } from '@/contract/general-settings';
 import type { GeneralSettingsView } from '@/contract/rpc';
 import { callRpc } from '@/platform/rpc/client';
@@ -25,6 +25,9 @@ export function useGeneralSettings(): GeneralSettingsState {
   const [view, setView] = useState<GeneralSettingsView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+  // The change being saved shows at once: a controlled checkbox would
+  // otherwise spring back until the background answers.
+  const [pending, setPending] = useState<GeneralSettingsPatch | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -39,16 +42,27 @@ export function useGeneralSettings(): GeneralSettingsState {
 
   const update = useCallback(async (patch: GeneralSettingsPatch) => {
     setSave({ kind: 'saving' });
+    setPending(patch);
     try {
       const saved = await callRpc('settings.patch', patch);
       setView(saved);
       setSave({ kind: 'saved', quarantined: saved.quarantined });
     } catch (error) {
       setSave({ kind: 'failed', message: messageOf(error) });
+    } finally {
+      setPending(null);
     }
   }, []);
 
-  return { view, loadError, save, update };
+  const shown = useMemo(
+    () =>
+      view === null || pending === null
+        ? view
+        : { ...view, settings: { ...view.settings, ...pending } },
+    [view, pending],
+  );
+
+  return { view: shown, loadError, save, update };
 }
 
 function messageOf(error: unknown): string {

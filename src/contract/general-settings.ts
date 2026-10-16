@@ -70,6 +70,11 @@ export const GeneralSettings = z.looseObject({
   fontSize: FontSize.default('medium'),
   answerLanguage: AnswerLanguage.default('interface'),
   interfaceLanguage: InterfaceLanguage.default('auto'),
+  /**
+   * Opening the panel on a page without a saved conversation summarizes it
+   * right away; off, the panel waits for the user to ask.
+   */
+  autoSummarize: z.boolean().default(true),
 });
 export type GeneralSettings = z.infer<typeof GeneralSettings>;
 
@@ -89,5 +94,6 @@ export const GeneralSettingsPatch = z.strictObject({
   fontSize: FontSize.optional(),
   answerLanguage: AnswerLanguage.optional(),
   interfaceLanguage: InterfaceLanguage.optional(),
+  autoSummarize: z.boolean().optional(),
 });
 export type GeneralSettingsPatch = z.infer<typeof GeneralSettingsPatch>;

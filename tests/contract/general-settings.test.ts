@@ -14,6 +14,7 @@ describe('GeneralSettings', () => {
       fontSize: 'medium',
       answerLanguage: 'interface',
       interfaceLanguage: 'auto',
+      autoSummarize: true,
     });
   });
 
@@ -25,6 +26,7 @@ describe('GeneralSettings', () => {
       fontSize: 'medium',
       answerLanguage: 'interface',
       interfaceLanguage: 'auto',
+      autoSummarize: true,
     });
   });
 

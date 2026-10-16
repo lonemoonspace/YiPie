@@ -33,6 +33,9 @@ export const pages = {
   'settings.trimming.nothing': '不裁剪（原样发送）',
   'settings.trimming.hint':
     '按模型的上下文窗口估算要发送多少正文；模型没有填写上下文窗口时按 {window} tokens 估算。选「不裁剪」时，服务以超长拒绝后，面板里可以裁剪后重试。',
+  'settings.autoSummarize': '打开面板时自动总结',
+  'settings.autoSummarize.hint':
+    '关闭后，打开面板只显示「总结此页」按钮，点了才请求模型。这一页已有的对话照常恢复；从右键菜单总结选中的文字时仍会立即总结。',
   'settings.fontSize': '面板字号',
   'settings.fontSize.small': '小',
   'settings.fontSize.medium': '中（默认）',
@@ -130,6 +133,13 @@ export const pages = {
     '服务没有提供模型列表（GET /models）。可以发送一次真实请求来测试，这会消耗少量 token。',
   'model.test.chat': '发送测试请求',
   'model.test.chatOk': '连接成功：模型回答了。',
+  'model.fetch': '获取模型列表',
+  'model.fetch.fetching': '正在获取…',
+  'model.fetch.pick': '从服务的模型列表里选择',
+  'model.fetch.choose': '选择一个模型（共 {count} 个）',
+  'model.fetch.empty': '服务的模型列表是空的，请手动填写模型名。',
+  'model.fetch.unsupported': '服务没有提供模型列表（GET /models），请手动填写模型名。',
+  'model.fetch.failed': '获取失败：',
   'model.test.failed': '连接失败：',
 
   'prompt.section': 'Prompt',
@@ -228,6 +238,8 @@ export const pages = {
   'panel.retryTurn': '重试',
   'panel.cutRetry': '裁剪后重试',
   'panel.openSettings': '打开设置',
+  'panel.summarize': '总结此页',
+  'panel.status.ready': '点「总结此页」开始',
   'panel.status.attaching': '正在连接…',
   'panel.status.restored': '已恢复上次的对话',
   'panel.status.extracting': '正在读取正文…',

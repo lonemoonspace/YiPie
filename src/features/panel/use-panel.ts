@@ -49,6 +49,7 @@ export function usePanel(): PanelControls {
           prompt: prompts.items.find((item) => item.id === prompts.defaultId) ?? null,
           trimming: settings.trimming,
           answerLanguage: settings.answerLanguage,
+          autoSummarize: settings.autoSummarize,
         };
       },
       restore: () => callRpc('snapshot.get', {}),

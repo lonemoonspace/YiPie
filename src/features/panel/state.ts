@@ -75,12 +75,14 @@ export type SnapshotNote =
  * The panel: the conversation so far, and the phase of its latest run,
  * extracting → requesting → streaming → done / stopped / error
  * (docs/development-plan.md §4.2). Before the first run it is attaching;
- * after restoring a saved conversation, restored. Text received before a
+ * after restoring a saved conversation, restored; when the settings say not
+ * to summarize on opening, ready until the user asks for one. Text received before a
  * stop or an error stays on screen.
  */
 export interface PanelState {
   phase:
     | 'attaching'
+    | 'ready'
     | 'restored'
     | 'extracting'
     | 'requesting'
@@ -116,6 +118,8 @@ export interface Exchange {
 }
 
 export type PanelEvent =
+  /** Attached, and waiting for the user to ask for a summary. */
+  | { type: 'ready' }
   /** A saved conversation is shown instead of a new summary. */
   | { type: 'restored'; exchanges: Exchange[]; truncated: boolean }
   /** A new turn begins after the first `keep` turns; the others are gone. */
@@ -123,8 +127,11 @@ export type PanelEvent =
   | { type: 'models'; models: ModelChoice[]; modelId: string | null }
   /** The panel was opened on the selection. */
   | { type: 'mode'; mode: PanelMode }
-  /** A model picked from the menu: the latest turn runs again with it. */
-  | { type: 'select'; modelId: string }
+  /**
+   * A model picked from the menu: the latest turn runs again with it, unless
+   * the panel is `waiting` for the user to ask for a summary.
+   */
+  | { type: 'select'; modelId: string; waiting?: boolean }
   | { type: 'requesting'; origin: string; cut: CutNote | null }
   /** The request is sent once more after `seconds`. */
   | { type: 'retrying'; seconds: number }
@@ -172,6 +179,8 @@ export function modelName(state: PanelState): string {
 
 export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
   switch (event.type) {
+    case 'ready':
+      return { ...state, phase: 'ready' };
     case 'restored':
       return {
         ...state,
@@ -211,6 +220,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
     case 'mode':
       return { ...state, mode: event.mode };
     case 'select':
+      if (event.waiting === true) return { ...state, phase: 'ready', modelId: event.modelId };
       // The run in flight is dropped; the turn starts again once the pick is stored.
       return {
         ...state,
