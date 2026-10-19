@@ -9,30 +9,27 @@ const SVG = 'http://www.w3.org/2000/svg';
 export function createLogo(): SVGSVGElement {
   const svg = element('svg', { class: 'logo', viewBox: '16 16 96 96', 'aria-hidden': 'true' });
   svg.append(
-    element('rect', { x: '16', y: '16', width: '96', height: '96', rx: '24', fill: '#ffffff' }),
-    element('rect', {
-      x: '16.5',
-      y: '16.5',
-      width: '95',
-      height: '95',
-      rx: '23.5',
-      fill: 'none',
-      stroke: '#e3e6ec',
-    }),
-    line('M38 42 H90', '#c5cad4'),
+    element('rect', { x: '16', y: '16', width: '96', height: '96', rx: '24', fill: '#2f6bea' }),
+    line('M38 42 H90', '#ffffff', '0.45'),
     // The highlighter swipe across the line that matters.
     element('path', {
       fill: '#ffd23f',
       d: 'M36 54 C63 52.5 63 55 96 53 L91 73 C63 75 63 73 29 75 Z',
     }),
     line('M40 64 H86', '#1d2433'),
-    line('M38 86 H74', '#c5cad4'),
+    line('M38 86 H74', '#ffffff', '0.45'),
   );
   return svg;
 }
 
-function line(d: string, stroke: string): SVGPathElement {
-  return element('path', { d, stroke, 'stroke-width': '7', 'stroke-linecap': 'round' });
+function line(d: string, stroke: string, opacity = '1'): SVGPathElement {
+  return element('path', {
+    d,
+    stroke,
+    'stroke-opacity': opacity,
+    'stroke-width': '7',
+    'stroke-linecap': 'round',
+  });
 }
 
 function element<K extends keyof SVGElementTagNameMap>(
