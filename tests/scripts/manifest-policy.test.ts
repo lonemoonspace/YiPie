@@ -12,6 +12,7 @@ const valid = {
   name: '__MSG_extName__',
   version: '0.0.0',
   default_locale: 'zh_CN',
+  minimum_chrome_version: '110',
   permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   optional_host_permissions: ['https://*/*', 'http://*/*'],
   action: { default_title: '一瞥：总结此页' },
@@ -89,6 +90,15 @@ describe('checkManifest', () => {
       'host_permissions',
     );
     expect(checkManifest({ ...valid, content_scripts: [] })[0]).toContain('content_scripts');
+  });
+
+  it('requires the oldest browser to be declared, so older ones refuse to install', () => {
+    expect(checkManifest({ ...valid, minimum_chrome_version: undefined })[0]).toContain(
+      'minimum_chrome_version',
+    );
+    expect(checkManifest({ ...valid, minimum_chrome_version: '102' })[0]).toContain(
+      'minimum_chrome_version',
+    );
   });
 
   it('requires every icon size, the 128 px one the store needs included', () => {

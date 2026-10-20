@@ -49,6 +49,15 @@ export interface ConfigListService<T, Draft, Patch> {
   add(draft: Draft): Promise<ListView<T>>;
   /** Appends every item, each with a fresh id, in one change (an import). */
   addAll(drafts: readonly Draft[]): Promise<ListView<T>>;
+  /** `addAll` for a task that already runs in the write queue (`importConfig`). */
+  addAllUnqueued(drafts: readonly Draft[]): Promise<ListView<T>>;
+  /** Takes out the items with these ids, for a task in the write queue (undoing an import). */
+  removeAllUnqueued(ids: readonly string[]): Promise<ListView<T>>;
+  /**
+   * Refuses with `ReadOnlyRecordError` when the list would refuse an
+   * `addAll`, for a task in the write queue to ask before it writes anything.
+   */
+  assertAppendableUnqueued(): Promise<void>;
   /** Changes only the fields named in `patch`. */
   update(id: string, patch: Patch): Promise<ListView<T>>;
   remove(id: string): Promise<ListView<T>>;
@@ -97,57 +106,68 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
     ...state,
   });
 
-  /** Applies `edit` to the items, keeping the default where it belongs. */
-  const change = (edit: (items: T[]) => T[] | null, id: string | null) =>
-    queue(async () => {
-      const choice = await selection.read();
-      const stored = choice.value[field];
-      let before: T[] = [];
-      let next = { id: stored, fellBack: false };
-      let pin = false;
+  /**
+   * Applies `edit` to the items, keeping the default where it belongs. For a
+   * task that already runs in the write queue; `change` queues it.
+   */
+  const changeUnqueued = async (
+    edit: (items: T[]) => T[] | null,
+    id: string | null,
+  ): Promise<ListView<T>> => {
+    const choice = await selection.read();
+    const stored = choice.value[field];
+    let before: T[] = [];
+    let next = { id: stored, fellBack: false };
+    let pin = false;
 
-      const written = await rows.updateUnqueued((items) => {
-        const after = edit(items);
-        if (after === null) throw new NotFoundError(options.what, id ?? '');
-        before = items;
-        next = defaultAfterChange(items, stored, after);
-        // The default is stored only when this change would otherwise move it.
-        pin = next.id !== (effectiveDefault(after, stored)?.id ?? null);
-        if (pin && choice.status === 'invalid' && choice.readOnly) {
-          // Refused before anything is written, rather than half done.
-          throw new ReadOnlyRecordError(SELECTION_KEY, storedVersionOf(choice.raw));
-        }
-        return after;
-      });
-
-      let selected = stored;
-      let quarantined = written.quarantined;
-      if (pin) {
-        const saved = await selection.updateUnqueued((current) => ({
-          ...current,
-          [field]: next.id,
-        }));
-        selected = next.id;
-        quarantined ||= saved.quarantined;
+    const written = await rows.updateUnqueued((items) => {
+      const after = edit(items);
+      if (after === null) throw new NotFoundError(options.what, id ?? '');
+      before = items;
+      next = defaultAfterChange(items, stored, after);
+      // The default is stored only when this change would otherwise move it.
+      pin = next.id !== (effectiveDefault(after, stored)?.id ?? null);
+      if (pin && choice.status === 'invalid' && choice.readOnly) {
+        // Refused before anything is written, rather than half done.
+        throw new ReadOnlyRecordError(SELECTION_KEY, storedVersionOf(choice.raw));
       }
-
-      if (options.afterChange) {
-        const kept = written.value.unrecognized;
-        try {
-          await options.afterChange([...before, ...kept], [...written.value.items, ...kept]);
-        } catch (error) {
-          logger.error(`After changing a ${options.what}:`, error);
-        }
-      }
-
-      return toView(written.value, selected, {
-        status: 'ok',
-        readOnly: false,
-        quarantined,
-        defaultFellBack: next.fellBack,
-        defaultUnreadable: !pin && choice.status === 'invalid' && !choice.readOnly,
-      });
+      return after;
     });
+
+    let selected = stored;
+    let quarantined = written.quarantined;
+    if (pin) {
+      const saved = await selection.updateUnqueued((current) => ({
+        ...current,
+        [field]: next.id,
+      }));
+      selected = next.id;
+      quarantined ||= saved.quarantined;
+    }
+
+    if (options.afterChange) {
+      const kept = written.value.unrecognized;
+      try {
+        await options.afterChange([...before, ...kept], [...written.value.items, ...kept]);
+      } catch (error) {
+        logger.error(`After changing a ${options.what}:`, error);
+      }
+    }
+
+    return toView(written.value, selected, {
+      status: 'ok',
+      readOnly: false,
+      quarantined,
+      defaultFellBack: next.fellBack,
+      defaultUnreadable: !pin && choice.status === 'invalid' && !choice.readOnly,
+    });
+  };
+  const change = (edit: (items: T[]) => T[] | null, id: string | null) =>
+    queue(() => changeUnqueued(edit, id));
+  const appendAll = (drafts: readonly Draft[]) => {
+    const added = drafts.map((draft) => options.create(draft, options.newId()));
+    return (items: T[]) => [...items, ...added];
+  };
 
   return {
     async list() {
@@ -172,9 +192,17 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
       const item = options.create(draft, options.newId());
       return change((items) => [...items, item], null);
     },
-    addAll(drafts) {
-      const added = drafts.map((draft) => options.create(draft, options.newId()));
-      return change((items) => [...items, ...added], null);
+    addAll: (drafts) => change(appendAll(drafts), null),
+    addAllUnqueued: (drafts) => changeUnqueued(appendAll(drafts), null),
+    removeAllUnqueued: (ids) =>
+      changeUnqueued((items) => items.filter((item) => !ids.includes(item.id)), null),
+    // Appending never moves the default (`defaultAfterChange`), so the list
+    // is the only record an append writes.
+    async assertAppendableUnqueued() {
+      const read = await rows.read();
+      if (read.status === 'invalid' && read.readOnly) {
+        throw new ReadOnlyRecordError(options.list.key, storedVersionOf(read.raw));
+      }
     },
     update: (id, patch) => change((items) => updateItem(items, id, patch), id),
     remove: (id) => change((items) => removeItem(items, id), id),

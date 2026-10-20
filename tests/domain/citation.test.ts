@@ -49,6 +49,29 @@ describe('findQuote', () => {
     expect(findQuote(chunks, '给出总结……一瞥把当前网页')).toEqual([]);
   });
 
+  it('maps a match back past empty and whitespace-only chunks', () => {
+    const chunks = ['前言', '', '  \n', '它在页面里', '', '打开面板', ' ', '后记'];
+    expect(findQuote(chunks, '页面里打开')).toEqual([
+      { start: { chunk: 3, offset: 2 }, end: { chunk: 5, offset: 2 } },
+    ]);
+    expect(covered(chunks, '后记')).toEqual(['后记']);
+    expect(covered(chunks, '前言')).toEqual(['前言']);
+  });
+
+  it('maps a character that normalizes to several back to the whole of it', () => {
+    // NFKC writes ㍿ (one character) as 株式会社.
+    expect(covered(['甲㍿乙'], '式会')).toEqual(['㍿']);
+    expect(covered(['甲㍿乙'], '社乙')).toEqual(['㍿乙']);
+  });
+
+  it('maps every match in one long chunk, overlapping ones too', () => {
+    expect(findQuote(['甲甲甲甲'], '甲甲甲')).toEqual([
+      { start: { chunk: 0, offset: 0 }, end: { chunk: 0, offset: 3 } },
+      { start: { chunk: 0, offset: 1 }, end: { chunk: 0, offset: 4 } },
+    ]);
+    expect(covered(['A b c, a B c.', '乙 abc'], 'abc')).toEqual(['A b c', 'a B c', 'abc']);
+  });
+
   it('keeps offsets right around characters outside the BMP', () => {
     expect(covered(['😀一瞥😀'], '一瞥')).toEqual(['一瞥']);
   });

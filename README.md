@@ -5,7 +5,7 @@
 - 只支持 OpenAI Chat Completions 兼容接口：OpenAI、DeepSeek、OpenRouter、Ollama、vLLM 等，填 base URL、Key 和模型名即可
 - 数据只在浏览器和你自己的模型服务之间流动：没有中间服务器，没有遥测
 - 安装时不申请任何站点权限；只在你点工具栏图标、右键菜单或按快捷键时读取当前页
-- 支持 Chrome / Edge
+- 支持 Chrome / Edge 110 及以上
 
 ## 当前状态
 

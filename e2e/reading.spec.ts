@@ -149,6 +149,34 @@ test('the selection is summarized on its own, and the page keeps its conversatio
   expect(snapshots(savedAfter)).toEqual(snapshots(savedBefore));
 });
 
+test('the page trigger replaces an open panel of the selection with one of the page', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:normal');
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/article.html`);
+
+  await select(page, '浮动面板');
+  await openPanelOnSelection(serviceWorker, page);
+  const selection = await panelFrame(page);
+  await expect(selection.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(selection.locator('[data-mode="selection"]')).toBeVisible();
+
+  await openPanel(page);
+  await expect.poll(() => selection.isDetached()).toBe(true);
+  const whole = await panelFrame(page);
+  await expect(whole.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(whole.locator('[data-mode="selection"]')).toHaveCount(0);
+  expect(lastUserMessage(server.requests.at(-1)?.body)).toContain('一瞥是一个浏览器扩展');
+  // The page's conversation is saved; the selection's never is.
+  const saved = await session(serviceWorker);
+  expect(Object.keys(saved).some((key) => key.startsWith('snapshot:'))).toBe(true);
+});
+
 test('the menu-reported selection stands in when the page reads none', async ({
   context,
   server,

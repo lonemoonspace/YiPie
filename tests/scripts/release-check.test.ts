@@ -7,6 +7,7 @@ const manifest = (version: string, extra: Record<string, unknown> = {}) =>
     name: '__MSG_extName__',
     version,
     default_locale: 'zh_CN',
+    minimum_chrome_version: '110',
     permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
     optional_host_permissions: ['https://*/*', 'http://*/*'],
     action: { default_title: '__MSG_extName__' },

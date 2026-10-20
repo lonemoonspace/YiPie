@@ -46,8 +46,9 @@ interface Instance {
 
 /**
  * Shows the panel in this tab, creating the host on the first call. A panel
- * already open stays as it is, unless the trigger asks for a summary of the
- * selection: that is new work, so a new panel replaces it.
+ * of the page already open stays as it is when the page is asked for again.
+ * Anything else is new work, so a new panel replaces the open one: a summary
+ * of the selection, or the page while the selection's panel is open.
  */
 export function openPanelHost(mode: PanelMode = 'page'): void {
   const scope = globalThis as unknown as Record<symbol, Instance | undefined>;
@@ -235,7 +236,7 @@ function createPanelHost(): PanelHost {
 
   return {
     open(requested) {
-      if (open && requested !== 'selection') return;
+      if (open && requested === 'page' && mode === 'page') return;
       if (open) hide();
       mode = requested;
       open = true;

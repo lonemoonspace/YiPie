@@ -1,0 +1,7 @@
+# Prettier checks for LF line endings; without this, Git for Windows checks
+# files out with CRLF and `npm run gate` fails on every file.
+* text=auto eol=lf
+*.png binary
+*.zip binary
+# Services' raw output, byte for byte: some of it really is CRLF.
+tests/fixtures/** -text

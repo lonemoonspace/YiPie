@@ -13,6 +13,7 @@ import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
 import { registerRpcServer, type HandlerContext } from '@/platform/rpc/server';
 import { createBackupsService } from '@/platform/settings/backups-service';
+import { createConfigImport } from '@/platform/settings/config-import';
 import { createGeneralSettingsService } from '@/platform/settings/general-settings-service';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { createPromptConfigsService } from '@/platform/settings/prompt-configs-service';
@@ -37,6 +38,7 @@ export default defineBackground(() => {
   // The built-in prompt is in the interface language (§4.7).
   const prompts = createPromptConfigsService(store, writeQueue, { locale });
   const backups = createBackupsService(store, writeQueue);
+  const importConfig = createConfigImport(writeQueue, models, prompts);
   const panels = createPanelRegistry(store, writeQueue);
   const snapshots = createSnapshotStore(store, writeQueue, {
     attached: (tabId, documentId) => panels.isAttached(tabId, documentId),
@@ -104,13 +106,7 @@ export default defineBackground(() => {
       'prompts.move': ({ id, direction }) => prompts.move(id, direction),
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
       'prompts.choose': ({ id }) => prompts.setDefault(id),
-      // One list after the other: each is appended in one change, and a list
-      // with nothing to add is left unwritten.
-      'config.import': async (input) => ({
-        models: input.models.length > 0 ? await models.addAll(input.models) : await models.list(),
-        prompts:
-          input.prompts.length > 0 ? await prompts.addAll(input.prompts) : await prompts.list(),
-      }),
+      'config.import': (input) => importConfig(input),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),
       // The page the panel is about to be mounted on, as the browser reports
