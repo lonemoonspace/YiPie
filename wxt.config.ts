@@ -14,6 +14,12 @@ export default defineConfig({
     // it cannot follow the interface language in the settings.
     default_locale: 'zh_CN',
     name: '__MSG_extName__',
+    // The oldest browser with everything the extension relies on (appendix C):
+    // the panel's iframe is `credentialless` (110), the panel is recognized by
+    // `sender.documentId` (106), storage.local is closed to content scripts
+    // with `setAccessLevel` and the panel follows page changes through the
+    // Navigation API (102).
+    minimum_chrome_version: '110',
     description: '__MSG_extDescription__',
     permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
     // Granted per origin at runtime, when the user saves a model configuration.

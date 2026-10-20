@@ -51,7 +51,7 @@ export function findQuote(chunks: readonly string[], quote: string, limit = 20):
   const haystack = normalizeChunks(chunks);
   const parts = quote
     .split(ELLIPSIS)
-    .map((part) => normalize(part).text)
+    .map((part) => normalize(part))
     .filter((part) => part !== '');
   const first = parts[0];
   if (first === undefined) return [];
@@ -79,9 +79,9 @@ export function findQuote(chunks: readonly string[], quote: string, limit = 20):
       if (!ok) continue;
       end = cursor;
     }
-    const startPoint = haystack.points[start];
-    const endPoint = haystack.points[end - 1];
-    if (startPoint === undefined || endPoint === undefined) continue;
+    const startPoint = haystack.point(start);
+    const endPoint = haystack.point(end - 1);
+    if (startPoint === null || endPoint === null) continue;
     matches.push({
       start: { chunk: startPoint.chunk, offset: startPoint.offset },
       end: { chunk: endPoint.chunk, offset: endPoint.offset + endPoint.length },
@@ -95,35 +95,103 @@ interface MappedPoint extends TextPoint {
   length: number;
 }
 
-/** Normalized text of every chunk, each character mapped back to its source. */
-function normalizeChunks(chunks: readonly string[]): { text: string; points: MappedPoint[] } {
-  let text = '';
-  const points: MappedPoint[] = [];
-  chunks.forEach((chunk, index) => {
-    const { text: part, origins } = normalize(chunk);
-    text += part;
-    for (const origin of origins) points.push({ chunk: index, ...origin });
-  });
-  return { text, points };
+interface Haystack {
+  text: string;
+  /** Where the normalized character at `index` came from. */
+  point(index: number): MappedPoint | null;
 }
 
 /**
- * Text as matching sees it, with where each of its characters came from:
- * whitespace dropped, NFKC, lower case. One source character (a code point)
- * may become several.
+ * Normalized text of every chunk, each character mapped back to its source.
+ * A page can hold millions of characters and this runs in its renderer on
+ * every click of a quote, so only where each chunk starts is kept; a
+ * character is traced back to its source only for the few places that match.
  */
-function normalize(source: string): {
-  text: string;
-  origins: { offset: number; length: number }[];
-} {
-  let text = '';
-  const origins: { offset: number; length: number }[] = [];
-  let offset = 0;
-  for (const char of source) {
-    const mapped = char.normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
-    for (let i = 0; i < mapped.length; i += 1) origins.push({ offset, length: char.length });
-    text += mapped;
-    offset += char.length;
+function normalizeChunks(chunks: readonly string[]): Haystack {
+  const fold = createFolder();
+  const parts: string[] = [];
+  /** Where each chunk starts in the normalized text. */
+  const starts: number[] = [];
+  let length = 0;
+  for (const chunk of chunks) {
+    starts.push(length);
+    forEachChar(chunk, (char) => {
+      const mapped = fold(char);
+      if (mapped === '') return;
+      parts.push(mapped);
+      length += mapped.length;
+    });
   }
-  return { text, origins };
+  return {
+    text: parts.join(''),
+    point(index) {
+      if (index < 0 || index >= length) return null;
+      // The last chunk that starts at or before `index`: empty chunks start
+      // where the next one does, and are passed over.
+      let low = 0;
+      let high = starts.length - 1;
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if ((starts[middle] ?? 0) <= index) low = middle;
+        else high = middle - 1;
+      }
+      let at = starts[low] ?? 0;
+      let found: MappedPoint | null = null;
+      forEachChar(chunks[low] ?? '', (char, offset) => {
+        if (found !== null) return;
+        at += fold(char).length;
+        if (at > index) found = { chunk: low, offset, length: char.length };
+      });
+      return found;
+    },
+  };
+}
+
+/** Text as matching sees it: whitespace dropped, NFKC, lower case. */
+function normalize(source: string): string {
+  const fold = createFolder();
+  let text = '';
+  forEachChar(source, (char) => {
+    text += fold(char);
+  });
+  return text;
+}
+
+/** Calls `visit` with each code point of `text` and its offset. */
+function forEachChar(text: string, visit: (char: string, offset: number) => void): void {
+  for (let offset = 0; offset < text.length;) {
+    const code = text.charCodeAt(offset);
+    const length =
+      code >= 0xd800 && code <= 0xdbff && offset + 1 < text.length
+        ? surrogatePair(text, offset)
+        : 1;
+    visit(length === 1 ? text.charAt(offset) : text.slice(offset, offset + 2), offset);
+    offset += length;
+  }
+}
+
+function surrogatePair(text: string, offset: number): 1 | 2 {
+  const next = text.charCodeAt(offset + 1);
+  return next >= 0xdc00 && next <= 0xdfff ? 2 : 1;
+}
+
+/**
+ * One character as matching sees it. ASCII, most of any page, is folded by
+ * hand (NFKC leaves it as it is); anything else once per distinct character.
+ */
+function createFolder(): (char: string) => string {
+  const seen = new Map<string, string>();
+  return (char) => {
+    const code = char.charCodeAt(0);
+    if (code < 0x80) {
+      if (code === 0x20 || (code >= 0x09 && code <= 0x0d)) return '';
+      return code >= 0x41 && code <= 0x5a ? String.fromCharCode(code + 0x20) : char;
+    }
+    let mapped = seen.get(char);
+    if (mapped === undefined) {
+      mapped = char.normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+      seen.set(char, mapped);
+    }
+    return mapped;
+  };
 }

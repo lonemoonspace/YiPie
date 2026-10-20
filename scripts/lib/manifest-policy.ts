@@ -27,6 +27,8 @@ export const MANIFEST_POLICY: ManifestPolicy = {
     // from _locales, Chinese unless the browser speaks a language there is a
     // table for.
     default_locale: 'zh_CN',
+    // Older browsers refuse to install rather than fail silently (appendix C).
+    minimum_chrome_version: '110',
     web_accessible_resources: [
       { resources: ['panel.html'], matches: ['http://*/*', 'https://*/*'], use_dynamic_url: true },
     ],
