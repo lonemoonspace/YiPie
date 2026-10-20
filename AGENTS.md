@@ -85,7 +85,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - 结果取决于到达顺序的 RPC 在面板里经 `features/panel/latest-only.ts` 发送（目前是换默认模型与默认 Prompt，各一个队列，两边都存好才开始请求）：一次一个，只认最新的。后台先检查发送方再入队，两个同时发出的请求可能以任意顺序进写队列。
 - 保存对话（`snapshot.save`）不排队，而是带着本面板的序号 `revision` 立即发出：后台按发送方的面板文档与序号只留最新的一次，晚到的旧保存返回 `stored: false`。来自另一个面板文档的保存，只在写队列里轮到时它仍是这个标签页接上的面板才存（`createSnapshotStore` 的 `attached`）：调度器的核对发生在请求排队之前，排队期间新面板可能已经接上。以后新增「以面板已接上为前提」的写入，同样在队列任务里再核对一次。面板上已完成的对话一变（回答完成、重新总结清空、重做去掉最后一轮）就保存，不等下一个回答。
 - 引用定位经 `page.locate`（只给已接上的面板）：后台请内容脚本在页面里查找（`platform/locate/scroll-to-text.ts`），高亮用 CSS Custom Highlight API，样式经 `scripting.insertCSS` 注入，不改页面 DOM。
-- 导入经 `config.import`（只接受设置页）：文件在设置页里读、按表单的规则逐条校验（`domain/config-transfer.ts`），只把认得的条目发给后台。后台在一个队列任务里先确认两张表都能写、再依次追加并分配新 id（`platform/settings/config-import.ts`）：被拒绝时两张表都不动，用户重试不会重复导入。
+- 导入经 `config.import`（只接受设置页）：文件在设置页里读、按表单的规则逐条校验（`domain/config-transfer.ts`），只把认得的条目发给后台。后台在一个队列任务里先确认两张表都能写、再依次追加并分配新 id（`platform/settings/config-import.ts`）：被只读拒绝时两张表都不动；Prompt 写入本身失败（配额、I/O）时把刚追加的模型撤回，撤回也失败就报 `ImportHalfDoneError`，不让用户以为什么都没导入。
 - 扩展页面用 `callRpc`，它会校验返回值。内容脚本用 `callRpcLite`（`src/platform/rpc/lite-client.ts`），不引入 zod；通道名和请求 / 回复的形状在不依赖 zod 的 `contract/rpc-wire.ts` 里（从 `rpc.ts` 取常量会把全部 schema 带进内容脚本）。
 
 ## 凭据与日志

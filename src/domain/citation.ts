@@ -115,13 +115,24 @@ function normalizeChunks(chunks: readonly string[]): Haystack {
   let length = 0;
   for (const chunk of chunks) {
     starts.push(length);
-    forEachChar(chunk, (char) => {
+    for (let offset = 0; offset < chunk.length;) {
+      const char = charAt(chunk, offset);
       const mapped = fold(char);
-      if (mapped === '') return;
-      parts.push(mapped);
-      length += mapped.length;
-    });
+      if (mapped !== '') {
+        parts.push(mapped);
+        length += mapped.length;
+      }
+      offset += char.length;
+    }
   }
+  /**
+   * Where the last trace stopped: the source character it found and where
+   * that character starts in the normalized text. Matches come in order, so
+   * the next trace in the same chunk usually picks up from here rather than
+   * from the chunk's start, and a page that is one long text node is not
+   * walked again for every match.
+   */
+  let cursor = { chunk: -1, offset: 0, at: 0 };
   return {
     text: parts.join(''),
     point(index) {
@@ -135,14 +146,20 @@ function normalizeChunks(chunks: readonly string[]): Haystack {
         if ((starts[middle] ?? 0) <= index) low = middle;
         else high = middle - 1;
       }
-      let at = starts[low] ?? 0;
-      let found: MappedPoint | null = null;
-      forEachChar(chunks[low] ?? '', (char, offset) => {
-        if (found !== null) return;
-        at += fold(char).length;
-        if (at > index) found = { chunk: low, offset, length: char.length };
-      });
-      return found;
+      const chunk = chunks[low] ?? '';
+      let { offset, at } =
+        cursor.chunk === low && cursor.at <= index ? cursor : { offset: 0, at: starts[low] ?? 0 };
+      while (offset < chunk.length) {
+        const char = charAt(chunk, offset);
+        const next = at + fold(char).length;
+        if (next > index) {
+          cursor = { chunk: low, offset, at };
+          return { chunk: low, offset, length: char.length };
+        }
+        at = next;
+        offset += char.length;
+      }
+      return null;
     },
   };
 }
@@ -151,28 +168,22 @@ function normalizeChunks(chunks: readonly string[]): Haystack {
 function normalize(source: string): string {
   const fold = createFolder();
   let text = '';
-  forEachChar(source, (char) => {
+  for (let offset = 0; offset < source.length;) {
+    const char = charAt(source, offset);
     text += fold(char);
-  });
+    offset += char.length;
+  }
   return text;
 }
 
-/** Calls `visit` with each code point of `text` and its offset. */
-function forEachChar(text: string, visit: (char: string, offset: number) => void): void {
-  for (let offset = 0; offset < text.length;) {
-    const code = text.charCodeAt(offset);
-    const length =
-      code >= 0xd800 && code <= 0xdbff && offset + 1 < text.length
-        ? surrogatePair(text, offset)
-        : 1;
-    visit(length === 1 ? text.charAt(offset) : text.slice(offset, offset + 2), offset);
-    offset += length;
+/** The code point of `text` at `offset`: one UTF-16 unit, or a surrogate pair. */
+function charAt(text: string, offset: number): string {
+  const code = text.charCodeAt(offset);
+  if (code >= 0xd800 && code <= 0xdbff && offset + 1 < text.length) {
+    const next = text.charCodeAt(offset + 1);
+    if (next >= 0xdc00 && next <= 0xdfff) return text.slice(offset, offset + 2);
   }
-}
-
-function surrogatePair(text: string, offset: number): 1 | 2 {
-  const next = text.charCodeAt(offset + 1);
-  return next >= 0xdc00 && next <= 0xdfff ? 2 : 1;
+  return text.charAt(offset);
 }
 
 /**

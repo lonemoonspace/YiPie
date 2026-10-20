@@ -51,6 +51,8 @@ export interface ConfigListService<T, Draft, Patch> {
   addAll(drafts: readonly Draft[]): Promise<ListView<T>>;
   /** `addAll` for a task that already runs in the write queue (`importConfig`). */
   addAllUnqueued(drafts: readonly Draft[]): Promise<ListView<T>>;
+  /** Takes out the items with these ids, for a task in the write queue (undoing an import). */
+  removeAllUnqueued(ids: readonly string[]): Promise<ListView<T>>;
   /**
    * Refuses with `ReadOnlyRecordError` when the list would refuse an
    * `addAll`, for a task in the write queue to ask before it writes anything.
@@ -192,6 +194,8 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
     },
     addAll: (drafts) => change(appendAll(drafts), null),
     addAllUnqueued: (drafts) => changeUnqueued(appendAll(drafts), null),
+    removeAllUnqueued: (ids) =>
+      changeUnqueued((items) => items.filter((item) => !ids.includes(item.id)), null),
     // Appending never moves the default (`defaultAfterChange`), so the list
     // is the only record an append writes.
     async assertAppendableUnqueued() {

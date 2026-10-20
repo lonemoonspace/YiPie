@@ -64,6 +64,14 @@ describe('findQuote', () => {
     expect(covered(['甲㍿乙'], '社乙')).toEqual(['㍿乙']);
   });
 
+  it('maps every match in one long chunk, overlapping ones too', () => {
+    expect(findQuote(['甲甲甲甲'], '甲甲甲')).toEqual([
+      { start: { chunk: 0, offset: 0 }, end: { chunk: 0, offset: 3 } },
+      { start: { chunk: 0, offset: 1 }, end: { chunk: 0, offset: 4 } },
+    ]);
+    expect(covered(['A b c, a B c.', '乙 abc'], 'abc')).toEqual(['A b c', 'a B c', 'abc']);
+  });
+
   it('keeps offsets right around characters outside the BMP', () => {
     expect(covered(['😀一瞥😀'], '一瞥')).toEqual(['一瞥']);
   });
