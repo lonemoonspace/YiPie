@@ -9,7 +9,7 @@
 
 ## 当前状态
 
-阶段 6（硬化与分发）的自动化部分已完成：界面可以在中文与英文之间切换（默认跟随浏览器）；设置页与面板达到 WCAG 2.1 AA 的对比度，并且只用键盘就能操作；发版有固定步骤和发布前的安装包检查。阶段 1–5 已完成（总结、多个模型与 Prompt、追问与刷新后恢复、错误分类与自动重试、引用定位与选区总结、导入导出等）。版本 0.1.3 已作为 [GitHub Release](https://github.com/lonemoonspace/YiPie/releases) 附件发布；正在上架 Chrome 应用商店（商店与 Release 是同一个安装包，[隐私政策](PRIVACY.md)已就绪）。路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+阶段 6（硬化与分发）的自动化部分已完成：界面可以在中文与英文之间切换（默认跟随浏览器）；设置页与面板达到 WCAG 2.1 AA 的对比度，并且只用键盘就能操作；发版有固定步骤和发布前的安装包检查。阶段 1–5 已完成（总结、多个模型与 Prompt、追问与刷新后恢复、错误分类与自动重试、引用定位与选区总结、导入导出等）。版本 0.1.4 已作为 [GitHub Release](https://github.com/lonemoonspace/YiPie/releases) 附件发布；正在上架 Chrome 应用商店（商店与 Release 是同一个安装包，[隐私政策](PRIVACY.md)已就绪）。路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
 
 ## 使用
 
