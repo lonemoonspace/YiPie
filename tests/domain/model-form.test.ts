@@ -5,6 +5,7 @@ import {
   formFromConfig,
   modelOptions,
   addMenuModel,
+  followModelRename,
   parseMenuModels,
   parseConnectionFields,
   parseModelForm,
@@ -204,5 +205,23 @@ describe('the menu models field', () => {
     const result = parseModelForm({ ...filled, menuModels: many });
     expect(result.ok).toBe(false);
     expect(result.ok ? null : result.errors.menuModels).toBeTruthy();
+  });
+});
+
+describe('followModelRename', () => {
+  const saved = (model: string, menuModels: string[]) => {
+    const result = parseModelForm({ ...filled, model, menuModels: menuModels.join('\n') });
+    if (!result.ok) throw new Error('the form should parse');
+    return result.value;
+  };
+
+  it('puts the new model name where the old one was on the menu', () => {
+    expect(followModelRename('m1', saved('m9', ['m1', 'm2'])).menuModels).toEqual(['m9', 'm2']);
+  });
+
+  it('leaves the list alone when it already has the new name, or never had the old one', () => {
+    expect(followModelRename('m1', saved('m2', ['m1', 'm2'])).menuModels).toEqual(['m1', 'm2']);
+    expect(followModelRename('m1', saved('m9', ['m2', 'm3'])).menuModels).toEqual(['m2', 'm3']);
+    expect(followModelRename('m1', saved('m1', ['m1', 'm2'])).menuModels).toEqual(['m1', 'm2']);
   });
 });

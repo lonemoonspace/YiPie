@@ -341,6 +341,18 @@ describe('model configurations: what the panel gets', () => {
     });
   });
 
+  it('keeps the menu as it is once the settings page renamed the model on it', async () => {
+    // The settings page put the new name where the old one was (`followModelRename`).
+    const { models } = setup(
+      list(config('a', 'https://api.example.com/v1', { model: 'm9', menuModels: ['m9', 'm2'] })),
+    );
+
+    await models.choose('a', 'm2');
+    await models.choose('a', 'm9');
+
+    expect((await models.current()).choices[0]?.models).toEqual(['m9', 'm2']);
+  });
+
   it('writes nothing to the list when the picked name is already in use', async () => {
     const stored = config('b', 'https://api.example.com/v1', { menuModels: ['x'] });
     const { models, store } = setup(list(stored));

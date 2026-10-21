@@ -151,6 +151,20 @@ export function parseMenuModels(text: string): string[] {
   return [...new Set(text.split('\n').map((line) => line.trim()))].filter((name) => name !== '');
 }
 
+/**
+ * The form as it is saved after its model name changed from `previous`: on
+ * the menu's list, the old name gives its place to the new one, so a rename
+ * does not leave the old name behind as a menu entry. A list that already has
+ * the new name, or never had the old one, stays as the user wrote it.
+ */
+export function followModelRename(previous: string, form: ParsedModelForm): ParsedModelForm {
+  const { model, menuModels } = form;
+  if (model === previous || !menuModels.includes(previous) || menuModels.includes(model)) {
+    return form;
+  }
+  return { ...form, menuModels: menuModels.map((name) => (name === previous ? model : name)) };
+}
+
 /** `text` with `name` on a new last line, unless a line already has it. */
 export function addMenuModel(text: string, name: string): string {
   const names = parseMenuModels(text);

@@ -310,6 +310,7 @@ test('the model menu switches between the model names a configuration lists', as
   await expect(frame.locator('article.answer h2')).toHaveText('概要');
   expect((lastRequest(server)?.body as { model: string }).model).toBe('scenario:normal');
   await expect(menu).toHaveAttribute('title', '主力 · scenario:normal');
+  await expect(menu).toHaveValue(JSON.stringify(['main', 'scenario:normal']));
 
   // The pick is the configuration's model now, and both names stay on its menu.
   const models = (await stored(serviceWorker, 'model-configs')) as {
@@ -319,6 +320,10 @@ test('the model menu switches between the model names a configuration lists', as
     id: 'main',
     model: 'scenario:normal',
     menuModels: ['scenario:slow', 'scenario:normal'],
+  });
+  // The menu still writes the global default, as it does ungrouped.
+  expect(await stored(serviceWorker, 'selection')).toMatchObject({
+    data: { defaultModelId: 'main' },
   });
 });
 

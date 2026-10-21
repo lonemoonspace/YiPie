@@ -6,6 +6,7 @@ import { t } from '@/domain/i18n';
 import {
   EMPTY_MODEL_FORM,
   addMenuModel,
+  followModelRename,
   formFromConfig,
   parseConnectionFields,
   parseModelForm,
@@ -63,7 +64,10 @@ export function ModelForm(props: ModelFormProps) {
     // Still inside the submit event: Chrome only shows the prompt during a
     // user gesture, so this must run before anything awaits.
     const accessRequest = requestOriginAccess(parsed.value.baseURL);
-    props.onSave(parsed.value, accessRequest);
+    props.onSave(
+      initial ? followModelRename(initial.model, parsed.value) : parsed.value,
+      accessRequest,
+    );
   };
 
   return (
