@@ -18,12 +18,14 @@ import { CheckIcon, CopyIcon, RefreshIcon, StopIcon } from '@/features/ui/icons'
 import { MoreMenu } from '@/features/ui/more-menu';
 import { openSettingsPage } from '@/platform/runtime/settings-page';
 import { copyText } from './clipboard';
+import { isGrouped, optionValue, pickOf } from './model-menu';
+import type { ModelPick } from './model-switcher';
 import type { Conversation } from './conversation';
 import {
   canAsk,
   isAnswered,
   isBusy,
-  modelName,
+  modelTitle,
   type CutNote,
   type PanelProblem,
   type PanelState,
@@ -56,21 +58,7 @@ export function PanelApp() {
   return (
     <main className="panel" data-phase={state.phase} data-problem={state.problem?.kind}>
       <div className="toolbar">
-        {state.models.length > 0 ? (
-          <select
-            className="menu model"
-            aria-label={t('panel.model')}
-            title={modelName(state)}
-            value={state.modelId ?? ''}
-            onChange={(event) => switchModel(event.target.value)}
-          >
-            {state.models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
+        {state.models.length > 0 ? <ModelMenu state={state} onPick={switchModel} /> : null}
         {state.prompts.length > 1 ? (
           <select
             className="menu prompt"
@@ -512,13 +500,58 @@ function AskForm({ enabled, ask }: { enabled: boolean; ask: Conversation['ask'] 
   );
 }
 
+/**
+ * The model menu. Once a configuration offers several model names, they are
+ * listed under its name and the menu shows the model name in use; otherwise
+ * each configuration is one entry, by its name.
+ */
+function ModelMenu({ state, onPick }: { state: PanelState; onPick: (pick: ModelPick) => void }) {
+  const grouped = isGrouped(state.models);
+  const current = state.models.find((choice) => choice.id === state.modelId);
+  const value =
+    current === undefined
+      ? ''
+      : grouped
+        ? optionValue(current.id, current.model)
+        : optionValue(current.id);
+  return (
+    <select
+      className="menu model"
+      data-grouped={grouped ? '' : undefined}
+      aria-label={t('panel.model')}
+      title={modelTitle(state)}
+      value={value}
+      onChange={(event) => {
+        const pick = pickOf(event.target.value, grouped);
+        if (pick !== null) onPick(pick);
+      }}
+    >
+      {grouped
+        ? state.models.map((choice) => (
+            <optgroup key={choice.id} label={choice.name}>
+              {choice.models.map((model) => (
+                <option key={model} value={optionValue(choice.id, model)}>
+                  {model}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        : state.models.map((choice) => (
+            <option key={choice.id} value={optionValue(choice.id)}>
+              {choice.name}
+            </option>
+          ))}
+    </select>
+  );
+}
+
 /** A finished summary needs no words above it: the answer says it is done. */
 function quietPhase(state: PanelState): boolean {
   return state.phase === 'done';
 }
 
 function describePhase(state: PanelState): string {
-  const model = modelName(state);
+  const model = modelTitle(state);
   switch (state.phase) {
     case 'attaching':
       return t('panel.status.attaching');

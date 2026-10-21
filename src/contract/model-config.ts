@@ -110,6 +110,12 @@ export const ModelConfig = z.looseObject({
   /** Empty for servers that take no key, such as a local Ollama. */
   apiKey: z.string().default(''),
   model: z.string().min(1),
+  /**
+   * Other model names of the same service, offered in the panel's model menu
+   * next to `model`; picking one there makes it `model`. Empty: the menu
+   * offers this configuration by its name alone, as before.
+   */
+  menuModels: z.array(z.string()).default([]),
   headers: HeaderMap.default({}),
   extraBody: ExtraBody.default({}),
   /** Tokens the model accepts. Used only for budgeting; never sent. */
@@ -122,12 +128,22 @@ export type ModelConfig = z.infer<typeof ModelConfig>;
 export const ModelConfigList = z.array(ModelConfig);
 export type ModelConfigList = z.infer<typeof ModelConfigList>;
 
+/** Most names one configuration's menu may hold. */
+export const MAX_MENU_MODELS = 50;
+
+/** `menuModels` as the settings page submits it: names, each once, none empty. */
+const MenuModels = z
+  .array(z.string().trim().min(1))
+  .max(MAX_MENU_MODELS)
+  .refine((names) => new Set(names).size === names.length, 'Each model name only once.');
+
 /** What the settings page submits to create a configuration; the id is assigned on save. */
 export const ModelConfigDraft = z.strictObject({
   name: z.string().default(''),
   baseURL: BaseURL,
   apiKey: z.string().default(''),
   model: z.string().trim().min(1),
+  menuModels: MenuModels.default([]),
   headers: HeaderMapInput.default({}),
   extraBody: ExtraBodyInput.default({}),
   contextWindow: z.number().int().positive().nullable().default(null),
@@ -144,6 +160,7 @@ export const ModelConfigPatch = z.strictObject({
   baseURL: BaseURL.optional(),
   apiKey: z.string().optional(),
   model: z.string().trim().min(1).optional(),
+  menuModels: MenuModels.optional(),
   headers: HeaderMapInput.optional(),
   extraBody: ExtraBodyInput.optional(),
   contextWindow: z.number().int().positive().nullable().optional(),
@@ -154,4 +171,14 @@ export type ModelConfigPatch = z.infer<typeof ModelConfigPatch>;
 /** The name to show for a configuration. */
 export function displayName(config: Pick<ModelConfig, 'name' | 'model'>): string {
   return config.name.trim() || config.model;
+}
+
+/**
+ * The model names the panel's menu offers for a configuration: `menuModels`,
+ * with `model` first when the list does not have it. A pick in the panel
+ * keeps this whole list (see `pickMenuModel`), so nothing on it disappears.
+ */
+export function menuModelNames(config: Pick<ModelConfig, 'model' | 'menuModels'>): string[] {
+  const names = config.menuModels.filter((name) => name.trim() !== '');
+  return [...new Set(names.includes(config.model) ? names : [config.model, ...names])];
 }

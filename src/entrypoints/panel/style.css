@@ -88,6 +88,18 @@ body {
   text-overflow: ellipsis;
 }
 
+/*
+ * Grouped, the model menu shows a model name, often longer than a
+ * configuration's; it gives way, so the prompt's name stays readable.
+ */
+.menu.model[data-grouped] {
+  max-width: 46%;
+}
+
+.menu.model[data-grouped] ~ .menu.prompt {
+  flex-shrink: 0;
+}
+
 .menu:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;

@@ -205,6 +205,8 @@ export interface StoredModel {
   apiKey?: string;
   /** Blank (`null`) unless given. */
   contextWindow?: number | null;
+  /** The other model names the panel's menu offers; none unless given. */
+  menuModels?: string[];
 }
 
 /**

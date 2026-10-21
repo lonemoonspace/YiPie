@@ -13,7 +13,7 @@ function setup() {
   const chosen = vi.fn();
   const failed = vi.fn();
   const pick = createModelSwitcher({
-    choose: (id) =>
+    choose: ({ id }) =>
       new Promise<void>((resolve, reject) => {
         sent.push({ id, resolve, reject });
       }),
@@ -31,7 +31,7 @@ describe('createModelSwitcher', () => {
   it('stores a pick, then goes on with it', async () => {
     const { pick, sent, chosen, failed } = setup();
 
-    pick('b');
+    pick({ id: 'b' });
     await settle();
     sent[0]?.resolve();
     await settle();
@@ -43,9 +43,9 @@ describe('createModelSwitcher', () => {
   it('sends one pick at a time, in the order they were made', async () => {
     const { pick, sent, ids, chosen } = setup();
 
-    pick('b');
+    pick({ id: 'b' });
     await settle();
-    pick('c');
+    pick({ id: 'c' });
     await settle();
     // `c` waits for `b`, so the background stores them in this order.
     expect(ids()).toEqual(['b']);
@@ -64,10 +64,10 @@ describe('createModelSwitcher', () => {
   it('does not send a pick that a newer one replaced before its turn', async () => {
     const { pick, sent, ids, chosen } = setup();
 
-    pick('b');
+    pick({ id: 'b' });
     await settle();
-    pick('c');
-    pick('d');
+    pick({ id: 'c' });
+    pick({ id: 'd' });
     await settle();
     sent[0]?.resolve();
     await settle();
@@ -81,8 +81,8 @@ describe('createModelSwitcher', () => {
   it('sends only the newest of picks made before the first one went out', async () => {
     const { pick, sent, ids, chosen } = setup();
 
-    pick('b');
-    pick('c');
+    pick({ id: 'b' });
+    pick({ id: 'c' });
     await settle();
     sent[0]?.resolve();
     await settle();
@@ -94,9 +94,9 @@ describe('createModelSwitcher', () => {
   it('ignores the failure of a pick that a newer one replaced', async () => {
     const { pick, sent, chosen, failed } = setup();
 
-    pick('b');
+    pick({ id: 'b' });
     await settle();
-    pick('c');
+    pick({ id: 'c' });
     await settle();
     sent[0]?.reject(new Error('b was deleted meanwhile'));
     await settle();
@@ -111,14 +111,14 @@ describe('createModelSwitcher', () => {
     const { pick, sent, chosen, failed } = setup();
     const error = new Error('read-only');
 
-    pick('b');
+    pick({ id: 'b' });
     await settle();
     sent[0]?.reject(error);
     await settle();
     expect(failed).toHaveBeenCalledWith(error);
     expect(chosen).not.toHaveBeenCalled();
 
-    pick('c');
+    pick({ id: 'c' });
     await settle();
     sent[1]?.resolve();
     await settle();

@@ -24,7 +24,7 @@ import { countVariable } from '@/domain/prompt/render';
 import { estimateTokens } from '@/domain/token-estimate';
 import type { ChatOutcome } from '@/platform/llm/client';
 import { createLatestOnly } from './latest-only';
-import { createModelSwitcher } from './model-switcher';
+import { createModelSwitcher, type ModelPick } from './model-switcher';
 import type {
   BudgetWindow,
   CutNote,
@@ -77,7 +77,7 @@ export interface ConversationDeps {
    */
   save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
   /** Makes a model the default (`models.choose`). */
-  choose: (id: string) => Promise<unknown>;
+  choose: (pick: ModelPick) => Promise<unknown>;
   /** Makes a prompt the default (`prompts.choose`). */
   choosePrompt: (id: string) => Promise<unknown>;
   /** The service of a model refused `stream_options` (`models.disableStreamUsage`). */
@@ -109,8 +109,8 @@ export interface Conversation {
   retry: (options?: { cut?: boolean }) => void;
   /** Ends the request in flight; what arrived stays. */
   stop: () => void;
-  /** Makes `id` the default model, then runs the latest turn again with it. */
-  switchModel: (id: string) => void;
+  /** Makes the pick the default model, then runs the latest turn again with it. */
+  switchModel: (pick: ModelPick) => void;
   /** Makes `id` the default prompt, then starts over with a new summary that uses it. */
   switchPrompt: (id: string) => void;
   /**
@@ -497,12 +497,12 @@ export function createConversation(deps: ConversationDeps): Conversation {
       run?.abort();
     },
 
-    switchModel(id) {
+    switchModel(pick) {
       picked = ++action;
       drop();
-      deps.dispatch({ type: 'select', modelId: id, waiting });
+      deps.dispatch({ type: 'select', modelId: pick.id, model: pick.model, waiting });
       modelPicking = true;
-      pickModel(id);
+      pickModel(pick);
     },
 
     switchPrompt(id) {

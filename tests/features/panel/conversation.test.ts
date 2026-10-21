@@ -17,6 +17,7 @@ import {
   type StreamRequest,
 } from '@/features/panel/conversation';
 import { INITIAL_PANEL_STATE, reducePanel, type PanelEvent } from '@/features/panel/state';
+import type { ModelPick } from '@/features/panel/model-switcher';
 import type { ChatOutcome } from '@/platform/llm/client';
 
 const config: PanelModelConfig = {
@@ -65,7 +66,7 @@ function harness(options: {
   setup?: Partial<RunSetup> | Error;
   page?: PageContext;
   save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
-  choose?: (id: string) => Promise<unknown>;
+  choose?: (pick: ModelPick) => Promise<unknown>;
   choosePrompt?: (id: string) => Promise<unknown>;
   disableStreamUsage?: (id: string) => Promise<unknown>;
 }) {
@@ -86,8 +87,8 @@ function harness(options: {
         ? Promise.reject(options.setup)
         : Promise.resolve({
             choices: [
-              { id: 'm1', name: '主力' },
-              { id: 'm2', name: '备用' },
+              { id: 'm1', name: '主力', model: 'm1-model', models: ['m1-model'] },
+              { id: 'm2', name: '备用', model: 'm2-model', models: ['m2-model'] },
             ],
             config,
             prompt,
@@ -403,12 +404,24 @@ describe('conversation: without summarizing on opening', () => {
     await h.conversation.open();
     await settle();
 
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
 
-    expect(h.choose).toHaveBeenCalledWith('m2');
+    expect(h.choose).toHaveBeenCalledWith({ id: 'm2' });
     expect(h.requests).toHaveLength(0);
     expect(h.state()).toMatchObject({ phase: 'ready', modelId: 'm2' });
+  });
+
+  it('sends the model name picked under a configuration along with it', async () => {
+    const h = harness({ setup: off, scripts: [answer('总结')] });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel({ id: 'm2', model: 'm2-other' });
+    await settle();
+
+    expect(h.choose).toHaveBeenCalledWith({ id: 'm2', model: 'm2-other' });
+    expect(h.state().models.find((choice) => choice.id === 'm2')?.model).toBe('m2-other');
   });
 
   it('goes ahead when the settings cannot be read, and reports why it could not run', async () => {
@@ -778,10 +791,10 @@ describe('conversation: the model menu', () => {
     h.conversation.ask('问');
     await settle();
 
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
 
-    expect(h.choose).toHaveBeenCalledWith('m2');
+    expect(h.choose).toHaveBeenCalledWith({ id: 'm2' });
     expect(h.sent(2).slice(2)).toEqual([
       { role: 'assistant', content: '总结' },
       { role: 'user', content: '问' },
@@ -797,7 +810,7 @@ describe('conversation: the model menu', () => {
     await h.conversation.open();
     await settle();
 
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
 
     expect(h.requests[0]?.signal.aborted).toBe(true);
@@ -813,7 +826,7 @@ describe('conversation: the model menu', () => {
     await h.conversation.open();
     await settle();
 
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
 
     expect(h.state()).toMatchObject({
@@ -882,7 +895,7 @@ describe('conversation: the prompt menu', () => {
     await settle();
 
     h.conversation.switchPrompt('p2');
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
     // The model is stored, the prompt not yet: nothing runs.
     expect(h.requests).toHaveLength(1);
@@ -1000,7 +1013,7 @@ describe('conversation: what goes on after the user moved on (PR #4 review)', ()
     });
     await h.conversation.open();
     await settle();
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
     const seen = h.events.length;
 
@@ -1020,7 +1033,7 @@ describe('conversation: what goes on after the user moved on (PR #4 review)', ()
     });
     await h.conversation.open();
     await settle();
-    h.conversation.switchModel('m2');
+    h.conversation.switchModel({ id: 'm2' });
     await settle();
     const seen = h.events.length;
 

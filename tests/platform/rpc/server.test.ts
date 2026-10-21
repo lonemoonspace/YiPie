@@ -46,7 +46,10 @@ const view: GeneralSettingsView = {
   locale: 'zh-Hans',
 };
 
-const panelModels: PanelModelsView = { choices: [{ id: 'a', name: 'A' }], current: null };
+const panelModels: PanelModelsView = {
+  choices: [{ id: 'a', name: 'A', model: 'a', models: ['a'] }],
+  current: null,
+};
 
 const models: ModelConfigsView = {
   items: [],

@@ -4,6 +4,9 @@ import {
   EMPTY_MODEL_FORM,
   formFromConfig,
   modelOptions,
+  addMenuModel,
+  followModelRename,
+  parseMenuModels,
   parseConnectionFields,
   parseModelForm,
   type ModelFormFields,
@@ -25,6 +28,7 @@ describe('parseModelForm', () => {
         baseURL: 'http://localhost:11434/v1',
         apiKey: '',
         model: 'qwen2.5:7b',
+        menuModels: [],
         headers: {},
         extraBody: {},
         contextWindow: null,
@@ -109,6 +113,7 @@ describe('formFromConfig', () => {
       baseURL: 'https://api.deepseek.com',
       apiKey: 'sk-x',
       model: 'deepseek-chat',
+      menuModels: ['deepseek-chat', 'deepseek-reasoner'],
       headers: { 'X-A': '1' },
       extraBody: { temperature: 0.5 },
       contextWindow: 65536,
@@ -123,6 +128,7 @@ describe('formFromConfig', () => {
         baseURL: 'https://api.deepseek.com',
         apiKey: 'sk-x',
         model: 'deepseek-chat',
+        menuModels: ['deepseek-chat', 'deepseek-reasoner'],
         headers: { 'X-A': '1' },
         extraBody: { temperature: 0.5 },
         contextWindow: 65536,
@@ -180,5 +186,42 @@ describe('modelOptions', () => {
       'deepseek-chat',
       'gpt-4o',
     ]);
+  });
+});
+
+describe('the menu models field', () => {
+  it('reads one name per line, trimmed, each once, without blank lines', () => {
+    expect(parseMenuModels(' a \n\nb\na\n')).toEqual(['a', 'b']);
+  });
+
+  it('adds a name on a new line unless it is there', () => {
+    expect(addMenuModel('', 'a')).toBe('a');
+    expect(addMenuModel('a\n', 'b')).toBe('a\nb');
+    expect(addMenuModel('a\nb', 'a')).toBe('a\nb');
+  });
+
+  it('refuses more names than the menu holds', () => {
+    const many = Array.from({ length: 51 }, (_, index) => `m${index}`).join('\n');
+    const result = parseModelForm({ ...filled, menuModels: many });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.errors.menuModels).toBeTruthy();
+  });
+});
+
+describe('followModelRename', () => {
+  const saved = (model: string, menuModels: string[]) => {
+    const result = parseModelForm({ ...filled, model, menuModels: menuModels.join('\n') });
+    if (!result.ok) throw new Error('the form should parse');
+    return result.value;
+  };
+
+  it('puts the new model name where the old one was on the menu', () => {
+    expect(followModelRename('m1', saved('m9', ['m1', 'm2'])).menuModels).toEqual(['m9', 'm2']);
+  });
+
+  it('leaves the list alone when it already has the new name, or never had the old one', () => {
+    expect(followModelRename('m1', saved('m2', ['m1', 'm2'])).menuModels).toEqual(['m1', 'm2']);
+    expect(followModelRename('m1', saved('m9', ['m2', 'm3'])).menuModels).toEqual(['m2', 'm3']);
+    expect(followModelRename('m1', saved('m1', ['m1', 'm2'])).menuModels).toEqual(['m1', 'm2']);
   });
 });

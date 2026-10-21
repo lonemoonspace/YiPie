@@ -58,7 +58,8 @@ export function usePanel(): PanelControls {
       extract: () => callRpc('page.getContext', {}),
       stream: (request) => streamChat(request),
       save: (messages, revision) => callRpc('snapshot.save', { messages, revision }),
-      choose: (id) => callRpc('models.choose', { id }),
+      choose: ({ id, model }) =>
+        callRpc('models.choose', model === undefined ? { id } : { id, model }),
       choosePrompt: (id) => callRpc('prompts.choose', { id }),
       disableStreamUsage: (id) => callRpc('models.disableStreamUsage', { id }),
       dispatch,

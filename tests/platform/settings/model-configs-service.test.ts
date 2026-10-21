@@ -30,6 +30,7 @@ const config = (id: string, baseURL: string, extra: Record<string, unknown> = {}
   baseURL,
   apiKey: '',
   model: `model-${id}`,
+  menuModels: [],
   headers: {},
   extraBody: {},
   contextWindow: null,
@@ -264,6 +265,9 @@ describe('model configurations: the default', () => {
 describe('model configurations: what the panel gets', () => {
   const keyed = (id: string, key: string, name = '') =>
     config(id, 'https://api.example.com/v1', { name, apiKey: key });
+  /** What the panel gets of a configuration: the menu's names stay on the menu. */
+  const sent = (row: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(row).filter(([field]) => field !== 'menuModels'));
 
   it('names every model, and carries only the key of the one in use', async () => {
     const { models } = setup(list(keyed('a', 'sk-a', '主力'), keyed('b', 'sk-b')));
@@ -272,10 +276,10 @@ describe('model configurations: what the panel gets', () => {
 
     expect(panel).toEqual({
       choices: [
-        { id: 'a', name: '主力' },
-        { id: 'b', name: 'model-b' },
+        { id: 'a', name: '主力', model: 'model-a', models: ['model-a'] },
+        { id: 'b', name: 'model-b', model: 'model-b', models: ['model-b'] },
       ],
-      current: keyed('a', 'sk-a', '主力'),
+      current: sent(keyed('a', 'sk-a', '主力')),
     });
     expect(JSON.stringify(panel)).not.toContain('sk-b');
   });
@@ -295,7 +299,7 @@ describe('model configurations: what the panel gets', () => {
     const { models } = setup(list(odd));
 
     for (const panel of [await models.current(), await models.choose('a')]) {
-      expect(panel.current).toEqual(keyed('a', 'sk-a'));
+      expect(panel.current).toEqual(sent(keyed('a', 'sk-a')));
       expect(JSON.stringify(panel)).not.toContain('tok-from-a-newer-version');
     }
   });
@@ -303,6 +307,71 @@ describe('model configurations: what the panel gets', () => {
   it('has nothing in use while there are no models', async () => {
     const { models } = setup();
     expect(await models.current()).toEqual({ choices: [], current: null });
+  });
+
+  it('offers the menu names of each configuration, its model among them', async () => {
+    const { models } = setup(
+      list(config('a', 'https://api.example.com/v1', { menuModels: ['x', 'y'] })),
+    );
+
+    expect((await models.current()).choices).toEqual([
+      { id: 'a', name: 'model-a', model: 'model-a', models: ['model-a', 'x', 'y'] },
+    ]);
+  });
+
+  it('changes the model name and the default in one pick, keeping every name on the menu', async () => {
+    const { models, store } = setup(
+      list(
+        keyed('a', 'sk-a'),
+        config('b', 'https://api.example.com/v1', { menuModels: ['x', 'y'] }),
+      ),
+    );
+
+    const panel = await models.choose('b', 'y');
+
+    expect(panel.current).toMatchObject({ id: 'b', model: 'y' });
+    expect(panel.choices[1]).toEqual({
+      id: 'b',
+      name: 'y',
+      model: 'y',
+      models: ['model-b', 'x', 'y'],
+    });
+    expect(store.dump()[MODEL_CONFIGS_KEY]).toMatchObject({
+      data: [{ id: 'a' }, { id: 'b', model: 'y', menuModels: ['model-b', 'x', 'y'] }],
+    });
+  });
+
+  it('keeps the menu as it is once the settings page renamed the model on it', async () => {
+    // The settings page put the new name where the old one was (`followModelRename`).
+    const { models } = setup(
+      list(config('a', 'https://api.example.com/v1', { model: 'm9', menuModels: ['m9', 'm2'] })),
+    );
+
+    await models.choose('a', 'm2');
+    await models.choose('a', 'm9');
+
+    expect((await models.current()).choices[0]?.models).toEqual(['m9', 'm2']);
+  });
+
+  it('writes nothing to the list when the picked name is already in use', async () => {
+    const stored = config('b', 'https://api.example.com/v1', { menuModels: ['x'] });
+    const { models, store } = setup(list(stored));
+
+    await models.choose('b', 'model-b');
+
+    expect(store.dump()[MODEL_CONFIGS_KEY]).toEqual({ version: 1, data: [stored] });
+  });
+
+  it('refuses a model name the menu does not offer, and changes nothing', async () => {
+    const stored = config('b', 'https://api.example.com/v1', { menuModels: ['x'] });
+    const { models, store } = setup(list(keyed('a', 'sk-a'), stored));
+
+    await expect(models.choose('b', 'gpt-anything')).rejects.toBeInstanceOf(NotFoundError);
+    expect(store.dump()[SELECTION_KEY]).toBeUndefined();
+    expect(store.dump()[MODEL_CONFIGS_KEY]).toEqual({
+      version: 1,
+      data: [keyed('a', 'sk-a'), stored],
+    });
   });
 
   it('refuses to choose a model that is not in the list', async () => {

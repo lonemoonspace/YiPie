@@ -60,9 +60,13 @@ export interface ConfigListService<T, Draft, Patch> {
   assertAppendableUnqueued(): Promise<void>;
   /** Changes only the fields named in `patch`. */
   update(id: string, patch: Patch): Promise<ListView<T>>;
+  /** `update` for a task that already runs in the write queue. */
+  updateUnqueued(id: string, patch: Patch): Promise<ListView<T>>;
   remove(id: string): Promise<ListView<T>>;
   move(id: string, direction: MoveDirection): Promise<ListView<T>>;
   setDefault(id: string): Promise<ListView<T>>;
+  /** `setDefault` for a task that already runs in the write queue. */
+  setDefaultUnqueued(id: string): Promise<ListView<T>>;
 }
 
 export interface ConfigListOptions<T extends { id: string }, Draft> {
@@ -205,29 +209,31 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
       }
     },
     update: (id, patch) => change((items) => updateItem(items, id, patch), id),
+    updateUnqueued: (id, patch) => changeUnqueued((items) => updateItem(items, id, patch), id),
     remove: (id) => change((items) => removeItem(items, id), id),
     move: (id, direction) => change((items) => moveItem(items, id, direction), id),
 
-    setDefault(id) {
-      return queue(async () => {
-        const read = await rows.read();
-        if (!read.value.items.some((item) => item.id === id)) {
-          throw new NotFoundError(options.what, id);
-        }
-        // A list a newer version wrote is read-only as a whole, its default
-        // included: that version may read the default differently.
-        if (read.status === 'invalid' && read.readOnly) {
-          throw new ReadOnlyRecordError(options.list.key, storedVersionOf(read.raw));
-        }
-        const saved = await selection.updateUnqueued((current) => ({ ...current, [field]: id }));
-        return toView(read.value, id, {
-          status: read.status,
-          readOnly: false,
-          quarantined: saved.quarantined,
-          defaultFellBack: false,
-          defaultUnreadable: false,
-        });
-      });
-    },
+    setDefault: (id) => queue(() => setDefaultUnqueued(id)),
+    setDefaultUnqueued,
   };
+
+  async function setDefaultUnqueued(id: string): Promise<ListView<T>> {
+    const read = await rows.read();
+    if (!read.value.items.some((item) => item.id === id)) {
+      throw new NotFoundError(options.what, id);
+    }
+    // A list a newer version wrote is read-only as a whole, its default
+    // included: that version may read the default differently.
+    if (read.status === 'invalid' && read.readOnly) {
+      throw new ReadOnlyRecordError(options.list.key, storedVersionOf(read.raw));
+    }
+    const saved = await selection.updateUnqueued((current) => ({ ...current, [field]: id }));
+    return toView(read.value, id, {
+      status: read.status,
+      readOnly: false,
+      quarantined: saved.quarantined,
+      defaultFellBack: false,
+      defaultUnreadable: false,
+    });
+  }
 }

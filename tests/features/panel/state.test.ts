@@ -4,6 +4,7 @@ import {
   canAsk,
   isBusy,
   modelName,
+  modelTitle,
   reducePanel,
   type PanelEvent,
   type PanelState,
@@ -30,8 +31,13 @@ const requesting: PanelEvent = {
 const menu: PanelEvent = {
   type: 'models',
   models: [
-    { id: 'q', name: 'qwen' },
-    { id: 'd', name: 'deepseek' },
+    { id: 'q', name: 'qwen', model: 'qwen3:8b', models: ['qwen3:8b'] },
+    {
+      id: 'd',
+      name: 'deepseek',
+      model: 'deepseek-chat',
+      models: ['deepseek-chat', 'deepseek-reasoner'],
+    },
   ],
   modelId: 'q',
 };
@@ -249,6 +255,24 @@ describe('reducePanel: a conversation', () => {
     expect(picked).toMatchObject({ phase: 'extracting', modelId: 'd', problem: null });
     expect(modelName(picked)).toBe('deepseek');
     expect(picked.turns).toHaveLength(1);
+  });
+
+  it('shows a model name picked from the menu at once, under the configuration it belongs to', () => {
+    const picked = play(
+      [{ type: 'select', modelId: 'd', model: 'deepseek-reasoner' }],
+      play(answered('总结')),
+    );
+
+    expect(picked.models).toEqual([
+      { id: 'q', name: 'qwen', model: 'qwen3:8b', models: ['qwen3:8b'] },
+      {
+        id: 'd',
+        name: 'deepseek',
+        model: 'deepseek-reasoner',
+        models: ['deepseek-chat', 'deepseek-reasoner'],
+      },
+    ]);
+    expect(modelTitle(picked)).toBe('deepseek · deepseek-reasoner');
   });
 
   it('stays ready for a model picked before the first summary', () => {

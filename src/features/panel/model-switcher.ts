@@ -1,8 +1,14 @@
 import { createLatestOnly } from './latest-only';
 
+/** A pick from the model menu: a configuration, and one of its model names if the menu offers several. */
+export interface ModelPick {
+  id: string;
+  model?: string;
+}
+
 export interface ModelSwitcherDeps {
-  /** Makes `id` the default: the `models.choose` RPC. */
-  choose: (id: string) => Promise<unknown>;
+  /** Makes the pick the default: the `models.choose` RPC. */
+  choose: (pick: ModelPick) => Promise<unknown>;
   /** The newest pick is stored: go on with it. */
   chosen: () => void;
   /** The newest pick could not be stored. */
@@ -16,6 +22,6 @@ export interface ModelSwitcherDeps {
  * sent at all, and only the newest pick's answer counts: it alone goes on or
  * reports a failure (see `createLatestOnly`).
  */
-export function createModelSwitcher(deps: ModelSwitcherDeps): (id: string) => void {
+export function createModelSwitcher(deps: ModelSwitcherDeps): (pick: ModelPick) => void {
   return createLatestOnly({ send: deps.choose, settled: () => deps.chosen(), failed: deps.failed });
 }

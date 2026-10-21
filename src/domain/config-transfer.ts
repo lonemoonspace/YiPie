@@ -13,6 +13,7 @@ const MODEL_FIELDS = [
   'baseURL',
   'apiKey',
   'model',
+  'menuModels',
   'headers',
   'extraBody',
   'contextWindow',

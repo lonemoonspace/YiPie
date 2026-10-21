@@ -139,10 +139,11 @@ export type PanelEvent =
   /** The panel was opened on the selection. */
   | { type: 'mode'; mode: PanelMode }
   /**
-   * A model picked from the menu: the latest turn runs again with it, unless
+   * A model picked from the menu, with one of its model names when the menu
+   * offers several: the latest turn runs again with it, unless
    * the panel is `waiting` for the user to ask for a summary.
    */
-  | { type: 'select'; modelId: string; waiting?: boolean }
+  | { type: 'select'; modelId: string; model?: string; waiting?: boolean }
   /**
    * A prompt picked from the menu: a new summary starts with it once the
    * pick is stored, unless the panel is `waiting` for the user to ask for one.
@@ -193,6 +194,13 @@ export function isAnswered(turn: Turn): boolean {
 /** Display name of the model in use, or empty while unknown. */
 export function modelName(state: PanelState): string {
   return state.models.find((model) => model.id === state.modelId)?.name ?? '';
+}
+
+/** The model in use as the menu shows it: its configuration, and its model name. */
+export function modelTitle(state: PanelState): string {
+  const choice = state.models.find((model) => model.id === state.modelId);
+  if (choice === undefined) return '';
+  return choice.name === choice.model ? choice.name : `${choice.name} · ${choice.model}`;
 }
 
 export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
@@ -249,16 +257,29 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         retrying: null,
         problem: null,
       };
-    case 'select':
-      if (event.waiting === true) return { ...state, phase: 'ready', modelId: event.modelId };
+    case 'select': {
+      // The menu shows the pick at once; the next read of the settings confirms it.
+      const models =
+        event.model === undefined
+          ? state.models
+          : state.models.map((choice) =>
+              choice.id === event.modelId
+                ? { ...choice, model: event.model ?? choice.model }
+                : choice,
+            );
+      if (event.waiting === true) {
+        return { ...state, phase: 'ready', models, modelId: event.modelId };
+      }
       // The run in flight is dropped; the turn starts again once the pick is stored.
       return {
         ...state,
         phase: 'extracting',
+        models,
         modelId: event.modelId,
         retrying: null,
         problem: null,
       };
+    }
     case 'requesting':
       return {
         ...state,
