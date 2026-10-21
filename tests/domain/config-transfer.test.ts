@@ -12,6 +12,7 @@ const gateway = ModelConfig.parse({
   baseURL: 'https://gw.example/v1?key=query-secret',
   apiKey: 'sk-secret',
   model: 'gpt-4o-mini',
+  menuModels: ['gpt-4o-mini', 'gpt-4o'],
   headers: { 'X-Team': 'header-secret' },
   extraBody: { temperature: 0.2 },
   contextWindow: 128_000,

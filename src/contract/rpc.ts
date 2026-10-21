@@ -109,8 +109,16 @@ export type ListView<T> = Omit<z.infer<ReturnType<typeof listView>>, 'items'> & 
 export const ModelConfigsView = listView(ModelConfig);
 export type ModelConfigsView = z.infer<typeof ModelConfigsView>;
 
-/** One entry of the panel's model menu: a name, no credentials. */
-export const ModelChoice = z.object({ id: z.string(), name: z.string() });
+/**
+ * One configuration in the panel's model menu: names, no credentials. `models`
+ * is what the menu offers under it (`menuModelNames`), `model` among them.
+ */
+export const ModelChoice = z.object({
+  id: z.string(),
+  name: z.string(),
+  model: z.string(),
+  models: z.array(z.string()),
+});
 export type ModelChoice = z.infer<typeof ModelChoice>;
 
 /**
@@ -233,8 +241,10 @@ export const RPC_METHODS = {
   },
   // The one change a panel may make: its model menu sets the global default
   // (docs/development-plan.md §4.3, decision 7; listed as an exception in §8).
+  // With `model`, the configuration's model name changes to it too, one of
+  // the names its menu offers and nothing else.
   'models.choose': {
-    input: SetDefaultInput,
+    input: SetDefaultInput.extend({ model: z.string().min(1).max(200).optional() }),
     output: PanelModelsView,
     callers: ['panel'],
   },

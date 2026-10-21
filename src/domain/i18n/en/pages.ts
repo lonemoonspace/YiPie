@@ -107,6 +107,9 @@ export const pages = {
     'Kept only in this browser; leave it empty for a local service that needs none',
   'model.model': 'Model',
   'model.model.hint': 'For example gpt-4o-mini, deepseek-chat, qwen2.5:7b',
+  'model.menuModels': 'Models to switch between in the panel (one per line)',
+  'model.menuModels.hint':
+    "When filled, the panel's model menu lists these models grouped by service, so you can switch in the panel; the model name above is always included. Leave empty to list this configuration by its name only.",
   'model.advanced': 'Advanced',
   'model.headers': 'Extra request headers (a JSON object)',
   'model.headers.hint':
@@ -130,6 +133,7 @@ export const pages = {
   'model.error.headers': 'Header values must be strings: {name}',
   'model.error.headerForbidden':
     'Browsers do not let extensions set this header, so it would not be sent: {name}',
+  'model.error.menuModels': 'At most {max} models to switch between',
   'model.error.contextWindow': 'The context window must be a positive whole number',
   'model.error.reserved': 'The request sets {name} itself; extra body fields cannot override it',
   'model.presets': 'Common services',
@@ -148,6 +152,8 @@ export const pages = {
   'model.fetch.fetching': 'Fetching…',
   'model.fetch.pick': 'Pick from the service’s models',
   'model.fetch.choose': 'Choose a model ({count} in all)',
+  'model.fetch.addMenu': 'Add to the models to switch between in the panel',
+  'model.fetch.addMenuChoose': "Add to the panel's models…",
   'model.fetch.empty': 'The service’s model list is empty; type the model name.',
   'model.fetch.unsupported': 'The service has no model list (GET /models); type the model name.',
   'model.fetch.failed': 'Could not fetch the list: ',

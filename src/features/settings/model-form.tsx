@@ -5,6 +5,7 @@ import { DEFAULT_CONTEXT_WINDOW } from '@/domain/budget';
 import { t } from '@/domain/i18n';
 import {
   EMPTY_MODEL_FORM,
+  addMenuModel,
   formFromConfig,
   parseConnectionFields,
   parseModelForm,
@@ -111,11 +112,25 @@ export function ModelForm(props: ModelFormProps) {
       <ModelFetch
         model={fields.model}
         onPick={(model) => set('model', model)}
+        onAddToMenu={(model) =>
+          setFields((previous) => ({
+            ...previous,
+            menuModels: addMenuModel(previous.menuModels, model),
+          }))
+        }
         check={() => {
           const parsed = parseConnectionFields(fields);
           setErrors(parsed.ok ? {} : parsed.errors);
           return parsed.ok ? parsed.value : null;
         }}
+      />
+      <TextField
+        label={t('model.menuModels')}
+        hint={t('model.menuModels.hint')}
+        error={errors.menuModels}
+        value={fields.menuModels}
+        onChange={(value) => set('menuModels', value)}
+        rows={3}
       />
       <TextField
         label={t('model.name')}

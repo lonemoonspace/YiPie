@@ -4,6 +4,7 @@ import {
   ModelConfigDraft,
   ModelConfigPatch,
   displayName,
+  menuModelNames,
   isForbiddenHeaderName,
 } from '@/contract/model-config';
 
@@ -17,6 +18,7 @@ describe('ModelConfig', () => {
       baseURL: 'http://localhost:11434/v1',
       apiKey: '',
       model: 'm',
+      menuModels: [],
       headers: {},
       extraBody: {},
       contextWindow: null,
@@ -120,5 +122,29 @@ describe('displayName', () => {
   it('falls back to the model name', () => {
     expect(displayName({ name: '  ', model: 'gpt-4o-mini' })).toBe('gpt-4o-mini');
     expect(displayName({ name: '工作', model: 'gpt-4o-mini' })).toBe('工作');
+  });
+});
+
+describe('menuModelNames', () => {
+  it('puts the model in use first when the list lacks it', () => {
+    expect(menuModelNames({ model: 'a', menuModels: ['b', 'c'] })).toEqual(['a', 'b', 'c']);
+  });
+
+  it('keeps the list order when the model is on it, each name once', () => {
+    expect(menuModelNames({ model: 'b', menuModels: ['a', 'b', 'a'] })).toEqual(['a', 'b']);
+  });
+
+  it('offers the model alone when the list is empty', () => {
+    expect(menuModelNames({ model: 'a', menuModels: [] })).toEqual(['a']);
+  });
+});
+
+describe('menuModels as submitted', () => {
+  const base = { baseURL: 'http://x.test', model: 'm' };
+
+  it('trims each name and refuses empty or repeated ones', () => {
+    expect(ModelConfigDraft.parse({ ...base, menuModels: [' a '] }).menuModels).toEqual(['a']);
+    expect(ModelConfigDraft.safeParse({ ...base, menuModels: [' '] }).success).toBe(false);
+    expect(ModelConfigPatch.safeParse({ menuModels: ['a', 'a'] }).success).toBe(false);
   });
 });

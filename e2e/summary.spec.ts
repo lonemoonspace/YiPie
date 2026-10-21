@@ -276,6 +276,52 @@ test('the model menu makes another model the default and summarizes again with i
   });
 });
 
+test('the model menu switches between the model names a configuration lists', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await storeModels(serviceWorker, server, [
+    {
+      id: 'main',
+      name: '主力',
+      model: 'scenario:slow',
+      menuModels: ['scenario:slow', 'scenario:normal'],
+    },
+    { id: 'spare', name: '备用', model: 'scenario:chat' },
+  ]);
+  const { frame } = await openOn(context, server, openPanel, panelFrame);
+  const menu = frame.getByRole('combobox', { name: '模型' });
+
+  // Grouped by configuration, each listing its model names.
+  await expect(menu.locator('optgroup')).toHaveCount(2);
+  await expect(menu.locator('optgroup[label="主力"] option')).toHaveText([
+    'scenario:slow',
+    'scenario:normal',
+  ]);
+  await expect(menu).toHaveAttribute('title', '主力 · scenario:slow');
+  await expect(frame.locator('article.answer')).toContainText('片段2');
+
+  await menu.selectOption({ label: 'scenario:normal' });
+
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+  await expect(frame.locator('article.answer h2')).toHaveText('概要');
+  expect((lastRequest(server)?.body as { model: string }).model).toBe('scenario:normal');
+  await expect(menu).toHaveAttribute('title', '主力 · scenario:normal');
+
+  // The pick is the configuration's model now, and both names stay on its menu.
+  const models = (await stored(serviceWorker, 'model-configs')) as {
+    data: { id: string; model: string; menuModels: string[] }[];
+  };
+  expect(models.data[0]).toMatchObject({
+    id: 'main',
+    model: 'scenario:normal',
+    menuModels: ['scenario:slow', 'scenario:normal'],
+  });
+});
+
 test('the prompt menu makes another built-in prompt the default and starts over with it', async ({
   context,
   server,

@@ -19,6 +19,8 @@ interface ModelFetchProps {
   /** The model name in the form, selected in the list when it is there. */
   model: string;
   onPick: (model: string) => void;
+  /** Adds a listed model to the ones the panel's menu offers. */
+  onAddToMenu: (model: string) => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface ModelFetchProps {
  * name can be picked rather than typed. Costs no tokens, and asks for host
  * access first, inside the click, as the connection test does.
  */
-export function ModelFetch({ check, model, onPick }: ModelFetchProps) {
+export function ModelFetch({ check, model, onPick, onAddToMenu }: ModelFetchProps) {
   const [state, setState] = useState<FetchState>({ kind: 'idle' });
   const run = useRef<AbortController | null>(null);
 
@@ -84,6 +86,24 @@ export function ModelFetch({ check, model, onPick }: ModelFetchProps) {
         >
           <option value="" disabled>
             {t('model.fetch.choose', { count: listed.length })}
+          </option>
+          {listed.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {listed !== null ? (
+        <select
+          aria-label={t('model.fetch.addMenu')}
+          value=""
+          onChange={(event) => {
+            if (event.target.value !== '') onAddToMenu(event.target.value);
+          }}
+        >
+          <option value="" disabled>
+            {t('model.fetch.addMenuChoose')}
           </option>
           {listed.map((option) => (
             <option key={option} value={option}>

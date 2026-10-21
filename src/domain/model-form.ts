@@ -1,4 +1,5 @@
 import {
+  MAX_MENU_MODELS,
   RESERVED_BODY_KEYS,
   isForbiddenHeaderName,
   type ModelConfig,
@@ -12,6 +13,8 @@ export interface ModelFormFields {
   baseURL: string;
   apiKey: string;
   model: string;
+  /** One name per line. */
+  menuModels: string;
   headers: string;
   extraBody: string;
   contextWindow: string;
@@ -23,6 +26,7 @@ export interface ParsedModelForm {
   baseURL: string;
   apiKey: string;
   model: string;
+  menuModels: string[];
   headers: Record<string, string>;
   extraBody: Record<string, unknown>;
   contextWindow: number | null;
@@ -39,6 +43,7 @@ export const EMPTY_MODEL_FORM: ModelFormFields = {
   baseURL: '',
   apiKey: '',
   model: '',
+  menuModels: '',
   headers: '',
   extraBody: '',
   contextWindow: '',
@@ -51,6 +56,7 @@ export function formFromConfig(config: ModelConfig): ModelFormFields {
     baseURL: config.baseURL,
     apiKey: config.apiKey,
     model: config.model,
+    menuModels: config.menuModels.join('\n'),
     headers: isEmpty(config.headers) ? '' : JSON.stringify(config.headers, null, 2),
     extraBody: isEmpty(config.extraBody) ? '' : JSON.stringify(config.extraBody, null, 2),
     contextWindow: config.contextWindow === null ? '' : String(config.contextWindow),
@@ -91,6 +97,11 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
   const model = fields.model.trim();
   if (model === '') errors.model = t('model.error.model');
 
+  const menuModels = parseMenuModels(fields.menuModels);
+  if (menuModels.length > MAX_MENU_MODELS) {
+    errors.menuModels = t('model.error.menuModels', { max: MAX_MENU_MODELS });
+  }
+
   const headers = checkHeaders(fields, errors);
 
   const extraBody = parseObject(fields.extraBody);
@@ -121,6 +132,7 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
       baseURL,
       apiKey: fields.apiKey.trim(),
       model,
+      menuModels,
       headers,
       extraBody,
       contextWindow,
@@ -132,6 +144,17 @@ export function parseModelForm(fields: ModelFormFields): ModelFormResult {
 /** A service's model list as the picker offers it: each id once, in alphabetical order. */
 export function modelOptions(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+/** The menu's model names, one per line: trimmed, each once, blank lines left out. */
+export function parseMenuModels(text: string): string[] {
+  return [...new Set(text.split('\n').map((line) => line.trim()))].filter((name) => name !== '');
+}
+
+/** `text` with `name` on a new last line, unless a line already has it. */
+export function addMenuModel(text: string, name: string): string {
+  const names = parseMenuModels(text);
+  return names.includes(name) ? names.join('\n') : [...names, name].join('\n');
 }
 
 /** The normalized address, or null with its error recorded. */
