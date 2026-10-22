@@ -1,4 +1,4 @@
-import { RPC_CHANNEL, type RpcErrorCode, type RpcReply } from '@/contract/rpc';
+import { RPC_CHANNEL, type RpcErrorCode, type RpcReplyWire } from '@/contract/rpc-wire';
 
 /** Cheap check that lets the listener ignore messages that are not ours. */
 export function isRpcMessage(message: unknown): boolean {
@@ -9,6 +9,6 @@ export function isRpcMessage(message: unknown): boolean {
   );
 }
 
-export function failure(code: RpcErrorCode, message: string): RpcReply {
+export function failure(code: RpcErrorCode, message: string): RpcReplyWire {
   return { ok: false, error: { code, message } };
 }

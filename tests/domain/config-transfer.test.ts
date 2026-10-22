@@ -114,6 +114,26 @@ describe('import preview', () => {
     expect(preview.prompts.map((prompt) => prompt.name)).toEqual(['要点']);
   });
 
+  it('drops a user name and password from a base URL, and tidies it as the form does', () => {
+    const preview = previewImport(
+      file({ models: [{ baseURL: 'https://user:secret@gw.example/v1/', model: 'm' }] }),
+    );
+
+    expect(preview).toMatchObject({
+      kind: 'ready',
+      models: [{ baseURL: 'https://gw.example/v1' }],
+      withCredentials: false,
+    });
+  });
+
+  it('counts a base URL query as a credential', () => {
+    const preview = previewImport(
+      file({ models: [{ baseURL: 'https://gw.example/v1?key=secret', model: 'm' }] }),
+    );
+
+    expect(preview).toMatchObject({ kind: 'ready', withCredentials: true });
+  });
+
   it('ignores an id and fields it does not know', () => {
     const preview = previewImport(
       file({ prompts: [{ id: 'taken', name: '要点', user: '{{content}}', color: 'red' }] }),

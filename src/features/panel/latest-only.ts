@@ -26,14 +26,20 @@ export function createLatestOnly<T, R>(deps: LatestOnlyDeps<T, R>): (value: T) =
   return (value) => {
     const ticket = ++newest;
     const isNewest = () => ticket === newest;
-    previous = previous.then(async () => {
-      if (!isNewest()) return;
-      try {
-        const result = await deps.send(value);
+    previous = previous
+      .then(async () => {
+        if (!isNewest()) return;
+        let result: R;
+        try {
+          result = await deps.send(value);
+        } catch (error) {
+          if (isNewest()) deps.failed(error);
+          return;
+        }
         if (isNewest()) deps.settled(result);
-      } catch (error) {
-        if (isNewest()) deps.failed(error);
-      }
-    });
+      })
+      // A callback that throws must not stop the values after it: they
+      // would wait on a rejected promise and never be sent.
+      .catch(() => undefined);
   };
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { PageContext } from '@/contract/page-context';
 import type { PanelModelConfig, SnapshotView } from '@/contract/rpc';
-import type { SnapshotMessage } from '@/contract/snapshot';
+import { SNAPSHOT_MESSAGE_LENGTH, SnapshotMessage } from '@/contract/snapshot';
 import { estimateMessages, outputReserve } from '@/domain/budget';
 import type { LlmError } from '@/domain/llm/errors';
 import type { ChatMessage } from '@/domain/llm/request';
@@ -960,6 +961,20 @@ describe('saved messages and turns', () => {
     expect(
       toExchanges([{ role: 'assistant', content: '答', stopped: false, usage: null }]),
     ).toEqual([{ question: null, answer: '答', stopped: false, usage: null }]);
+  });
+
+  it('cut a message longer than a snapshot keeps, and save a cut answer as stopped', () => {
+    const long = 'a'.repeat(SNAPSHOT_MESSAGE_LENGTH + 1);
+    const messages = toSnapshotMessages([
+      { question: long, answer: long, stopped: false, usage: null },
+    ]);
+
+    expect(messages.map((message) => message.content.length)).toEqual([
+      SNAPSHOT_MESSAGE_LENGTH,
+      SNAPSHOT_MESSAGE_LENGTH,
+    ]);
+    expect(messages[1]).toMatchObject({ role: 'assistant', stopped: true });
+    expect(z.array(SnapshotMessage).safeParse(messages).success).toBe(true);
   });
 });
 

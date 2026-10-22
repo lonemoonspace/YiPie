@@ -11,7 +11,10 @@ import {
   type SnapshotIndexEntry,
   type SnapshotMessage,
 } from '@/contract/snapshot';
+import { createLogger } from '@/platform/logger';
 import { createRepo, type Queue, type StorageLike } from '@/platform/storage';
+
+const logger = createLogger('snapshot');
 
 export type SnapshotLookup =
   | { status: 'found'; messages: SnapshotMessage[]; truncated: boolean }
@@ -150,6 +153,12 @@ export function createSnapshotStore(
         if (entry.evicted) return { status: 'evicted' };
 
         const read = await conversation(entry.id).read();
+        // Unreadable is not the same as never saved: the panel summarizes
+        // anew either way, but the log says why. The entry stays, so the
+        // order of this panel's saves still holds.
+        if (read.status === 'invalid') {
+          logger.warn('A saved conversation is unreadable:', read.reason, read.issues);
+        }
         if (read.status !== 'ok' || read.value.messages.length === 0) return { status: 'none' };
         await index.updateUnqueued((current) => ({
           ...current,

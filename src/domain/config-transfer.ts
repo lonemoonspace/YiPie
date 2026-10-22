@@ -6,6 +6,7 @@ import {
 import { ModelConfigDraft, type ModelConfig } from '@/contract/model-config';
 import { PromptConfigDraft, type PromptConfig } from '@/contract/prompt-config';
 import { withoutCredentials } from './credentials';
+import { normalizeBaseURL } from './url';
 
 /** The fields of a model configuration a file carries; the id never travels. */
 const MODEL_FIELDS = [
@@ -109,7 +110,12 @@ export function previewImport(text: string): ImportPreview {
   const prompts: PromptConfigDraft[] = [];
   for (const row of modelRows) {
     const parsed = isRecord(row) ? ModelConfigDraft.safeParse(pick(row, MODEL_FIELDS)) : null;
-    if (parsed?.success) models.push(parsed.data);
+    if (!parsed?.success) continue;
+    // Tidied as the settings form tidies what is typed, which also drops a
+    // `user:password@`: the form never stores one, and an export without
+    // credentials would keep it.
+    const baseURL = normalizeBaseURL(parsed.data.baseURL);
+    if (baseURL.ok) models.push({ ...parsed.data, baseURL: baseURL.value });
   }
   for (const row of promptRows) {
     const parsed = isRecord(row) ? PromptConfigDraft.safeParse(pick(row, PROMPT_FIELDS)) : null;
@@ -123,7 +129,10 @@ export function previewImport(text: string): ImportPreview {
     prompts,
     skipped: modelRows.length + promptRows.length - models.length - prompts.length,
     withCredentials: models.some(
-      (model) => (model.apiKey ?? '') !== '' || Object.keys(model.headers ?? {}).length > 0,
+      (model) =>
+        (model.apiKey ?? '') !== '' ||
+        Object.keys(model.headers ?? {}).length > 0 ||
+        new URL(model.baseURL).search !== '',
     ),
   };
 }

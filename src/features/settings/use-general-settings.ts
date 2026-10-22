@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GeneralSettingsPatch } from '@/contract/general-settings';
 import type { GeneralSettingsView } from '@/contract/rpc';
 import { callRpc } from '@/platform/rpc/client';
@@ -28,6 +28,9 @@ export function useGeneralSettings(): GeneralSettingsState {
   // The change being saved shows at once: a controlled checkbox would
   // otherwise spring back until the background answers.
   const [pending, setPending] = useState<GeneralSettingsPatch | null>(null);
+  // Changes made in quick succession are all shown until the newest is
+  // answered: an earlier answer must not take away a later change's value.
+  const newest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -41,8 +44,9 @@ export function useGeneralSettings(): GeneralSettingsState {
   }, []);
 
   const update = useCallback(async (patch: GeneralSettingsPatch) => {
+    const ticket = ++newest.current;
     setSave({ kind: 'saving' });
-    setPending(patch);
+    setPending((shown) => ({ ...shown, ...patch }));
     try {
       const saved = await callRpc('settings.patch', patch);
       setView(saved);
@@ -50,7 +54,7 @@ export function useGeneralSettings(): GeneralSettingsState {
     } catch (error) {
       setSave({ kind: 'failed', message: messageOf(error) });
     } finally {
-      setPending(null);
+      if (ticket === newest.current) setPending(null);
     }
   }, []);
 

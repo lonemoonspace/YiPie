@@ -14,6 +14,15 @@ import { tidy, textOf } from './text';
 export const MAX_PAGE_TEXT_LENGTH = 200_000;
 
 /**
+ * The contract's bounds on the rest of the page context (contract/page-context,
+ * which this script cannot import: it brings zod). The page writes its title,
+ * address and language itself, so a page must not fail the parse with them.
+ */
+export const MAX_TITLE_LENGTH = 2_000;
+export const MAX_URL_LENGTH = 8_000;
+export const MAX_LANG_LENGTH = 100;
+
+/**
  * Text shorter than this (in characters) is not taken as the page's content
  * while another way might find more (docs/development-plan.md §4.6).
  */
@@ -93,9 +102,9 @@ export function extractPage(
   const { title, lang, text } = extractText(doc);
   const truncated = text.length > limit;
   return {
-    title,
-    url: doc.URL,
-    lang,
+    title: title.slice(0, MAX_TITLE_LENGTH),
+    url: doc.URL.slice(0, MAX_URL_LENGTH),
+    lang: lang.slice(0, MAX_LANG_LENGTH),
     text: truncated ? text.slice(0, limit) : text,
     selection: selection.slice(0, limit),
     truncated,

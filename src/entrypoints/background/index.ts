@@ -74,6 +74,24 @@ export default defineBackground(() => {
       .catch((error: unknown) => logger.error('Could not apply the general settings:', error));
   });
 
+  /**
+   * Runs a panel's write in the queue, if the panel is still the one attached
+   * then: the dispatcher checked before the write waited its turn.
+   */
+  const whileAttached = async <T>(
+    { tabId, documentId }: HandlerContext,
+    task: () => Promise<T>,
+  ): Promise<T> => {
+    const done =
+      tabId === undefined || documentId === undefined
+        ? null
+        : await panels.whileAttached(tabId, documentId, task);
+    if (done === null) {
+      throw new RpcRefusal('forbidden', 'This panel is not the one attached in its tab.');
+    }
+    return done;
+  };
+
   const panelPage = async ({ tabId, documentId }: HandlerContext) => {
     if (tabId !== undefined && documentId !== undefined) {
       const pageKey = await panels.pageKeyOf(tabId, documentId);
@@ -97,7 +115,8 @@ export default defineBackground(() => {
       'models.move': ({ id, direction }) => models.move(id, direction),
       'models.setDefault': ({ id }) => models.setDefault(id),
       'models.current': () => models.current(),
-      'models.choose': ({ id, model }) => models.choose(id, model),
+      'models.choose': ({ id, model }, context) =>
+        whileAttached(context, () => models.chooseUnqueued(id, model)),
       'models.disableStreamUsage': ({ id }) => models.disableStreamUsage(id),
       'prompts.list': () => prompts.list(),
       'prompts.add': (draft) => prompts.add(draft),
@@ -105,7 +124,8 @@ export default defineBackground(() => {
       'prompts.remove': ({ id }) => prompts.remove(id),
       'prompts.move': ({ id, direction }) => prompts.move(id, direction),
       'prompts.setDefault': ({ id }) => prompts.setDefault(id),
-      'prompts.choose': ({ id }) => prompts.setDefault(id),
+      'prompts.choose': ({ id }, context) =>
+        whileAttached(context, () => prompts.setDefaultUnqueued(id)),
       'config.import': (input) => importConfig(input),
       'backups.list': () => backups.list(),
       'backups.remove': ({ key, at }) => backups.remove(key, at),

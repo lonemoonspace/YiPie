@@ -31,6 +31,8 @@ export interface ModelConfigsService extends ConfigListService<
    * names stay as they were.
    */
   choose(id: string, model?: string): Promise<PanelModelsView>;
+  /** `choose` for a task that already runs in the write queue. */
+  chooseUnqueued(id: string, model?: string): Promise<PanelModelsView>;
   /**
    * The service of `id` refused `stream_options`: stop asking it for usage
    * (docs/development-plan.md §4.5, decision 2), then answer like `current`.
@@ -73,22 +75,24 @@ export function createModelConfigsService(
     },
   });
 
+  const chooseUnqueued = async (id: string, model?: string) => {
+    if (model !== undefined) {
+      const config = (await configs.list()).items.find((item) => item.id === id);
+      if (config === undefined) throw new NotFoundError('model configuration', id);
+      const names = menuModelNames(config);
+      if (!names.includes(model)) throw new NotFoundError(`model of ${id} named`, model);
+      if (model !== config.model) {
+        await configs.updateUnqueued(id, { model, menuModels: names });
+      }
+    }
+    return forPanel(await configs.setDefaultUnqueued(id));
+  };
+
   return {
     ...configs,
     current: async () => forPanel(await configs.list()),
-    choose: (id, model) =>
-      queue(async () => {
-        if (model !== undefined) {
-          const config = (await configs.list()).items.find((item) => item.id === id);
-          if (config === undefined) throw new NotFoundError('model configuration', id);
-          const names = menuModelNames(config);
-          if (!names.includes(model)) throw new NotFoundError(`model of ${id} named`, model);
-          if (model !== config.model) {
-            await configs.updateUnqueued(id, { model, menuModels: names });
-          }
-        }
-        return forPanel(await configs.setDefaultUnqueued(id));
-      }),
+    choose: (id, model) => queue(() => chooseUnqueued(id, model)),
+    chooseUnqueued,
     disableStreamUsage: async (id) => forPanel(await configs.update(id, { streamUsage: false })),
   };
 }

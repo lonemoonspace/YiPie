@@ -3,7 +3,7 @@ import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { ModelChoice, PanelModelConfig, SnapshotView } from '@/contract/rpc';
 import type { PanelMode } from '@/contract/rpc-wire';
-import type { SnapshotMessage } from '@/contract/snapshot';
+import { SNAPSHOT_MESSAGE_LENGTH, type SnapshotMessage } from '@/contract/snapshot';
 import { resolveAnswerLanguage, type ResolvedLanguage } from '@/domain/answer-language';
 import {
   DEFAULT_CONTEXT_WINDOW,
@@ -178,11 +178,19 @@ export function createConversation(deps: ConversationDeps): Conversation {
     const sent = ++revision;
     const life = generation;
     const shown = () => sent === revision && life === generation;
-    deps.save(toSnapshotMessages(history), sent).then(
+    const messages = toSnapshotMessages(history);
+    const cut = history.some(
+      ({ question, answer }) =>
+        (question?.length ?? 0) > SNAPSHOT_MESSAGE_LENGTH ||
+        answer.length > SNAPSHOT_MESSAGE_LENGTH,
+    );
+    deps.save(messages, sent).then(
       ({ truncated }) => {
         if (!shown()) return;
         deps.dispatch(
-          truncated ? { type: 'snapshot', note: { kind: 'save-truncated' } } : { type: 'saved' },
+          truncated || cut
+            ? { type: 'snapshot', note: { kind: 'save-truncated' } }
+            : { type: 'saved' },
         );
       },
       (error: unknown) => {
@@ -538,14 +546,21 @@ function toHistoryMessages(history: readonly Exchange[]): HistoryMessage[] {
   ]);
 }
 
-/** The conversation as it is saved: never the page, never a credential. */
+/**
+ * The conversation as it is saved: never the page, never a credential. A
+ * message longer than a snapshot keeps is cut to its start, and a cut answer
+ * is saved as stopped: the background would refuse the whole save otherwise,
+ * and every save after it.
+ */
 export function toSnapshotMessages(history: readonly Exchange[]): SnapshotMessage[] {
   return history.flatMap((exchange): SnapshotMessage[] => [
-    ...(exchange.question === null ? [] : [{ role: 'user' as const, content: exchange.question }]),
+    ...(exchange.question === null
+      ? []
+      : [{ role: 'user' as const, content: exchange.question.slice(0, SNAPSHOT_MESSAGE_LENGTH) }]),
     {
       role: 'assistant',
-      content: exchange.answer,
-      stopped: exchange.stopped,
+      content: exchange.answer.slice(0, SNAPSHOT_MESSAGE_LENGTH),
+      stopped: exchange.stopped || exchange.answer.length > SNAPSHOT_MESSAGE_LENGTH,
       usage: exchange.usage,
     },
   ]);

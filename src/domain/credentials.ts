@@ -2,8 +2,8 @@
  * A copy of `value` without what may be a credential, for a file that leaves
  * the extension: exports leave credentials out unless the user asks for them
  * (docs/development-plan.md §8). Drops every `apiKey` and `headers` property
- * at any depth, and the query and fragment of every `baseURL` (a gateway may
- * take its key there). It reads nothing else of the value, so it also works on
+ * at any depth, and the user name and password, query and fragment of every
+ * `baseURL` (a gateway may take its key there). It reads nothing else of the value, so it also works on
  * backups of data no version could read.
  */
 export function withoutCredentials(value: unknown): unknown {
@@ -17,7 +17,7 @@ export function withoutCredentials(value: unknown): unknown {
       .map(([key, inner]) => [
         key,
         key === 'baseURL' && typeof inner === 'string'
-          ? withoutQuery(inner)
+          ? withoutUserInfo(withoutQuery(inner))
           : withoutCredentials(inner),
       ]),
   );
@@ -26,4 +26,9 @@ export function withoutCredentials(value: unknown): unknown {
 function withoutQuery(url: string): string {
   const cut = url.search(/[?#]/);
   return cut === -1 ? url : url.slice(0, cut);
+}
+
+/** Drops `user:password@` before the host. Up to the last `@` before the path, as URL parsing does. */
+function withoutUserInfo(url: string): string {
+  return url.replace(/^([a-z][a-z\d+.-]*:\/\/)[^/?#]*@/i, '$1');
 }

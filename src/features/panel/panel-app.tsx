@@ -131,17 +131,23 @@ export function PanelApp() {
         </p>
       ) : null}
 
-      {state.snapshot !== null ? (
-        <p className="note" data-snapshot={state.snapshot.kind}>
-          {describeSnapshot(state.snapshot)}
-        </p>
-      ) : null}
+      {/* Live regions stay mounted: a screen reader may not say text that
+          arrives together with its region. */}
+      <div aria-live="polite">
+        {state.snapshot !== null ? (
+          <p className="note" data-snapshot={state.snapshot.kind}>
+            {describeSnapshot(state.snapshot)}
+          </p>
+        ) : null}
+      </div>
 
-      {located !== null ? (
-        <p className="note" aria-live="polite" data-located={located.found ? 'found' : 'missing'}>
-          {located.message}
-        </p>
-      ) : null}
+      <div aria-live="polite">
+        {located !== null ? (
+          <p className="note" data-located={located.found ? 'found' : 'missing'}>
+            {located.message}
+          </p>
+        ) : null}
+      </div>
 
       <div className="conversation" ref={conversation}>
         {state.phase === 'ready' ? (

@@ -115,6 +115,12 @@ describe('requestSecrets', () => {
         apiKey: '',
         baseURL: 'https://gw.example/v1?key=s%2Fecret+1&api-version=2024-02-01&flag',
       }),
-    ).toEqual(['s%2Fecret+1', 's/ecret 1', '2024-02-01']);
+    ).toEqual(['s%2Fecret+1', 's/ecret 1', '2024-02-01', 'flag']);
+  });
+
+  it('lists the user name and password of the base URL', () => {
+    expect(
+      requestSecrets({ ...config, apiKey: '', baseURL: 'https://user:p%40ss@gw.example/v1' }),
+    ).toEqual(['user', 'p%40ss', 'p@ss']);
   });
 });

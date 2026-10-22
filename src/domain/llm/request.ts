@@ -53,7 +53,8 @@ export function buildChatRequest(
  * Everything in the request that may be a credential, for `redact`: the key;
  * every header value the user set (an `Authorization` override, `X-API-Key`,
  * Azure's `api-key`…) and the token of a `<scheme> <token>` value; and the
- * base URL's query values (`?key=…`), as written and decoded.
+ * base URL's user name and password and its query values (`?key=…`, or a bare
+ * `?token`), as written and decoded.
  */
 export function requestSecrets(
   config: Pick<ModelConfig, 'baseURL' | 'apiKey' | 'headers'>,
@@ -66,10 +67,12 @@ export function requestSecrets(
     if (token !== undefined) secrets.push(token);
   }
 
-  for (const pair of new URL(config.baseURL).search.slice(1).split('&')) {
-    const equals = pair.indexOf('=');
-    if (equals === -1) continue;
-    const raw = pair.slice(equals + 1);
+  const url = new URL(config.baseURL);
+  for (const raw of [url.username, url.password]) {
+    secrets.push(raw, decodeQueryValue(raw));
+  }
+  for (const pair of url.search.slice(1).split('&')) {
+    const raw = pair.slice(pair.indexOf('=') + 1);
     secrets.push(raw, decodeQueryValue(raw));
   }
 

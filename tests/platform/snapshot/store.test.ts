@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   SNAPSHOT_INDEX_KEY,
   SNAPSHOT_PAGE_BYTES,
@@ -394,6 +394,22 @@ describe('snapshot store: failures and cleanup', () => {
     await store.remove(snapshotKey('s1'));
 
     expect(await snapshots.get(1, PAGE)).toEqual({ status: 'none' });
+  });
+
+  it('reads an unreadable conversation as nothing saved, and logs why', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { snapshots, store } = withStore();
+    await snapshots.save(1, PAGE, [answer('总结')]);
+    await store.set(snapshotKey('s1'), { version: 1, data: { messages: 'garbled' } });
+
+    expect(await snapshots.get(1, PAGE)).toEqual({ status: 'none' });
+    expect(warn).toHaveBeenCalledWith(
+      expect.anything(),
+      'A saved conversation is unreadable:',
+      'schema-mismatch',
+      expect.any(Array),
+    );
+    warn.mockRestore();
   });
 
   it('deletes every conversation of a closed tab, and only those', async () => {
