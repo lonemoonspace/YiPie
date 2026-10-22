@@ -38,9 +38,10 @@ describe('panel registry', () => {
     const first = await registry.issue(7, PAGE);
     await registry.attach(7, first, 'doc-a');
 
-    expect(await registry.whileAttached(7, 'doc-a', () => Promise.resolve('written'))).toBe(
-      'written',
-    );
+    expect(await registry.whileAttached(7, 'doc-a', () => Promise.resolve(null))).toEqual({
+      attached: true,
+      value: null,
+    });
 
     // The page reloaded before the write's turn came: a new panel is mounted.
     const task = vi.fn(() => Promise.resolve('written'));
@@ -48,7 +49,7 @@ describe('panel registry', () => {
     const write = registry.whileAttached(7, 'doc-a', task);
     await remount;
 
-    expect(await write).toBeNull();
+    expect(await write).toEqual({ attached: false });
     expect(task).not.toHaveBeenCalled();
   });
 

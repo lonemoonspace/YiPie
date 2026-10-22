@@ -132,9 +132,16 @@ export function PanelApp() {
       ) : null}
 
       {/* Live regions stay mounted: a screen reader may not say text that
-          arrives together with its region. */}
+          arrives together with its region. A failure interrupts (§4.7). */}
       <div aria-live="polite">
-        {state.snapshot !== null ? (
+        {state.snapshot !== null && !isSnapshotFailure(state.snapshot) ? (
+          <p className="note" data-snapshot={state.snapshot.kind}>
+            {describeSnapshot(state.snapshot)}
+          </p>
+        ) : null}
+      </div>
+      <div aria-live="assertive">
+        {state.snapshot !== null && isSnapshotFailure(state.snapshot) ? (
           <p className="note" data-snapshot={state.snapshot.kind}>
             {describeSnapshot(state.snapshot)}
           </p>
@@ -595,6 +602,11 @@ function describeCut(cut: CutNote): string {
   return cut.assumedWindow
     ? `${kept}${t('panel.cut.assumed', { window: formatCount(cut.contextWindow) })}`
     : kept;
+}
+
+/** A note that something was not saved or restored, as against one that says how it went. */
+function isSnapshotFailure(note: SnapshotNote): boolean {
+  return note.kind === 'save-failed' || note.kind === 'restore-failed';
 }
 
 function describeSnapshot(note: SnapshotNote): string {

@@ -84,12 +84,12 @@ export default defineBackground(() => {
   ): Promise<T> => {
     const done =
       tabId === undefined || documentId === undefined
-        ? null
+        ? { attached: false as const }
         : await panels.whileAttached(tabId, documentId, task);
-    if (done === null) {
+    if (!done.attached) {
       throw new RpcRefusal('forbidden', 'This panel is not the one attached in its tab.');
     }
-    return done;
+    return done.value;
   };
 
   const panelPage = async ({ tabId, documentId }: HandlerContext) => {

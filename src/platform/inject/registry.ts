@@ -22,12 +22,16 @@ export interface PanelRegistryService {
   isAttached(tabId: number, documentId: string): Promise<boolean>;
   /**
    * Runs `task` in its own slot of the write queue if `documentId` is still
-   * the panel attached in `tabId` there, and resolves to null if not. For a
+   * the panel attached in `tabId` there, and says whether it ran. For a
    * panel's write: asked in the queue, a panel replaced while the write
    * waited does not change what the new one sees (§4.4, detail 7). `task`
    * is already in the queue, so it uses the services' `…Unqueued` methods.
    */
-  whileAttached<T>(tabId: number, documentId: string, task: () => Promise<T>): Promise<T | null>;
+  whileAttached<T>(
+    tabId: number,
+    documentId: string,
+    task: () => Promise<T>,
+  ): Promise<{ attached: true; value: T } | { attached: false }>;
   /** The page of the panel `documentId` attached in `tabId`; null when it is not the one attached. */
   pageKeyOf(tabId: number, documentId: string): Promise<string | null>;
   /** What the panel `documentId` attached in `tabId` works on; null when it is not the one attached. */
@@ -86,7 +90,11 @@ export function createPanelRegistry(
     isAttached,
 
     whileAttached(tabId, documentId, task) {
-      return queue(async () => ((await isAttached(tabId, documentId)) ? task() : null));
+      return queue(async () =>
+        (await isAttached(tabId, documentId))
+          ? { attached: true as const, value: await task() }
+          : { attached: false as const },
+      );
     },
 
     async pageKeyOf(tabId, documentId) {

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { PageContext } from '@/contract/page-context';
 import type { PanelModelConfig, SnapshotView } from '@/contract/rpc';
-import { SNAPSHOT_MESSAGE_LENGTH, SnapshotMessage } from '@/contract/snapshot';
+import { SNAPSHOT_MESSAGE_LENGTH, SNAPSHOT_PAGE_BYTES, SnapshotMessage } from '@/contract/snapshot';
+import { fitPage } from '@/platform/snapshot/store';
 import { estimateMessages, outputReserve } from '@/domain/budget';
 import type { LlmError } from '@/domain/llm/errors';
 import type { ChatMessage } from '@/domain/llm/request';
@@ -13,6 +14,7 @@ import {
   CUT_RETRY_STRATEGY,
   createConversation,
   toExchanges,
+  savedText,
   toSnapshotMessages,
   type RunSetup,
   type StreamRequest,
@@ -975,6 +977,23 @@ describe('saved messages and turns', () => {
     ]);
     expect(messages[1]).toMatchObject({ role: 'assistant', stopped: true });
     expect(z.array(SnapshotMessage).safeParse(messages).success).toBe(true);
+  });
+
+  it('cut an answer to what fits a page snapshot in bytes, between characters', () => {
+    const long = '汉'.repeat(150_000) + '😀'.repeat(50_000);
+    const content = savedText(long);
+
+    expect(content.length).toBeLessThan(long.length);
+    expect(long.startsWith(content)).toBe(true);
+    expect(content).not.toMatch(/[\ud800-\udbff]$/);
+    const snapshot = fitPage(
+      'https://example.com/post',
+      [{ role: 'assistant', content, stopped: true, usage: null }],
+      0,
+      SNAPSHOT_PAGE_BYTES,
+    );
+    expect(snapshot?.snapshot.truncated).toBe(false);
+    expect(savedText('短回答')).toBe('短回答');
   });
 });
 
