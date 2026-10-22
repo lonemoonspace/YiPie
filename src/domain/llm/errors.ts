@@ -69,7 +69,7 @@ const STREAM_OPTIONS = /stream_options|include_usage/i;
 /** How a failure inside a stream names its kind when it carries no status. */
 const STREAM_KINDS: [RegExp, LlmErrorKind][] = [
   [CONTEXT_LENGTH, 'context-length'],
-  [/insufficient_quota|quota|balance|credit/i, 'quota'],
+  [QUOTA, 'quota'],
   [/rate[ _-]?limit|too many requests/i, 'rate-limit'],
   [/invalid[ _-]?request/i, 'bad-request'],
   [/authenticat|unauthori[sz]ed|api[ _-]?key/i, 'auth'],

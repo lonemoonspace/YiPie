@@ -296,7 +296,7 @@ export const pages = {
   'panel.snapshot.restoredTruncated': '这一页的对话较长，最早的部分没有保存。',
   'panel.snapshot.evicted': '这一页上次的对话因为存储空间不足已被清除，已重新总结。',
   'panel.snapshot.restoreFailed': '没能读取上次的对话：{detail}',
-  'panel.snapshot.saveTruncated': '对话较长，保存时去掉了最早的部分。',
+  'panel.snapshot.saveTruncated': '对话较长，没能完整保存。',
   'panel.snapshot.saveFailed': '对话没能保存：{detail}。刷新页面或关闭面板后将无法恢复。',
   'panel.noModel': '还没有配置模型。请先在设置页填写一个 OpenAI 兼容服务。',
   'panel.noPrompt': '还没有 Prompt。请先在设置页添加一个。',

@@ -26,6 +26,20 @@ describe('withoutCredentials', () => {
     expect(JSON.stringify(stripped)).not.toMatch(/secret/);
   });
 
+  it('drops the user name and password of a base URL', () => {
+    expect(
+      withoutCredentials([
+        { baseURL: 'https://user:secret@gw.example/v1?x=1' },
+        { baseURL: 'http://a:b@c@localhost:11434/v1' },
+        { baseURL: 'https://gw.example/v1/user@name' },
+      ]),
+    ).toEqual([
+      { baseURL: 'https://gw.example/v1' },
+      { baseURL: 'http://localhost:11434/v1' },
+      { baseURL: 'https://gw.example/v1/user@name' },
+    ]);
+  });
+
   it('works on values no version could read, at any depth', () => {
     expect(
       withoutCredentials(['x', 1, null, { nested: [{ apiKey: 7, keep: true }], baseURL: 3 }]),

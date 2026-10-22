@@ -38,12 +38,15 @@ export const TurnUsage = z.discriminatedUnion('source', [
 ]);
 export type TurnUsage = z.infer<typeof TurnUsage>;
 
+/** The longest message a snapshot keeps, in characters; the panel cuts longer ones. */
+export const SNAPSHOT_MESSAGE_LENGTH = 200_000;
+
 export const SnapshotMessage = z.discriminatedUnion('role', [
   /** A follow-up question. */
-  z.object({ role: z.literal('user'), content: z.string().max(200_000) }),
+  z.object({ role: z.literal('user'), content: z.string().max(SNAPSHOT_MESSAGE_LENGTH) }),
   z.object({
     role: z.literal('assistant'),
-    content: z.string().max(200_000),
+    content: z.string().max(SNAPSHOT_MESSAGE_LENGTH),
     /** The user stopped the answer before it was complete. */
     stopped: z.boolean(),
     usage: TurnUsage.nullable(),

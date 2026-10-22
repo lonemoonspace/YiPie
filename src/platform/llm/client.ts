@@ -138,9 +138,7 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
   });
   const failed = async (error: unknown): Promise<ChatOutcome> => {
     if (signal.aborted) return { kind: 'stopped' };
-    const hasOriginPermission = timedOut
-      ? null
-      : await (options.hasAccess ?? hasOriginAccess)(config.baseURL).catch(() => null);
+    const hasOriginPermission = timedOut ? null : await accessTo(config.baseURL, options.hasAccess);
     return clean(
       fromFetchFailure({
         aborted: false,
@@ -170,7 +168,7 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
     }
 
     if (!response.ok) {
-      const body = await readLimited(response, ERROR_BODY_LIMIT);
+      const body = await readLimited(response, ERROR_BODY_LIMIT, controller.signal);
       return clean(fromHttpStatus(response.status, body, response.headers.get('Retry-After')));
     }
     options.onAccepted();
@@ -318,9 +316,7 @@ export async function listModels(options: ModelListOptions): Promise<ModelListOu
     } catch (error) {
       const aborted = cancelled;
       const hasOriginPermission =
-        aborted || timedOut
-          ? null
-          : await (options.hasAccess ?? hasOriginAccess)(config.baseURL).catch(() => null);
+        aborted || timedOut ? null : await accessTo(config.baseURL, options.hasAccess);
       return clean(
         fromFetchFailure({
           aborted,
@@ -335,7 +331,11 @@ export async function listModels(options: ModelListOptions): Promise<ModelListOu
     // short by the timeout must not be read as a list, or as no list: the
     // race also covers a body that ignores the abort.
     const body = await Promise.race([
-      readLimited(response, response.ok ? MODEL_LIST_BODY_LIMIT : ERROR_BODY_LIMIT),
+      readLimited(
+        response,
+        response.ok ? MODEL_LIST_BODY_LIMIT : ERROR_BODY_LIMIT,
+        controller.signal,
+      ),
       abortedWhile,
     ]);
     if (body === null || controller.signal.aborted) return ended();
@@ -367,14 +367,34 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function readLimited(response: Response, limit: number): Promise<string> {
+/**
+ * Whether we hold the host permission for `baseURL`, or null when that cannot
+ * be told: the probe may throw before it returns a promise.
+ */
+async function accessTo(
+  baseURL: string,
+  hasAccess: (baseURL: string) => Promise<boolean> = hasOriginAccess,
+): Promise<boolean | null> {
+  try {
+    return await hasAccess(baseURL);
+  } catch {
+    return null;
+  }
+}
+
+/** The body as text, up to `limit` bytes; stops reading once `signal` aborts. */
+async function readLimited(
+  response: Response,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<string> {
   if (response.body === null) return '';
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let text = '';
   let size = 0;
   try {
-    while (size < limit) {
+    while (size < limit && signal?.aborted !== true) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;

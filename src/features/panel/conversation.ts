@@ -3,7 +3,11 @@ import type { PageContext } from '@/contract/page-context';
 import type { PromptConfig } from '@/contract/prompt-config';
 import type { ModelChoice, PanelModelConfig, SnapshotView } from '@/contract/rpc';
 import type { PanelMode } from '@/contract/rpc-wire';
-import type { SnapshotMessage } from '@/contract/snapshot';
+import {
+  SNAPSHOT_MESSAGE_LENGTH,
+  SNAPSHOT_PAGE_BYTES,
+  type SnapshotMessage,
+} from '@/contract/snapshot';
 import { resolveAnswerLanguage, type ResolvedLanguage } from '@/domain/answer-language';
 import {
   DEFAULT_CONTEXT_WINDOW,
@@ -178,11 +182,18 @@ export function createConversation(deps: ConversationDeps): Conversation {
     const sent = ++revision;
     const life = generation;
     const shown = () => sent === revision && life === generation;
-    deps.save(toSnapshotMessages(history), sent).then(
+    const messages = toSnapshotMessages(history);
+    const cut = history.some(
+      ({ question, answer }) =>
+        savedText(answer) !== answer || (question !== null && savedText(question) !== question),
+    );
+    deps.save(messages, sent).then(
       ({ truncated }) => {
         if (!shown()) return;
         deps.dispatch(
-          truncated ? { type: 'snapshot', note: { kind: 'save-truncated' } } : { type: 'saved' },
+          truncated || cut
+            ? { type: 'snapshot', note: { kind: 'save-truncated' } }
+            : { type: 'saved' },
         );
       },
       (error: unknown) => {
@@ -538,18 +549,58 @@ function toHistoryMessages(history: readonly Exchange[]): HistoryMessage[] {
   ]);
 }
 
-/** The conversation as it is saved: never the page, never a credential. */
+/**
+ * The conversation as it is saved: never the page, never a credential. A
+ * message too long for a snapshot is cut to its start (`savedText`), and a
+ * cut answer is saved as stopped: the background would refuse the whole save
+ * otherwise, and every save after it.
+ */
 export function toSnapshotMessages(history: readonly Exchange[]): SnapshotMessage[] {
-  return history.flatMap((exchange): SnapshotMessage[] => [
-    ...(exchange.question === null ? [] : [{ role: 'user' as const, content: exchange.question }]),
-    {
-      role: 'assistant',
-      content: exchange.answer,
-      stopped: exchange.stopped,
-      usage: exchange.usage,
-    },
-  ]);
+  return history.flatMap((exchange): SnapshotMessage[] => {
+    const answer = savedText(exchange.answer);
+    return [
+      ...(exchange.question === null
+        ? []
+        : [{ role: 'user' as const, content: savedText(exchange.question) }]),
+      {
+        role: 'assistant',
+        content: answer,
+        stopped: exchange.stopped || answer !== exchange.answer,
+        usage: exchange.usage,
+      },
+    ];
+  });
 }
+
+/**
+ * Room for one message in a page's snapshot, in bytes: the page's limit less
+ * what goes around it (the page key, the other fields).
+ */
+const MESSAGE_BYTES = SNAPSHOT_PAGE_BYTES - 16 * 1024;
+
+/**
+ * The start of `text` that a snapshot can hold: at most
+ * `SNAPSHOT_MESSAGE_LENGTH` characters (the schema), and few enough bytes,
+ * as stored, that it fits a page's snapshot on its own. Both bounds count:
+ * 200,000 Chinese characters are about 600 kB. Cut between characters.
+ */
+export function savedText(text: string): string {
+  const bytes = (part: string) => byteLength(JSON.stringify(part));
+  if (text.length <= SNAPSHOT_MESSAGE_LENGTH && bytes(text) <= MESSAGE_BYTES) return text;
+  let fits = 0;
+  let over = Math.min(text.length, SNAPSHOT_MESSAGE_LENGTH) + 1;
+  while (over - fits > 1) {
+    const middle = Math.floor((fits + over) / 2);
+    if (bytes(text.slice(0, middle)) <= MESSAGE_BYTES) fits = middle;
+    else over = middle;
+  }
+  // Not half a surrogate pair.
+  const last = text.charCodeAt(fits - 1);
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? fits - 1 : fits);
+}
+
+const encoder = new TextEncoder();
+const byteLength = (text: string) => encoder.encode(text).length;
 
 /** Saved messages back into turns: each answer with the question just before it, if any. */
 export function toExchanges(messages: readonly SnapshotMessage[]): Exchange[] {

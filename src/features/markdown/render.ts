@@ -64,53 +64,57 @@ interface CitationToken extends Tokens.Generic {
 
 const LEADING_CITATION = new RegExp(`^${CITATION.source}`);
 
-/** Numbers the quotes of one answer, in order; reset for every render. */
-let quotes = 0;
-
-const markdown = new Marked({
-  async: false,
-  gfm: true,
-  breaks: false,
-  extensions: [
-    {
-      name: 'citation',
-      level: 'inline',
-      start: (source: string) => {
-        const at = source.indexOf('[[');
-        return at === -1 ? undefined : at;
+/**
+ * A parser for one render: `quotes` numbers that answer's quotes, in order,
+ * so no state is shared between renders.
+ */
+const createMarkdown = () => {
+  let quotes = 0;
+  return new Marked({
+    async: false,
+    gfm: true,
+    breaks: false,
+    extensions: [
+      {
+        name: 'citation',
+        level: 'inline',
+        start: (source: string) => {
+          const at = source.indexOf('[[');
+          return at === -1 ? undefined : at;
+        },
+        tokenizer: (source: string): CitationToken | undefined => {
+          const match = LEADING_CITATION.exec(source);
+          const passage = match?.[1]?.trim();
+          if (match === null || !passage) return undefined;
+          return { type: 'citation', raw: match[0], passage };
+        },
+        renderer: (token) => {
+          quotes += 1;
+          const passage = escapeHtml((token as CitationToken).passage);
+          const label = escapeHtml(t('panel.cite.label', { number: quotes }));
+          return `<button type="button" class="cite" data-quote="${passage}" aria-label="${label}">${quotes}</button>`;
+        },
       },
-      tokenizer: (source: string): CitationToken | undefined => {
-        const match = LEADING_CITATION.exec(source);
-        const passage = match?.[1]?.trim();
-        if (match === null || !passage) return undefined;
-        return { type: 'citation', raw: match[0], passage };
+    ],
+    renderer: {
+      html({ text }) {
+        return escapeHtml(text);
       },
-      renderer: (token) => {
-        quotes += 1;
-        const passage = escapeHtml((token as CitationToken).passage);
-        const label = escapeHtml(t('panel.cite.label', { number: quotes }));
-        return `<button type="button" class="cite" data-quote="${passage}" aria-label="${label}">${quotes}</button>`;
+      link({ href, tokens }) {
+        const label = this.parser.parseInline(tokens.map(plainQuote));
+        if (!isSafeHref(href)) return label;
+        const target = escapeHtml(href.trim());
+        return `<a href="${target}" title="${target}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`;
+      },
+      image({ text }) {
+        return escapeHtml(text);
+      },
+      checkbox({ checked }) {
+        return checked ? '☑ ' : '☐ ';
       },
     },
-  ],
-  renderer: {
-    html({ text }) {
-      return escapeHtml(text);
-    },
-    link({ href, tokens }) {
-      const label = this.parser.parseInline(tokens.map(plainQuote));
-      if (!isSafeHref(href)) return label;
-      const target = escapeHtml(href.trim());
-      return `<a href="${target}" title="${target}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`;
-    },
-    image({ text }) {
-      return escapeHtml(text);
-    },
-    checkbox({ checked }) {
-      return checked ? '☑ ' : '☐ ';
-    },
-  },
-});
+  });
+};
 
 /** A quote inside a link's text, as the plain text it was. */
 function plainQuote(token: Tokens.Generic): Tokens.Generic {
@@ -118,6 +122,5 @@ function plainQuote(token: Tokens.Generic): Tokens.Generic {
 }
 
 export function renderMarkdown(source: string): string {
-  quotes = 0;
-  return markdown.parse(source, { async: false });
+  return createMarkdown().parse(source, { async: false });
 }

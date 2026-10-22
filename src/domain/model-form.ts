@@ -190,9 +190,12 @@ function checkHeaders(
     return null;
   }
   const bad = Object.entries(headers).find(([, value]) => typeof value !== 'string');
+  if (bad) {
+    errors.headers = t('model.error.headers', { name: bad[0] });
+    return null;
+  }
   const forbidden = Object.keys(headers).find(isForbiddenHeaderName);
-  if (bad) errors.headers = t('model.error.headers', { name: bad[0] });
-  else if (forbidden !== undefined) {
+  if (forbidden !== undefined) {
     errors.headers = t('model.error.headerForbidden', { name: forbidden });
   }
   return headers as Record<string, string>;

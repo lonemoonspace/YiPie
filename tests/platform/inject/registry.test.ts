@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PANEL_REGISTRY_KEY, PANEL_REGISTRY_LIMIT } from '@/contract/panel-registry';
 import { createPanelRegistry } from '@/platform/inject/registry';
 import { createQueue } from '@/platform/storage';
@@ -31,6 +31,26 @@ describe('panel registry', () => {
     expect(await registry.attach(7, nonce, 'doc-a')).toBe(true);
     expect(await registry.attach(7, nonce, 'doc-b')).toBe(false);
     expect(await registry.isAttached(7, 'doc-b')).toBe(false);
+  });
+
+  it('runs a write only while the panel is still the one attached', async () => {
+    const { registry } = setup();
+    const first = await registry.issue(7, PAGE);
+    await registry.attach(7, first, 'doc-a');
+
+    expect(await registry.whileAttached(7, 'doc-a', () => Promise.resolve(null))).toEqual({
+      attached: true,
+      value: null,
+    });
+
+    // The page reloaded before the write's turn came: a new panel is mounted.
+    const task = vi.fn(() => Promise.resolve('written'));
+    const remount = registry.issue(7, PAGE);
+    const write = registry.whileAttached(7, 'doc-a', task);
+    await remount;
+
+    expect(await write).toEqual({ attached: false });
+    expect(task).not.toHaveBeenCalled();
   });
 
   it('refuses a wrong nonce, another tab, and a tab with no nonce', async () => {

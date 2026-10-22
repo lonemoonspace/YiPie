@@ -319,8 +319,7 @@ export const pages = {
   'panel.snapshot.evicted':
     'This page’s last conversation was cleared to free storage space, so it was summarized again.',
   'panel.snapshot.restoreFailed': 'Could not read the last conversation: {detail}',
-  'panel.snapshot.saveTruncated':
-    'The conversation is long; its earliest part was left out when saving.',
+  'panel.snapshot.saveTruncated': 'The conversation is long; part of it was left out when saving.',
   'panel.snapshot.saveFailed':
     'The conversation was not saved: {detail}. It cannot be restored after you reload the page or close the panel.',
   'panel.noModel': 'No model is set up yet. Add an OpenAI-compatible service on the settings page.',

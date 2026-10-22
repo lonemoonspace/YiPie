@@ -493,6 +493,18 @@ describe('listModels', () => {
     ).toMatchObject({ kind: 'error', error: { kind: 'network' } });
   });
 
+  it('still answers when the host permission cannot be asked', async () => {
+    const outcome = await listModels({
+      config,
+      fetch: answers(() => Promise.reject(new TypeError('Failed to fetch'))),
+      hasAccess: () => {
+        throw new TypeError('Invalid URL');
+      },
+    });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'network' } });
+  });
+
   it('gives up after the timeout', async () => {
     const outcome = await listModels({
       config,

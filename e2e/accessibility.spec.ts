@@ -231,6 +231,8 @@ test('the panel can be used by keyboard alone, with focus always visible', async
   await frame.getByRole('button', { name: '在网页中定位引用 2' }).focus();
   await page.keyboard.press('Enter');
   await expect(frame.locator('[data-located]')).toContainText('在网页里没找到这段原文');
+  // Said aloud: the note arrives in a region that was there before it.
+  await expect(frame.locator('[aria-live="polite"] > [data-located]')).toHaveCount(1);
 
   // A follow-up is typed and sent from the keyboard.
   const before = server.requests.length;

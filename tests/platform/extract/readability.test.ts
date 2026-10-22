@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { extractPage } from '@/platform/extract/readability';
+import { PageContext } from '@/contract/page-context';
+import {
+  extractPage,
+  MAX_LANG_LENGTH,
+  MAX_TITLE_LENGTH,
+  MAX_URL_LENGTH,
+} from '@/platform/extract/readability';
 import { textOf, tidy } from '@/platform/extract/text';
 
 function pageWith(body: string, title = '一篇文章', lang = 'zh-CN'): Document {
@@ -51,6 +57,22 @@ describe('extractPage', () => {
     const page = extractPage(pageWith(`<article>${paragraphs}</article>`), 50);
     expect(page.text).toHaveLength(50);
     expect(page.truncated).toBe(true);
+  });
+
+  it('keeps a page-written title, address and language within the contract', () => {
+    const doc = pageWith(`<article>${paragraphs}</article>`);
+    doc.title = '长'.repeat(MAX_TITLE_LENGTH + 500);
+    doc.documentElement.lang = 'x'.repeat(MAX_LANG_LENGTH + 50);
+    Object.defineProperty(doc, 'URL', {
+      value: `https://example.com/?q=${'a'.repeat(MAX_URL_LENGTH)}`,
+    });
+
+    const page = extractPage(doc);
+
+    expect(page.title).toHaveLength(MAX_TITLE_LENGTH);
+    expect(page.lang).toHaveLength(MAX_LANG_LENGTH);
+    expect(page.url).toHaveLength(MAX_URL_LENGTH);
+    expect(PageContext.safeParse(page).success).toBe(true);
   });
 });
 

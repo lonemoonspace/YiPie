@@ -124,4 +124,29 @@ describe('createModelSwitcher', () => {
     await settle();
     expect(chosen).toHaveBeenCalledOnce();
   });
+
+  it('keeps sending picks after a callback throws', async () => {
+    const { pick, sent, ids, chosen, failed } = setup();
+    chosen.mockImplementationOnce(() => {
+      throw new Error('chosen broke');
+    });
+    failed.mockImplementationOnce(() => {
+      throw new Error('failed broke');
+    });
+
+    pick({ id: 'b' });
+    await settle();
+    sent[0]?.reject(new Error('offline'));
+    await settle();
+    pick({ id: 'c' });
+    await settle();
+    sent[1]?.resolve();
+    await settle();
+    pick({ id: 'd' });
+    await settle();
+
+    expect(ids()).toEqual(['b', 'c', 'd']);
+    // A stored pick that `chosen` choked on is not reported as a failure.
+    expect(failed).toHaveBeenCalledOnce();
+  });
 });
