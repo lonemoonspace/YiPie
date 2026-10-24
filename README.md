@@ -15,9 +15,13 @@ YiPie (一瞥, "a glance") is a free, open source Chrome / Edge extension. It su
 
 ## Status
 
-The current version is 0.1.4. Packages are on [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases), and a Chrome Web Store listing is under way (the store and the release ship the same package). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and [docs/development-plan.md](docs/development-plan.md) (in Chinese) for the roadmap, technical decisions and acceptance criteria.
+The current version is 0.1.4. It is available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao), and packages are also on [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases) (both ship the same package). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and [docs/development-plan.md](docs/development-plan.md) (in Chinese) for the roadmap, technical decisions and acceptance criteria.
 
 ## Install
+
+**Recommended**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao). Edge can use the same link (open it in Edge and allow extensions from other stores).
+
+**Manual install**:
 
 1. Download `yipie-<version>-chrome.zip` from [Releases](https://github.com/lonemoonspace/YiPie/releases) and unzip it.
 2. Open `chrome://extensions` (`edge://extensions` in Edge), turn on Developer mode, click "Load unpacked" and choose the unzipped folder.

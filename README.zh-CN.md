@@ -15,9 +15,13 @@
 
 ## 当前状态
 
-当前版本 0.1.4，安装包在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)，正在上架 Chrome 应用商店（商店与 Release 是同一个安装包）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+当前版本 0.1.4，已上架 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)，安装包也在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)（两处是同一个安装包）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
 
 ## 安装
+
+**推荐**：从 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)安装，Edge 也可以用这个链接（在 Edge 里打开后允许来自其他应用商店的扩展）。
+
+**手动安装**：
 
 1. 从 [Releases](https://github.com/lonemoonspace/YiPie/releases) 下载 `yipie-<版本>-chrome.zip` 并解压。
 2. 打开 `chrome://extensions`（Edge 是 `edge://extensions`），开启「开发者模式」，点「加载已解压的扩展程序」，选择解压出的文件夹。
