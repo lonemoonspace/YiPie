@@ -1,44 +1,60 @@
 # 一瞥 YiPie
 
-用你自己配置的 OpenAI 兼容模型服务，在页面上的浮动面板里总结当前网页，并能就这一页继续追问。
+English | [简体中文](README.zh-CN.md)
 
-- 只支持 OpenAI Chat Completions 兼容接口：OpenAI、DeepSeek、OpenRouter、Ollama、vLLM 等，填 base URL、Key 和模型名即可
-- 数据只在浏览器和你自己的模型服务之间流动：没有中间服务器，没有遥测
-- 安装时不申请任何站点权限；只在你点工具栏图标、右键菜单或按快捷键时读取当前页
-- 支持 Chrome / Edge 110 及以上
+YiPie (一瞥, "a glance") is a free, open source Chrome / Edge extension. It summarizes the current web page in a floating panel, using an OpenAI-compatible model service you configure yourself, and lets you ask follow-up questions about the page.
 
-## 当前状态
+## Features
 
-阶段 6（硬化与分发）的自动化部分已完成：界面可以在中文与英文之间切换（默认跟随浏览器）；设置页与面板达到 WCAG 2.1 AA 的对比度，并且只用键盘就能操作；发版有固定步骤和发布前的安装包检查。阶段 1–5 已完成（总结、多个模型与 Prompt、追问与刷新后恢复、错误分类与自动重试、引用定位与选区总结、导入导出等）。版本 0.1.4 已作为 [GitHub Release](https://github.com/lonemoonspace/YiPie/releases) 附件发布；正在上架 Chrome 应用商店（商店与 Release 是同一个安装包，[隐私政策](PRIVACY.md)已就绪）。路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+- **Bring your own model**: works with any OpenAI Chat Completions compatible API, such as OpenAI, DeepSeek, OpenRouter, or a local Ollama or vLLM. Enter a base URL, a key and a model name. You can set up several models and switch between them in the panel.
+- **No third party in between**: page content travels only between your browser and your own model service. There is no relay server and no telemetry. See the [privacy policy](PRIVACY.md).
+- **Reads only when asked**: the extension requests no site permissions at install time, and reads the current page only when you click the toolbar icon, use the context menu or press the shortcut.
+- **Citations you can follow**: click a citation marker in an answer and the page scrolls to the quoted text and highlights it.
+- **English and Chinese interface**, dark theme, and full keyboard operation.
+- Supports Chrome / Edge 110 and later.
 
-## 使用
+## Status
 
-1. 从 [Releases](https://github.com/lonemoonspace/YiPie/releases) 下载 `yipie-<版本>-chrome.zip` 并解压，在 `chrome://extensions`（Edge 是 `edge://extensions`）开启「开发者模式」，点「加载已解压的扩展程序」选择解压出的文件夹；也可以按下面「开发」一节自己构建。
-2. 打开扩展的设置页（`chrome://extensions` 里本扩展的「详细信息」→「扩展程序选项」），在「模型」里填 base URL（例如 `https://api.openai.com/v1`）、API Key 和模型名，保存。浏览器询问是否允许访问这个服务时，选允许。可以添加多个模型，点「设为默认」选默认的那个。
-3. 在网页上点工具栏的「一瞥」图标、按 `Alt+Shift+Y`，或在页面空白处右键选「用一瞥总结此页」。面板出现在页面右上角，用默认模型和默认 Prompt 开始总结（不想一打开就总结，可以在设置页「通用」里关掉「打开面板时自动总结」，之后点面板里的「总结此页」再开始）；工具栏的两个下拉框分别换模型（换了就成为新的默认，并用它重做最近一轮）和换 Prompt（换了就成为新的默认，清空这一页的对话、用它重新总结）。可以停止、重新总结，拖动左上角的图标移动面板，点 × 关闭；「⋯」里有「复制正文」和「打开设置」。
-4. 总结之后，在面板底部的输入框里继续追问。刷新页面或关掉面板后再触发一次，上次的对话会恢复；关闭标签页后就不再保留。单页应用里站内换页时面板会关闭，在新页面上再触发即可，回到原来那页再触发仍能恢复那页的对话。
-5. 界面语言在设置页「通用」里选（跟随浏览器、简体中文或 English）。想换一种总结方式：内置了「网页总结」「速读」「深度笔记」三个预设，在面板里直接选；也可以在设置页的「Prompt」里编辑它们，或新增一个（可以从预设开始）；编辑时可以展开「预览」看看发给模型的是什么。正文太长时怎么裁剪、回答用什么语言、面板字号多大，在设置页「通用」里选；在「模型」里如实填写上下文窗口，裁剪才准确。
-6. 只想总结一段：选中文字，右键选「用一瞥总结选中内容」。
-7. 回答里带编号的小标记是引用：点一下，网页会滚动到原文并高亮。面板「⋯」里的「复制正文」复制的是扩展读到的网页正文。
-8. 填模型时，「常用服务」可以一键填入 Base URL，「获取模型列表」从服务的模型列表里挑模型名，「测试连接」能先确认地址和 Key 是否可用。设置页的「导入与导出」可以把模型与 Prompt 存成 JSON 文件带到别的浏览器（默认不含 API Key，勾选后才带上）。
+The current version is 0.1.4. Packages are on [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases), and a Chrome Web Store listing is under way (the store and the release ship the same package). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and [docs/development-plan.md](docs/development-plan.md) (in Chinese) for the roadmap, technical decisions and acceptance criteria.
 
-- 浏览器内置页面（`chrome://`、新标签页）、扩展商店等页面打不开面板，图标上会显示「!」。
-- 用本地 Ollama 时，base URL 填 `http://localhost:11434/v1`；Ollama 拒绝扩展的请求时，启动前设置环境变量 `OLLAMA_ORIGINS=chrome-extension://*`。
+## Install
 
-## 开发
+1. Download `yipie-<version>-chrome.zip` from [Releases](https://github.com/lonemoonspace/YiPie/releases) and unzip it.
+2. Open `chrome://extensions` (`edge://extensions` in Edge), turn on Developer mode, click "Load unpacked" and choose the unzipped folder.
 
-需要 Node 22.18 或更高版本。
+You can also build it yourself, as described under [Development](#development).
+
+## Usage
+
+1. **Set up a model**: open the extension's options page (in `chrome://extensions`, Details → Extension options). Under Models, enter a base URL (for example `https://api.openai.com/v1`), an API key and a model name, then save. Allow access when the browser asks about the service. "Common services" fills in a base URL for you, "Fetch models" picks a model name from the service's model list, and "Test connection" checks the address and key first. You can add several models and pick one with "Make default".
+2. **Summarize**: on a web page, click the YiPie toolbar icon, press `Alt+Shift+Y`, or right-click the page and choose "Summarize this page with YiPie". The panel opens at the top right of the page and summarizes with the default model and prompt. Drag the icon at its top left to move it, and click × to close it; the ⋯ menu has "Copy text" and "Open settings". To start summaries yourself, turn off "Summarize when the panel opens" under General in the settings.
+3. **Switch the model or prompt**: the two menus in the panel toolbar change the model and the prompt, and the choice becomes the new default. A new model redoes the latest answer; a new prompt clears the page's conversation and summarizes again. To switch between several models of one service, fill in "Models to switch between in the panel" for that model configuration, and the panel's model menu lists them grouped by service.
+4. **Ask follow-ups**: after the summary, keep asking in the box at the bottom of the panel. If you reload the page or close the panel, open it again and the conversation comes back; it is dropped when the tab closes.
+5. **Summarize a selection**: select some text, right-click and choose "Summarize the selection with YiPie".
+6. **Check the source**: the small numbered markers in an answer are citations. Click one and the page scrolls to the quoted text and highlights it.
+7. **Tune the summaries**: three prompt presets are built in (Page summary, Quick read and Reading notes). Edit them or add your own under Prompts in the settings; expand "Preview" while editing to see what is sent to the model. Under General you choose how to cut text that is too long, the answer language, the panel text size and the interface language. Enter each model's real context window under Models so text is cut at the right length.
+8. **Back up and move**: "Import and export" in the settings saves models and prompts to a JSON file you can load in another browser. API keys are left out unless you tick the option to include them.
+
+### Tips
+
+- The panel cannot open on built-in browser pages (`chrome://`, the new tab page) or extension stores; the icon shows "!" there.
+- In single-page apps the panel closes when you navigate within the site. Open it again on the new page; going back to the earlier page and opening it there restores that page's conversation.
+- For a local Ollama, use the base URL `http://localhost:11434/v1`. If Ollama rejects the extension's requests, set the environment variable `OLLAMA_ORIGINS=chrome-extension://*` before starting it.
+
+## Development
+
+Requires Node 22.18 or later.
 
 ```sh
 npm ci
-npm run gate    # 类型检查、单测、lint、格式检查
-npm run build   # 产物在 .output/chrome-mv3
+npm run gate    # type check, unit tests, lint, format check
+npm run build   # output in .output/chrome-mv3
 ```
 
-在 Chrome 打开 `chrome://extensions`，开启「开发者模式」，点「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。开发约定见 [AGENTS.md](AGENTS.md)。
+Open `chrome://extensions` in Chrome, turn on Developer mode, click "Load unpacked" and choose `.output/chrome-mv3`. Development conventions are in [AGENTS.md](AGENTS.md) (in Chinese).
 
-不想自己构建时，可以下载测试包：每次推送后 CI 的 quality 检查全部通过，就把生产构建作为 artifact（`yipie-chrome-<提交>`，保留 14 天）放在那次运行的页面上。下载、解压后，同样用「加载已解压的扩展程序」选择解压出的文件夹。
+To try a build without building it yourself: whenever the CI quality checks pass on a push, the production build is uploaded as an artifact (`yipie-chrome-<commit>`, kept for 14 days) on that run's page. Download and unzip it, then load the folder with "Load unpacked" as above.
 
-## 许可证
+## License
 
 [MIT](LICENSE)
