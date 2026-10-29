@@ -64,8 +64,13 @@ export function ModelForm(props: ModelFormProps) {
     // Still inside the submit event: Chrome only shows the prompt during a
     // user gesture, so this must run before anything awaits.
     const accessRequest = requestOriginAccess(parsed.value.baseURL);
+    // A rename alone leaves the menu's list to the background, which
+    // follows it on the list as stored (#30); a list edited here goes as
+    // written, with the rename followed in it.
+    const listEdited =
+      initial !== null && parsed.value.menuModels.join('\n') !== initial.menuModels.join('\n');
     props.onSave(
-      initial ? followModelRename(initial.model, parsed.value) : parsed.value,
+      initial && listEdited ? followModelRename(initial.model, parsed.value) : parsed.value,
       accessRequest,
     );
   };

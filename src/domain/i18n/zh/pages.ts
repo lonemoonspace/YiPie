@@ -67,6 +67,7 @@ export const pages = {
   'list.cancel': '取消',
   'list.working': '处理中…',
   'list.saved': '已保存',
+  'list.editingGone': '正在编辑的这一项已在别处被删除，保存不会成功。需要的话先复制你填的内容。',
   'list.madeDefault': '已将「{name}」设为默认',
   'list.movedUp': '已上移「{name}」',
   'list.movedDown': '已下移「{name}」',

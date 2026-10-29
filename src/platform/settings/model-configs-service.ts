@@ -1,9 +1,11 @@
 import {
+  MAX_MENU_MODELS,
   MODEL_CONFIGS_KEY,
   MODEL_CONFIGS_VERSION,
   ModelConfig,
   displayName,
   menuModelNames,
+  renamedMenuModels,
   type ModelConfigPatch,
 } from '@/contract/model-config';
 import type {
@@ -84,14 +86,42 @@ export function createModelConfigsService(
       const names = menuModelNames(config);
       if (!names.includes(model)) throw new NotFoundError(`model of ${id} named`, model);
       if (model !== config.model) {
-        await configs.updateUnqueued(id, { model, menuModels: names });
+        // The list keeps the name picked away from, unless that would take
+        // it past what the settings page can save (#30): then it stays as
+        // the user wrote it, which already has the pick.
+        const menuModels = names.length <= MAX_MENU_MODELS ? names : config.menuModels;
+        await configs.updateUnqueued(id, { model, menuModels });
       }
     }
     return forPanel(await configs.setDefaultUnqueued(id));
   };
 
+  /**
+   * A rename moves the old name's place on the menu's list to the new name,
+   * here in the queue, on the list as stored: the settings page then sends
+   * only the model name, and an entry another tab added meanwhile stays (#30).
+   */
+  const update = (id: string, patch: ModelConfigPatch) =>
+    queue(async () => {
+      if (patch.model === undefined || patch.menuModels !== undefined) {
+        return configs.updateUnqueued(id, patch);
+      }
+      const stored = (await configs.list()).items.find((item) => item.id === id);
+      const menuModels =
+        stored === undefined
+          ? undefined
+          : renamedMenuModels(stored.menuModels, stored.model, patch.model);
+      return configs.updateUnqueued(
+        id,
+        menuModels === undefined || menuModels === stored?.menuModels
+          ? patch
+          : { ...patch, menuModels },
+      );
+    });
+
   return {
     ...configs,
+    update,
     current: async () => forPanel(await configs.list()),
     choose: (id, model) => queue(() => chooseUnqueued(id, model)),
     chooseUnqueued,

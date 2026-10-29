@@ -29,7 +29,6 @@ interface ConnectionTestProps {
 export function ConnectionTest({ check }: ConnectionTestProps) {
   const [state, setState] = useState<TestState>({ kind: 'idle' });
   const run = useRef<AbortController | null>(null);
-  const tested = useRef<ParsedModelForm | null>(null);
 
   useEffect(() => () => run.current?.abort(), []);
 
@@ -52,7 +51,6 @@ export function ConnectionTest({ check }: ConnectionTestProps) {
     if (config === null) return;
     // Still inside the click: the browser shows the prompt only during a gesture.
     const access = requestOriginAccess(config.baseURL);
-    tested.current = config;
     const controller = begin();
     void (async () => {
       await access.catch(() => false);
@@ -76,13 +74,18 @@ export function ConnectionTest({ check }: ConnectionTestProps) {
     })();
   };
 
+  // The form as it is now, not as the list test saw it: the user may have
+  // changed the address, key or model since (#30).
   const testChat = () => {
-    const config = tested.current;
+    const config = check();
     if (config === null) return;
+    const access = requestOriginAccess(config.baseURL);
     const controller = begin();
     const stop = new AbortController();
     let answered = false;
     void (async () => {
+      await access.catch(() => false);
+      if (controller.signal.aborted) return;
       const outcome = await streamChat({
         config,
         messages: [{ role: 'user', content: 'Reply with the single word OK.' }],

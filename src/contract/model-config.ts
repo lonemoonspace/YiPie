@@ -182,3 +182,16 @@ export function menuModelNames(config: Pick<ModelConfig, 'model' | 'menuModels'>
   const names = config.menuModels.filter((name) => name.trim() !== '');
   return [...new Set(names.includes(config.model) ? names : [config.model, ...names])];
 }
+
+/**
+ * The menu's list once the model name changed from `previous` to `model`:
+ * the old name gives its place to the new one, so a rename does not leave
+ * the old name behind. A list that already has the new name, or never had
+ * the old one, stays as it is.
+ */
+export function renamedMenuModels(menuModels: string[], previous: string, model: string): string[] {
+  if (model === previous || !menuModels.includes(previous) || menuModels.includes(model)) {
+    return menuModels;
+  }
+  return menuModels.map((name) => (name === previous ? model : name));
+}

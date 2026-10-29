@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   BACKED_UP_KEYS,
   type BackedUpKey,
@@ -57,14 +57,19 @@ export function BackupsSection() {
   const [busy, setBusy] = useState(false);
   const [withCredentials, setWithCredentials] = useState(false);
   const checkboxId = useId();
+  // Only the newest answer is shown: a list read before a delete must not
+  // bring the deleted backup back when it arrives after it (#30).
+  const answers = useRef(0);
 
   const reload = useCallback(() => {
+    const ticket = ++answers.current;
     callRpc('backups.list', {}).then(
       (loaded) => {
+        if (ticket !== answers.current) return;
         setView(loaded);
         setLoadError(null);
       },
-      (error: unknown) => setLoadError(messageOf(error)),
+      (error: unknown) => ticket === answers.current && setLoadError(messageOf(error)),
     );
   }, []);
 
@@ -84,10 +89,11 @@ export function BackupsSection() {
     const question = t('backup.confirmRemove', { name: nameOf(backup), time: timeOf(backup) });
     if (!window.confirm(question)) return;
     setBusy(true);
+    const ticket = ++answers.current;
     callRpc('backups.remove', { key: backup.key, at: backup.at })
       .then(
         (next) => {
-          setView(next);
+          if (ticket === answers.current) setView(next);
           setStatus(t('backup.removed'));
         },
         (error: unknown) => setStatus(t('list.failed', { detail: messageOf(error) })),

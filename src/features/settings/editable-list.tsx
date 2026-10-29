@@ -65,6 +65,10 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
   };
   // With nothing in the list yet, the form for a new item is all there is.
   const adding = editing.kind === 'new' || items.length === 0;
+  // The row being edited went away elsewhere (another tab, an import): the
+  // editor stays, below the list, so what the user typed is not lost (#30).
+  const orphan =
+    editing.kind === 'edit' && !items.some((item) => item.id === editing.id) ? editing : null;
 
   const remove = (item: T) => {
     const name = nameOf(item);
@@ -138,7 +142,14 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
         </ul>
       ) : null}
 
-      {adding ? (
+      {orphan !== null ? (
+        <>
+          <p className="note" role="alert">
+            {t('list.editingGone')}
+          </p>
+          {props.editor(orphan.original, { focusOnOpen: false, close, cancel: close })}
+        </>
+      ) : adding ? (
         props.editor(null, {
           focusOnOpen: items.length > 0,
           close,

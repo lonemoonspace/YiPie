@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MODEL_CONFIGS_KEY, ModelConfigDraft } from '@/contract/model-config';
 import { SELECTION_KEY } from '@/contract/selection';
+import type { StorageKey } from '@/contract/storage';
 import { NotFoundError } from '@/platform/settings/errors';
 import { createModelConfigsService } from '@/platform/settings/model-configs-service';
 import { ReadOnlyRecordError, createQueue, readQuarantine } from '@/platform/storage';
@@ -351,6 +352,49 @@ describe('model configurations: what the panel gets', () => {
     await models.choose('a', 'm9');
 
     expect((await models.current()).choices[0]?.models).toEqual(['m9', 'm2']);
+  });
+
+  it('follows a rename on the menu as stored, keeping what another tab added (#30)', async () => {
+    const { models } = setup(
+      list(config('a', 'https://api.example.com/v1', { model: 'm1', menuModels: ['m1', 'm2'] })),
+    );
+    // Another tab adds a name; this one then renames the model alone.
+    await models.update('a', { menuModels: ['m1', 'm2', 'm3'] });
+    await models.update('a', { model: 'm9' });
+
+    expect((await models.list()).items[0]).toMatchObject({
+      model: 'm9',
+      menuModels: ['m9', 'm2', 'm3'],
+    });
+  });
+
+  it('keeps a full menu within the limit when a pick moves away from a name not on it (#30)', async () => {
+    const names = Array.from({ length: 50 }, (_, index) => `n${index}`);
+    const { models } = setup(
+      list(config('a', 'https://api.example.com/v1', { model: 'base', menuModels: names })),
+    );
+
+    await models.choose('a', 'n3');
+
+    const [stored] = (await models.list()).items;
+    expect(stored).toMatchObject({ model: 'n3' });
+    expect(stored?.menuModels).toEqual(names);
+  });
+
+  it('undoes a list change when the default it moves cannot be stored (#30)', async () => {
+    const inner = createMemoryStore(list(keyed('a', 'sk-a'), keyed('b', 'sk-b')));
+    const store = {
+      ...inner,
+      set: (key: StorageKey, value: unknown) =>
+        key === SELECTION_KEY ? Promise.reject(new Error('Quota exceeded')) : inner.set(key, value),
+    };
+    const models = createModelConfigsService(store, createQueue());
+
+    // Moving the first one down would make the other the default: the
+    // default is pinned, and that write fails.
+    await expect(models.move('a', 'down')).rejects.toThrow('Quota exceeded');
+
+    expect((await models.list()).items.map(({ id }) => id)).toEqual(['a', 'b']);
   });
 
   it('writes nothing to the list when the picked name is already in use', async () => {

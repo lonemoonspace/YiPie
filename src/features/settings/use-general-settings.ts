@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GeneralSettingsPatch } from '@/contract/general-settings';
+import { GENERAL_SETTINGS_KEY, type GeneralSettingsPatch } from '@/contract/general-settings';
 import type { GeneralSettingsView } from '@/contract/rpc';
 import { callRpc } from '@/platform/rpc/client';
+import { onStoredChange } from '@/platform/storage/watch';
 
 export type SaveState =
   | { kind: 'idle' }
@@ -32,14 +33,23 @@ export function useGeneralSettings(): GeneralSettingsState {
   // answered: an earlier answer must not take away a later change's value.
   const newest = useRef(0);
 
+  // Read again when another tab changes them (#30); only the newest read shows.
   useEffect(() => {
     let active = true;
-    callRpc('settings.get', {}).then(
-      (loaded) => active && setView(loaded),
-      (error: unknown) => active && setLoadError(messageOf(error)),
-    );
+    let reads = 0;
+    const read = () => {
+      const current = ++reads;
+      const latest = () => active && current === reads;
+      callRpc('settings.get', {}).then(
+        (loaded) => latest() && setView(loaded),
+        (error: unknown) => latest() && setLoadError(messageOf(error)),
+      );
+    };
+    read();
+    const stop = onStoredChange([GENERAL_SETTINGS_KEY], read);
     return () => {
       active = false;
+      stop();
     };
   }, []);
 

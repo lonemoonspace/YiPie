@@ -70,6 +70,8 @@ export const pages = {
   'list.cancel': 'Cancel',
   'list.working': 'Working…',
   'list.saved': 'Saved',
+  'list.editingGone':
+    'The item you are editing was removed elsewhere, so it cannot be saved. Copy what you typed if you need it.',
   'list.madeDefault': '“{name}” is now the default',
   'list.movedUp': 'Moved “{name}” up',
   'list.movedDown': 'Moved “{name}” down',
