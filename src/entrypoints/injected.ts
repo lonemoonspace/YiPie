@@ -23,6 +23,8 @@ export default defineUnlistedScript(() => {
   scope[slot] = undefined;
   // Says to the background whether there is a panel: an SVG or XML file the
   // browser shows as such is no HTML document, and has no place for one (#29).
+  // `executeScript` hands this return value back only because WXT builds the
+  // script as an IIFE that returns what `main` returns (platform/inject).
   if (!(document.documentElement instanceof HTMLElement)) return false;
 
   // The shell speaks the interface language from the start; `content.hello`

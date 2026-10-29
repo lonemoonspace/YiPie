@@ -256,6 +256,25 @@ describe('streamChat', () => {
     }
   });
 
+  it('classifies by what the service said, before credentials are taken out of the detail', async () => {
+    // A header value that happens to be a word the classification looks for.
+    const plan = ModelConfig.parse({ ...config, headers: { 'X-Plan': 'quota' } });
+    const { outcome } = await run({
+      config: plan,
+      fetch: fakeFetch(
+        () =>
+          new Response(
+            JSON.stringify({ error: { code: 'insufficient_quota', message: 'quota' } }),
+            {
+              status: 429,
+            },
+          ),
+      ),
+    });
+
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'quota', detail: '***' } });
+  });
+
   it('cuts a failure reported in the stream to length, however long (#28)', async () => {
     const message = 'y'.repeat(100_000);
     const { outcome } = await run({

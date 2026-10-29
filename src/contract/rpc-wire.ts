@@ -86,3 +86,10 @@ export interface TriggerSlotWire extends TriggerWire {
    */
   pageKey: string | null;
 }
+
+/**
+ * What the panel posts to the page's window when `panel.attach` was refused,
+ * so the host lets the next trigger mount a new panel (#22). It carries
+ * nothing else; the host takes it only from its own frame's window.
+ */
+export const PANEL_ATTACH_FAILED = 'yipie:panel-attach-failed';

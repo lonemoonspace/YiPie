@@ -184,9 +184,10 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
       const body = await readLimited(response, ERROR_BODY_LIMIT, controller.signal);
       // Stopped while the body was read: not an error, and not retried.
       if (signal.aborted) return { kind: 'stopped' };
-      // The detail is cut to length: credentials go first, so none is cut in half.
-      const redacted = redact(body, secrets);
-      return clean(fromHttpStatus(response.status, redacted, response.headers.get('Retry-After')));
+      // Classified by the body as sent; the detail shown is cut to length
+      // from the body without credentials, so none is cut in half.
+      const error = fromHttpStatus(response.status, body, response.headers.get('Retry-After'));
+      return clean({ ...error, detail: describeErrorBody(redact(body, secrets)) });
     }
     options.onAccepted();
     if (response.body === null) return clean(fromProtocolError('The response has no body.'));

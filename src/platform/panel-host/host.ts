@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import type { PanelMode } from '@/contract/rpc-wire';
+import { PANEL_ATTACH_FAILED, type PanelMode } from '@/contract/rpc-wire';
 import { setLocale, t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
 import { clearQuoteHighlight } from '@/platform/locate/scroll-to-text';
@@ -115,6 +115,14 @@ function createPanelHost(): PanelHost {
   let open = false;
   /** The latest mount could not attach: the next trigger mounts again. */
   let failed = false;
+  /** The frame of the latest mount, the only window whose word about attaching counts. */
+  let mounted: HTMLIFrameElement | null = null;
+  /** The panel in our frame could not attach (#22): its own page says so. */
+  const onMessage = (event: MessageEvent) => {
+    if (event.data !== PANEL_ATTACH_FAILED) return;
+    if (mounted === null || event.source !== mounted.contentWindow) return;
+    failed = true;
+  };
   /** What the mounted panel works on, as the latest trigger asked. */
   let mode: PanelMode = 'page';
   /** The page the latest trigger was on. */
@@ -153,6 +161,7 @@ function createPanelHost(): PanelHost {
   async function mountPanel(): Promise<void> {
     const mount = ++mounts;
     failed = false;
+    mounted = null;
     body.replaceChildren();
     page = null;
     try {
@@ -184,6 +193,7 @@ function createPanelHost(): PanelHost {
       iframe.title = t('app.name');
       iframe.src = `${browser.runtime.getURL(PANEL_PAGE)}#${nonce}`;
       body.replaceChildren(iframe);
+      mounted = iframe;
     } catch (error) {
       // The extension was updated or reloaded: a new injection takes over.
       if (isOrphaned()) {
@@ -210,6 +220,7 @@ function createPanelHost(): PanelHost {
     observer.observe(document, { childList: true });
     observer.observe(root, { childList: true });
     window.addEventListener('resize', keepInView);
+    window.addEventListener('message', onMessage);
     // Once the extension is updated or reloaded, this host is dead: it goes
     // as soon as someone could see it (orphan.ts). Watched while shown only.
     unwatch ??= watchForOrphaning(element, hide);
@@ -264,6 +275,8 @@ function createPanelHost(): PanelHost {
     body.replaceChildren();
     element.remove();
     window.removeEventListener('resize', keepInView);
+    window.removeEventListener('message', onMessage);
+    mounted = null;
     unwatch?.();
     unwatch = null;
     // A quote the panel pointed at is no longer explained by anything.

@@ -51,22 +51,28 @@ async function injectNow(tabId: number, trigger: TriggerWire, pageKey: string): 
     target: { tabId },
     files: [CONTENT_SCRIPT_FILE],
   });
+  // What the script's main function returned (src/entrypoints/injected.ts).
+  // This relies on WXT building the unlisted script as an IIFE that returns
+  // it; a module build would give undefined, read here as "opened".
   return result?.result !== false;
+}
+
+/** `InjectDeps.injectInto` in the browser: one injection at a time per tab. */
+export function injectInto(tabId: number, trigger: TriggerWire, pageKey: string): Promise<boolean> {
+  const run = (injecting.get(tabId) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => injectNow(tabId, trigger, pageKey));
+  injecting.set(tabId, run);
+  const done = () => {
+    if (injecting.get(tabId) === run) injecting.delete(tabId);
+  };
+  run.then(done, done);
+  return run;
 }
 
 const browserDeps: InjectDeps = {
   storageIsolated: ensureLocalStorageIsolated,
-  injectInto: (tabId, trigger, pageKey) => {
-    const run = (injecting.get(tabId) ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => injectNow(tabId, trigger, pageKey));
-    injecting.set(tabId, run);
-    const done = () => {
-      if (injecting.get(tabId) === run) injecting.delete(tabId);
-    };
-    run.then(done, done);
-    return run;
-  },
+  injectInto,
   markUnavailable,
   markAvailable,
 };
@@ -142,6 +148,8 @@ async function markUnavailable(tabId: number): Promise<void> {
 async function markAvailable(tabId: number): Promise<void> {
   await Promise.all([
     browser.action.setBadgeText({ tabId, text: '' }),
-    browser.action.setTitle({ tabId, title: browser.i18n.getMessage('actionTitle') }),
+    // Chrome cannot clear a tab's own title, only set it: the icon's title
+    // again, in the interface language like the one it replaces.
+    browser.action.setTitle({ tabId, title: t('host.available') }),
   ]);
 }

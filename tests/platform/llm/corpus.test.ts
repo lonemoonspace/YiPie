@@ -66,6 +66,8 @@ interface Case {
     detail?: string;
     /** Requests sent, the automatic retry included. */
     requests?: number;
+    /** How a done answer ended; null for a whole one. */
+    ending?: 'length' | 'cut-off' | null;
   };
 }
 
@@ -236,6 +238,18 @@ const CASES: Case[] = [
     expected: { kind: 'server', detail: 'Overloaded', text: '' },
   },
   {
+    row: '流结束时没有 `[DONE]`',
+    name: 'a stream closed after its last chunk, with no [DONE] and no finish reason, may be cut off',
+    file: 'no-done-no-finish.sse',
+    expected: { kind: 'done', text: '说到一半', ending: 'cut-off', requests: 1 },
+  },
+  {
+    row: '流结束时没有 `[DONE]`',
+    name: 'a finish reason without [DONE] is a whole answer',
+    file: 'finish-no-done.sse',
+    expected: { kind: 'done', text: '完整的回答', ending: null },
+  },
+  {
     row: '超长上下文',
     name: 'OpenAI refuses with context_length_exceeded',
     file: 'openai-context-length.json',
@@ -284,6 +298,7 @@ const ROWS = [
   '首字节很慢',
   '`max_tokens` / `temperature` 的兼容性',
   'base URL 写法不一',
+  '流结束时没有 `[DONE]`',
 ];
 
 /**
@@ -339,6 +354,9 @@ describe('the compatibility corpus (appendix D)', () => {
         expect(outcome.kind).toBe('done');
         if (expected.usage !== undefined && outcome.kind === 'done') {
           expect(outcome.usage).toEqual(expected.usage);
+        }
+        if (expected.ending !== undefined && outcome.kind === 'done') {
+          expect(outcome.ending ?? null).toBe(expected.ending);
         }
       } else {
         expect(outcome).toMatchObject({ kind: 'error', error: { kind: expected.kind } });
