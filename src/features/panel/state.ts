@@ -248,7 +248,10 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
     case 'mode':
       return { ...state, mode: event.mode };
     case 'selectPrompt':
-      if (event.waiting === true) return { ...state, phase: 'ready', promptId: event.promptId };
+      // Waiting, the pick only changes the default: a failed pick before it is over.
+      if (event.waiting === true) {
+        return { ...state, phase: 'ready', promptId: event.promptId, problem: null };
+      }
       // What is on screen stays until the new summary starts.
       return {
         ...state,
@@ -268,7 +271,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
                 : choice,
             );
       if (event.waiting === true) {
-        return { ...state, phase: 'ready', models, modelId: event.modelId };
+        return { ...state, phase: 'ready', models, modelId: event.modelId, problem: null };
       }
       // The run in flight is dropped; the turn starts again once the pick is stored.
       return {
@@ -324,11 +327,11 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         ...state,
         phase: 'stopped',
         retrying: null,
-        turns: updateLast(state.turns, (turn) => ({
-          ...turn,
-          status: 'stopped',
-          usage: event.usage,
-        })),
+        // Stopped during a pick, before its turn began again: the turn on
+        // screen keeps what it was.
+        turns: updateLast(state.turns, (turn) =>
+          turn.status === 'pending' ? { ...turn, status: 'stopped', usage: event.usage } : turn,
+        ),
       };
     case 'failed':
       return {

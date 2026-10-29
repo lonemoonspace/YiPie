@@ -159,6 +159,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
   let mode: PanelMode = 'page';
   /** Opened without a summary, as the settings ask: a model pick only changes the default. */
   let waiting = false;
+  /** The run whose request is out: from then on the stream ends it, and keeps what arrived. */
+  let requested: AbortController | null = null;
+  /** Makes the pick that could not be stored again; what retry does while its failure shows. */
+  let failedPick: (() => void) | null = null;
 
   /** Fills both menus from what the settings say now. */
   const menus = (setup: RunSetup) => {
@@ -215,6 +219,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
   async function start(question: string | null, options: { cut?: boolean } = {}) {
     action += 1;
     waiting = false;
+    failedPick = null;
     drop();
     const controller = new AbortController();
     run = controller;
@@ -305,6 +310,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
       scheduled = true;
       cancel = deps.frame(flush);
     };
+    requested = controller;
     const outcome = await deps.stream({
       config,
       messages,
@@ -361,6 +367,14 @@ export function createConversation(deps: ConversationDeps): Conversation {
   }
 
   function retry(options: { cut?: boolean } = {}) {
+    // The pick failed, not a turn: trying again makes the pick again. Waiting
+    // for the user, nothing more runs after it (#27).
+    if (failedPick !== null) {
+      const again = failedPick;
+      failedPick = null;
+      again();
+      return;
+    }
     if (pending !== null) {
       void start(pending.question, options);
       return;
@@ -401,14 +415,27 @@ export function createConversation(deps: ConversationDeps): Conversation {
     if (fresh) restart();
     else retry();
   };
-  const pickFailed = (error: unknown) => {
+  const pickFailed = (error: unknown, again: () => void) => {
     if (picked !== action) return;
     // The other menu's pick, if still on its way, starts nothing after this.
     picked = 0;
     promptPicked = false;
     drop();
+    failedPick = again;
+    const failure = action;
     deps.dispatch({ type: 'failed', problem: { kind: 'switch', detail: messageOf(error) } });
+    // The menu showed the pick at once; it goes back to the defaults as
+    // stored, so the menu says what the next request uses and picking the
+    // same entry again is a change (#27).
+    deps.setup().then(
+      (setup) => {
+        if (failure === action) menus(setup);
+      },
+      () => undefined,
+    );
   };
+  let lastModelPick: ModelPick | null = null;
+  let lastPromptPick: string | null = null;
   const pickModel = createModelSwitcher({
     choose: deps.choose,
     chosen: () => {
@@ -417,7 +444,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
     },
     failed: (error) => {
       modelPicking = false;
-      pickFailed(error);
+      const pick = lastModelPick;
+      pickFailed(error, () => {
+        if (pick !== null) switchModel(pick);
+      });
     },
   });
   const pickPrompt = createLatestOnly({
@@ -428,9 +458,33 @@ export function createConversation(deps: ConversationDeps): Conversation {
     },
     failed: (error) => {
       promptPicking = false;
-      pickFailed(error);
+      const id = lastPromptPick;
+      pickFailed(error, () => {
+        if (id !== null) switchPrompt(id);
+      });
     },
   });
+
+  function switchModel(pick: ModelPick) {
+    picked = ++action;
+    failedPick = null;
+    lastModelPick = pick;
+    drop();
+    deps.dispatch({ type: 'select', modelId: pick.id, model: pick.model, waiting });
+    modelPicking = true;
+    pickModel(pick);
+  }
+
+  function switchPrompt(id: string) {
+    picked = ++action;
+    failedPick = null;
+    lastPromptPick = id;
+    drop();
+    deps.dispatch({ type: 'selectPrompt', promptId: id, waiting });
+    promptPicking = true;
+    promptPicked = true;
+    pickPrompt(id);
+  }
 
   return {
     async open(opening = 'page') {
@@ -494,7 +548,17 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
     // Starting over clears the saved conversation now, as the panel does,
     // rather than when the new summary is done.
-    summarize: restart,
+    summarize() {
+      // Waiting, with a pick on its way: the summary follows the pick, so it
+      // reads the new default and the pick is not dropped (#27).
+      if (waiting && (modelPicking || promptPicking) && picked === action) {
+        waiting = false;
+        failedPick = null;
+        deps.dispatch({ type: 'start', question: null, keep: 0 });
+        return;
+      }
+      restart();
+    },
 
     ask(question) {
       const text = question.trim();
@@ -505,29 +569,29 @@ export function createConversation(deps: ConversationDeps): Conversation {
     retry,
 
     stop() {
-      run?.abort();
+      // Once the request is out, the stream ends it and keeps what arrived.
+      if (run !== null && run === requested) {
+        run.abort();
+        return;
+      }
+      // Before that (a pick on its way, the settings or the page being read)
+      // the panel stops now, and nothing is sent afterwards: a pick still
+      // settling finds it is no longer the latest action (#23).
+      if (run === null && !modelPicking && !promptPicking) return;
+      action += 1;
+      promptPicked = false;
+      drop();
+      deps.dispatch({ type: 'stopped', usage: null });
     },
 
-    switchModel(pick) {
-      picked = ++action;
-      drop();
-      deps.dispatch({ type: 'select', modelId: pick.id, model: pick.model, waiting });
-      modelPicking = true;
-      pickModel(pick);
-    },
+    switchModel,
 
-    switchPrompt(id) {
-      picked = ++action;
-      drop();
-      deps.dispatch({ type: 'selectPrompt', promptId: id, waiting });
-      promptPicking = true;
-      promptPicked = true;
-      pickPrompt(id);
-    },
+    switchPrompt,
 
     dispose() {
       action += 1;
       generation += 1;
+      failedPick = null;
       drop();
     },
   };

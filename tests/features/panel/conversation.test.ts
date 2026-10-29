@@ -415,6 +415,58 @@ describe('conversation: without summarizing on opening', () => {
     expect(h.state()).toMatchObject({ phase: 'ready', modelId: 'm2' });
   });
 
+  it('retries a failed pick while waiting without summarizing, and clears the failure (#27)', async () => {
+    let refuse = true;
+    const h = harness({
+      setup: off,
+      choose: () => (refuse ? Promise.reject(new Error('read-only')) : Promise.resolve({})),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel({ id: 'm2' });
+    await settle();
+    expect(h.state()).toMatchObject({ phase: 'error', problem: { kind: 'switch' } });
+
+    refuse = false;
+    h.conversation.retry();
+    await settle();
+
+    expect(h.requests).toHaveLength(0);
+    expect(h.state()).toMatchObject({ phase: 'ready', modelId: 'm2', problem: null });
+  });
+
+  it('summarizes after a pick on its way, with the new default (#27)', async () => {
+    let store: () => void = () => {};
+    let chosen = 'm1';
+    const h = harness({
+      setup: off,
+      scripts: [answer('总结')],
+      choose: (pick) =>
+        new Promise((resolve) => {
+          store = () => {
+            chosen = pick.id;
+            resolve({});
+          };
+        }),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel({ id: 'm2' });
+    h.conversation.summarize();
+    await settle();
+    expect(h.requests).toHaveLength(0);
+    expect(h.state().phase).toBe('extracting');
+
+    store();
+    await settle();
+
+    expect(chosen).toBe('m2');
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
+  });
+
   it('sends the model name picked under a configuration along with it', async () => {
     const h = harness({ setup: off, scripts: [answer('总结')] });
     await h.conversation.open();
@@ -569,6 +621,47 @@ describe('conversation: one request at a time', () => {
     await settle();
 
     expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
+  });
+
+  it('stops at once while the page is read, and sends nothing afterwards (#23)', async () => {
+    let read: (page: PageContext) => void = () => {};
+    const h = harness({ scripts: [answer('总结')] });
+    h.extract.mockImplementationOnce(() => new Promise((resolve) => (read = resolve)));
+    await h.conversation.open();
+    await settle();
+    expect(h.state().phase).toBe('extracting');
+
+    h.conversation.stop();
+    expect(h.state()).toMatchObject({ phase: 'stopped', turns: [{ status: 'stopped' }] });
+    read(page);
+    await settle();
+
+    expect(h.requests).toHaveLength(0);
+    expect(h.events.some((event) => event.type === 'requesting')).toBe(false);
+    expect(h.state().phase).toBe('stopped');
+  });
+
+  it('stops a model pick on its way: the pick is stored, nothing runs after it (#23)', async () => {
+    let store: () => void = () => {};
+    const h = harness({
+      scripts: [answer('总结'), answer('不该有')],
+      choose: () => new Promise((resolve) => (store = () => resolve({}))),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel({ id: 'm2' });
+    h.conversation.stop();
+    store();
+    await settle();
+
+    expect(h.choose).toHaveBeenCalledWith({ id: 'm2' });
+    expect(h.requests).toHaveLength(1);
+    // The summary on screen is still the summary it was.
+    expect(h.state()).toMatchObject({
+      phase: 'stopped',
+      turns: [{ text: '总结', status: 'done' }],
+    });
   });
 });
 
@@ -837,6 +930,29 @@ describe('conversation: the model menu', () => {
       problem: { kind: 'switch', detail: 'read-only' },
     });
     expect(h.requests).toHaveLength(1);
+  });
+
+  it('puts the menu back on the stored default when a pick fails, and retries the pick (#27)', async () => {
+    let refuse = true;
+    const h = harness({
+      scripts: [answer('总结'), answer('另一个模型的总结')],
+      choose: () => (refuse ? Promise.reject(new Error('read-only')) : Promise.resolve({})),
+    });
+    await h.conversation.open();
+    await settle();
+
+    h.conversation.switchModel({ id: 'm2' });
+    await settle();
+    expect(h.state()).toMatchObject({ modelId: 'm1', problem: { kind: 'switch' } });
+
+    refuse = false;
+    h.conversation.retry();
+    await settle();
+
+    expect(h.choose).toHaveBeenCalledTimes(2);
+    expect(h.choose).toHaveBeenLastCalledWith({ id: 'm2' });
+    expect(h.requests).toHaveLength(2);
+    expect(h.state()).toMatchObject({ phase: 'done', problem: null });
   });
 });
 
