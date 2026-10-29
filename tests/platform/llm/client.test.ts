@@ -207,6 +207,53 @@ describe('streamChat', () => {
     }
   });
 
+  it('takes a key out before it cuts a long detail, so no part of it shows (#28)', async () => {
+    const message = `${'x'.repeat(295)} sk-secret-key and more`;
+    const http = await run({
+      fetch: fakeFetch(() => new Response(JSON.stringify({ error: { message } }), { status: 400 })),
+    });
+    const stream = await run({
+      fetch: fakeFetch(() =>
+        streamResponse([`data: ${JSON.stringify({ error: { message } })}\n\n`]),
+      ),
+    });
+
+    for (const { outcome } of [http, stream]) {
+      expect(outcome.kind).toBe('error');
+      const detail = outcome.kind === 'error' ? outcome.error.detail : '';
+      expect(detail).not.toContain('sk-');
+      expect(detail.length).toBeLessThanOrEqual(301);
+    }
+  });
+
+  it('cuts a failure reported in the stream to length, however long (#28)', async () => {
+    const message = 'y'.repeat(100_000);
+    const { outcome } = await run({
+      fetch: fakeFetch(() =>
+        streamResponse([`data: ${JSON.stringify({ error: { message } })}\n\n`]),
+      ),
+    });
+
+    expect(outcome.kind === 'error' && outcome.error.detail.length).toBe(301);
+  });
+
+  it('stops while an error body is read, without retrying (#28)', async () => {
+    const user = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        user.abort();
+        controller.enqueue(encoder.encode('busy'));
+        controller.close();
+      },
+    });
+    const fetch = fakeFetch(() => new Response(body, { status: 503 }));
+    const result = await run({ fetch, signal: user.signal });
+
+    expect(result.outcome).toEqual({ kind: 'stopped' });
+    expect(result.retries).toEqual([]);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('blames a missing host permission when the browser blocks the request', async () => {
     const fetch = fakeFetch(() => Promise.reject(new TypeError('Failed to fetch')));
 

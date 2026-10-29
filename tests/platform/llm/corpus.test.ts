@@ -139,6 +139,12 @@ const CASES: Case[] = [
     },
   },
   {
+    row: 'SSE 注释行 / 心跳',
+    name: 'lines that are no SSE field (a vendor header, a blank keep-alive) are skipped (#21)',
+    file: 'vendor-field-lines.sse',
+    expected: { kind: 'done', text: '有厂商字段', requests: 1 },
+  },
+  {
     row: '200 流中途发来错误事件',
     name: 'OpenRouter reports a provider failure after some text, which stays',
     file: 'openrouter-midstream-error.sse',
@@ -192,6 +198,42 @@ const CASES: Case[] = [
       detail: '502 Bad Gateway 502 Bad Gateway nginx',
       requests: 2,
     },
+  },
+  {
+    row: '错误体格式不统一',
+    name: 'a gateway answers 200 with an HTML page: its words, not a network failure (#21)',
+    file: 'gateway-200-html.html',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: Upgrade required Your plan has run out',
+      requests: 1,
+    },
+  },
+  {
+    row: '错误体格式不统一',
+    name: 'a bare JSON error behind a 200, without a line break at the end (#21)',
+    file: 'bare-json-error-200.json',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: quota exceeded',
+      requests: 1,
+    },
+  },
+  {
+    row: '错误体格式不统一',
+    name: 'a bare JSON error behind a 200, with a line break at the end (#21)',
+    file: 'bare-json-error-200-newline.json',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: quota exceeded',
+      requests: 1,
+    },
+  },
+  {
+    row: '200 流中途发来错误事件',
+    name: 'an event named error whose data is a JSON string (#21)',
+    file: 'error-event-string.sse',
+    expected: { kind: 'server', detail: 'Overloaded', text: '' },
   },
   {
     row: '超长上下文',

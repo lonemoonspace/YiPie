@@ -42,6 +42,10 @@ export function interpretEventData(data: string, event?: string): StreamEvent[] 
       { type: 'invalid', message: `The service sent data that is not JSON: ${clip(payload)}` },
     ];
   }
+  // An `event: error` may carry its message as a JSON string, too.
+  if (event === 'error' && typeof chunk === 'string') {
+    return [{ type: 'error', failure: failureOf(chunk) }];
+  }
   if (!isRecord(chunk)) {
     return [{ type: 'invalid', message: `The service sent unexpected data: ${clip(payload)}` }];
   }
@@ -174,9 +178,13 @@ function count(value: unknown): number | null {
  * (`{"type": "rate_limit_error"}`, `{"code": "insufficient_quota"}`).
  */
 function failureOf(error: unknown): StreamFailure {
-  if (typeof error === 'string') return { message: error };
+  // Cut like an error body: a service may send megabytes, and the panel shows it.
+  if (typeof error === 'string') return { message: clip(error, MESSAGE_LIMIT) };
   if (!isRecord(error)) return { message: clip(JSON.stringify(error)) };
-  const message = typeof error.message === 'string' ? error.message : clip(JSON.stringify(error));
+  const message =
+    typeof error.message === 'string'
+      ? clip(error.message, MESSAGE_LIMIT)
+      : clip(JSON.stringify(error));
   const failure: StreamFailure = { message };
   for (const value of [error.code, error.status]) {
     const status = typeof value === 'string' && /^\d{3}$/.test(value) ? Number(value) : value;
@@ -188,6 +196,9 @@ function failureOf(error: unknown): StreamFailure {
   if (type !== undefined) failure.type = type;
   return failure;
 }
+
+/** As long as an error body's message may be (`describeErrorBody`). */
+const MESSAGE_LIMIT = 300;
 
 function clip(text: string, limit = 200): string {
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
