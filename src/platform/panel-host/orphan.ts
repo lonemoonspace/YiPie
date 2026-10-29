@@ -36,20 +36,24 @@ export function isOrphaned(): boolean {
  * Calls `onOrphaned`, once, when this script finds its extension gone. It
  * looks when the page comes back into view or gets the focus, and when the
  * user touches `element`: the moments someone could see a dead panel. Looking
- * reads one property; it wakes nothing.
+ * reads one property; it wakes nothing. Returns what stops the watch.
  */
-export function watchForOrphaning(element: HTMLElement, onOrphaned: () => void): void {
+export function watchForOrphaning(element: HTMLElement, onOrphaned: () => void): () => void {
   const watched: [EventTarget, string][] = [
     [document, 'visibilitychange'],
     [window, 'focus'],
     [element, 'pointerdown'],
   ];
+  const stop = () => {
+    for (const [target, type] of watched) target.removeEventListener(type, check, true);
+  };
   const check = () => {
     if (!isOrphaned()) return;
-    for (const [target, type] of watched) target.removeEventListener(type, check, true);
+    stop();
     onOrphaned();
   };
   for (const [target, type] of watched) target.addEventListener(type, check, true);
+  return stop;
 }
 
 /** Whether `element` is a host of this extension: its tag name and its marker. */

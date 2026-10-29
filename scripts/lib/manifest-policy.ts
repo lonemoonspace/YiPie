@@ -16,6 +16,12 @@ export interface ManifestPolicy {
   present: Record<string, { forbidden: string[] }>;
   /** Top-level keys that must not appear. */
   absent: string[];
+  /**
+   * Every top-level key the manifest may have. Anything else fails, so a key
+   * nobody reviewed (`chrome_url_overrides`, `omnibox`, `devtools_page`…)
+   * cannot slip in.
+   */
+  allowed: string[];
 }
 
 export const MANIFEST_POLICY: ManifestPolicy = {
@@ -53,6 +59,25 @@ export const MANIFEST_POLICY: ManifestPolicy = {
     'externally_connectable',
     'side_panel',
     'declarative_net_request',
+  ],
+  allowed: [
+    // Written by WXT from package.json and the entrypoints.
+    'manifest_version',
+    'name',
+    'description',
+    'version',
+    'background',
+    'options_ui',
+    // Appendix C.
+    'icons',
+    'default_locale',
+    'minimum_chrome_version',
+    'permissions',
+    'optional_host_permissions',
+    'action',
+    'commands',
+    'web_accessible_resources',
+    'content_security_policy',
   ],
 };
 
@@ -94,6 +119,11 @@ export function checkManifest(
 
   for (const key of policy.absent) {
     if (key in manifest) problems.push(`manifest 里不应出现 "${key}"（见附录 C）`);
+  }
+
+  const allowed = new Set([...policy.allowed, ...policy.absent]);
+  for (const key of Object.keys(manifest)) {
+    if (!allowed.has(key)) problems.push(`manifest 里出现了附录 C 没有的 "${key}"`);
   }
 
   return problems;

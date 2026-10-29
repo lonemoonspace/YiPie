@@ -79,4 +79,17 @@ export interface TriggerWire {
 /** What the slot holds: the trigger, and the interface language for the shell around the panel. */
 export interface TriggerSlotWire extends TriggerWire {
   locale: Locale;
+  /**
+   * The page the trigger was on, as the tab's URL said then (`pageKeyOf`):
+   * a single-page app may become another page before the panel mounts, and
+   * a selection belongs to the page it was made on.
+   */
+  pageKey: string | null;
 }
+
+/**
+ * What the panel posts to the page's window when `panel.attach` was refused,
+ * so the host lets the next trigger mount a new panel (#22). It carries
+ * nothing else; the host takes it only from its own frame's window.
+ */
+export const PANEL_ATTACH_FAILED = 'yipie:panel-attach-failed';

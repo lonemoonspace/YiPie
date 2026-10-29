@@ -906,7 +906,7 @@ public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名
 
 ## 附录 C —— 权限与 manifest 清单
 
-`scripts/check-manifest.ts` 以本表为准（清单写在 `scripts/lib/manifest-policy.ts`，与本表同一提交修改）：产物 manifest 里多出或缺少任何一项，CI 都会失败。
+`scripts/check-manifest.ts` 以本表为准（清单写在 `scripts/lib/manifest-policy.ts`，与本表同一提交修改）：产物 manifest 里多出或缺少任何一项，CI 都会失败。顶层键按白名单核对：只允许本表的项与 WXT 固定写入的 `manifest_version`、`name`、`description`、`version`、`background`、`options_ui`，其余任何顶层键（如 `chrome_url_overrides`、`omnibox`、`devtools_page`）都会失败。
 
 | 项                                                                    | 用途                                                              | 去掉会怎样                         | 引入阶段 |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------- | -------- |
@@ -952,6 +952,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 首字节很慢                             | 本地模型冷加载、长 Prompt 预填充、推理模型                                       | 首字节超时与流中空闲超时分开设置，前者默认更宽；首字节超时管到正文的第一个字节，不只是响应头（阶段 4） |
 | `max_tokens` / `temperature` 的兼容性  | OpenAI 推理模型要求 `max_completion_tokens`，且不接受自定义温度                  | 默认都不发送；需要时由用户写进 extraBody                                                              |
 | base URL 写法不一                      | 漏写 `/v1`、多贴了 `/chat/completions`                                           | 去掉末尾的 `/chat/completions` 与斜杠；不自动补 `/v1`（不是所有服务都用它），测试连接失败时给出提示   |
+| 流结束时没有 `[DONE]`                  | 连接被代理提前切断；也有少数服务在最后一帧后直接关连接                           | 有 `finish_reason` 就算完整（`length` 标出「到了长度上限」）；两样都没有时标出「可能不完整」并按已停止存进快照。有意的取舍：宁可在后一种服务上多一条提示，也不把被切断的回答当成完整的（#28） |
 
 每一行的语料（OpenAI、DeepSeek、OpenRouter、Ollama、vLLM 与网关的原样输出）在 `tests/fixtures/sse`，由 `tests/platform/llm/corpus.test.ts` 整块、7 字节分块、CRLF 三种方式送进客户端（§4.5）。
 

@@ -1,0 +1,8 @@
+x-request-id: abc
+   
+data: {"choices":[{"index":0,"delta":{"content":"有厂商字段"}}]}
+
+x-vendor-trace: 1
+
+data: [DONE]
+

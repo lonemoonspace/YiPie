@@ -37,11 +37,25 @@ function budget(
 
 describe('outputReserve', () => {
   it('keeps a quarter of the window for the answer, between 1,024 and 8,192 tokens', () => {
-    expect(outputReserve(2_000)).toBe(1_024);
+    expect(outputReserve(2_048)).toBe(1_024);
     expect(outputReserve(4_096)).toBe(1_024);
     expect(outputReserve(20_000)).toBe(5_000);
     expect(outputReserve(DEFAULT_CONTEXT_WINDOW)).toBe(8_192);
     expect(outputReserve(1_000_000)).toBe(8_192);
+  });
+
+  it('never keeps more than half a small window, so the input still has room (#28)', () => {
+    expect(outputReserve(1_024)).toBe(512);
+    expect(outputReserve(1)).toBe(0);
+    expect(
+      planContent({
+        content: '短',
+        strategy: 'back',
+        contextWindow: 1_024,
+        measure: (content) => 10 + content.length,
+        occurrences: 1,
+      }),
+    ).toMatchObject({ kind: 'fits' });
   });
 });
 

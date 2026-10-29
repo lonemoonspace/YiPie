@@ -51,6 +51,8 @@ export const SHELL_CSS = `
   display: flex;
   align-items: center;
   gap: 7px;
+  /* The width includes the padding: the panel leaves --shell-start for it (#29). */
+  box-sizing: border-box;
   width: 80px;
   height: 100%;
   padding-left: 12px;

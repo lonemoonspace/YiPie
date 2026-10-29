@@ -1,5 +1,6 @@
 import {
   MAX_MENU_MODELS,
+  renamedMenuModels,
   RESERVED_BODY_KEYS,
   isForbiddenHeaderName,
   type ModelConfig,
@@ -158,11 +159,8 @@ export function parseMenuModels(text: string): string[] {
  * the new name, or never had the old one, stays as the user wrote it.
  */
 export function followModelRename(previous: string, form: ParsedModelForm): ParsedModelForm {
-  const { model, menuModels } = form;
-  if (model === previous || !menuModels.includes(previous) || menuModels.includes(model)) {
-    return form;
-  }
-  return { ...form, menuModels: menuModels.map((name) => (name === previous ? model : name)) };
+  const menuModels = renamedMenuModels(form.menuModels, previous, form.model);
+  return menuModels === form.menuModels ? form : { ...form, menuModels };
 }
 
 /** `text` with `name` on a new last line, unless a line already has it. */
@@ -192,6 +190,12 @@ function checkHeaders(
   const bad = Object.entries(headers).find(([, value]) => typeof value !== 'string');
   if (bad) {
     errors.headers = t('model.error.headers', { name: bad[0] });
+    return null;
+  }
+  // A line break would make the browser refuse the request before it leaves (#28).
+  const broken = Object.entries(headers).find(([, value]) => /[\r\n\0]/.test(String(value)));
+  if (broken) {
+    errors.headers = t('model.error.headerValue', { name: broken[0] });
     return null;
   }
   const forbidden = Object.keys(headers).find(isForbiddenHeaderName);

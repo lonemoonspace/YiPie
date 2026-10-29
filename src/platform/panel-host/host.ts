@@ -1,7 +1,8 @@
 import { browser } from 'wxt/browser';
-import type { PanelMode } from '@/contract/rpc-wire';
+import { PANEL_ATTACH_FAILED, type PanelMode } from '@/contract/rpc-wire';
 import { setLocale, t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
+import { clearQuoteHighlight } from '@/platform/locate/scroll-to-text';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
 import {
@@ -35,7 +36,8 @@ const LEFTOVER_LIMIT = 10;
 const INSTANCE_KEY = Symbol.for('yipie.panel-host');
 
 interface PanelHost {
-  open(mode: PanelMode): void;
+  /** `triggeredOn`: the page the trigger was on, as the background saw it; null when unknown. */
+  open(mode: PanelMode, triggeredOn: string | null): void;
 }
 
 /** The host, and the runtime of the extension that created it. */
@@ -50,7 +52,7 @@ interface Instance {
  * Anything else is new work, so a new panel replaces the open one: a summary
  * of the selection, or the page while the selection's panel is open.
  */
-export function openPanelHost(mode: PanelMode = 'page'): void {
+export function openPanelHost(mode: PanelMode = 'page', triggeredOn: string | null = null): void {
   const scope = globalThis as unknown as Record<symbol, Instance | undefined>;
   let instance = scope[INSTANCE_KEY];
   // Left by an older version of the extension, should it share this world:
@@ -59,7 +61,7 @@ export function openPanelHost(mode: PanelMode = 'page'): void {
     instance = { runtime: browser.runtime, host: createPanelHost() };
     scope[INSTANCE_KEY] = instance;
   }
-  instance.host.open(mode);
+  instance.host.open(mode, triggeredOn);
 }
 
 function createPanelHost(): PanelHost {
@@ -111,8 +113,20 @@ function createPanelHost(): PanelHost {
   shadow.append(frame);
 
   let open = false;
+  /** The latest mount could not attach: the next trigger mounts again. */
+  let failed = false;
+  /** The frame of the latest mount, the only window whose word about attaching counts. */
+  let mounted: HTMLIFrameElement | null = null;
+  /** The panel in our frame could not attach (#22): its own page says so. */
+  const onMessage = (event: MessageEvent) => {
+    if (event.data !== PANEL_ATTACH_FAILED) return;
+    if (mounted === null || event.source !== mounted.contentWindow) return;
+    failed = true;
+  };
   /** What the mounted panel works on, as the latest trigger asked. */
   let mode: PanelMode = 'page';
+  /** The page the latest trigger was on. */
+  let trigger: string | null = null;
   /** Counts mounts: only the latest one puts a frame in. */
   let mounts = 0;
   let remounts: number[] = [];
@@ -146,6 +160,8 @@ function createPanelHost(): PanelHost {
   /** A new panel document needs a new nonce: the old one was presented already. */
   async function mountPanel(): Promise<void> {
     const mount = ++mounts;
+    failed = false;
+    mounted = null;
     body.replaceChildren();
     page = null;
     try {
@@ -159,6 +175,12 @@ function createPanelHost(): PanelHost {
       // The document may have become another page while we asked.
       page = pageKey;
       if (closeIfAnotherPage()) return;
+      // Or before: a selection is about the page it was made on, and the
+      // panel would bind it to this one (#29).
+      if (mode === 'selection' && trigger !== null && trigger !== pageKey) {
+        hide();
+        return;
+      }
       const iframe = document.createElement('iframe');
       // Lets the panel load in pages that send Cross-Origin-Embedder-Policy;
       // set before `src` (docs/development-plan.md appendix F).
@@ -171,6 +193,7 @@ function createPanelHost(): PanelHost {
       iframe.title = t('app.name');
       iframe.src = `${browser.runtime.getURL(PANEL_PAGE)}#${nonce}`;
       body.replaceChildren(iframe);
+      mounted = iframe;
     } catch (error) {
       // The extension was updated or reloaded: a new injection takes over.
       if (isOrphaned()) {
@@ -179,6 +202,9 @@ function createPanelHost(): PanelHost {
       }
       if (mount !== mounts) return;
       logger.warn('Could not mount the panel:', error);
+      // Fail closed means the next request tries again (AGENTS.md): a trigger
+      // on a panel that never attached mounts afresh instead of being ignored.
+      failed = true;
       const message = node('p', { class: 'message', role: 'alert' });
       message.textContent = t('panel.attachFailed');
       body.replaceChildren(message);
@@ -193,6 +219,28 @@ function createPanelHost(): PanelHost {
     // Watch for the page removing our host, or replacing <html> altogether.
     observer.observe(document, { childList: true });
     observer.observe(root, { childList: true });
+    window.addEventListener('resize', keepInView);
+    window.addEventListener('message', onMessage);
+    // Once the extension is updated or reloaded, this host is dead: it goes
+    // as soon as someone could see it (orphan.ts). Watched while shown only.
+    unwatch ??= watchForOrphaning(element, hide);
+    keepInView();
+  }
+
+  let unwatch: (() => void) | null = null;
+
+  /**
+   * A panel dragged near an edge stays reachable when the window shrinks or
+   * the page zooms: its title bar is kept on screen, as dragging keeps it (#29).
+   */
+  function keepInView(): void {
+    if (element.style.getPropertyValue('left') === '') return;
+    const at = element.getBoundingClientRect();
+    const left = clamp(at.left, 0, window.innerWidth - element.offsetWidth);
+    const top = clamp(at.top, 0, window.innerHeight - brand.offsetHeight);
+    if (left !== at.left || top !== at.top) {
+      pin(element, { left: `${left}px`, top: `${top}px`, right: 'auto' });
+    }
   }
 
   const observer = new MutationObserver(() => {
@@ -226,19 +274,24 @@ function createPanelHost(): PanelHost {
     // Removing the frame unloads the panel document, which ends its request.
     body.replaceChildren();
     element.remove();
+    window.removeEventListener('resize', keepInView);
+    window.removeEventListener('message', onMessage);
+    mounted = null;
+    unwatch?.();
+    unwatch = null;
+    // A quote the panel pointed at is no longer explained by anything.
+    clearQuoteHighlight();
   }
 
   close.addEventListener('click', hide);
   makeDraggable(element, brand, frame, close);
-  // Once the extension is updated or reloaded, this host is dead: it goes
-  // as soon as someone could see it (orphan.ts).
-  watchForOrphaning(element, hide);
 
   return {
-    open(requested) {
-      if (open && requested === 'page' && mode === 'page') return;
+    open(requested, triggeredOn) {
+      if (open && !failed && requested === 'page' && mode === 'page') return;
       if (open) hide();
       mode = requested;
+      trigger = triggeredOn;
       open = true;
       place();
       void mountPanel();

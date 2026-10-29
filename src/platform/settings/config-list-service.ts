@@ -141,10 +141,20 @@ export function createConfigListService<T extends { id: string }, Draft, Patch e
     let selected = stored;
     let quarantined = written.quarantined;
     if (pin) {
-      const saved = await selection.updateUnqueued((current) => ({
-        ...current,
-        [field]: next.id,
-      }));
+      let saved: Awaited<ReturnType<typeof selection.updateUnqueued>>;
+      try {
+        saved = await selection.updateUnqueued((current) => ({
+          ...current,
+          [field]: next.id,
+        }));
+      } catch (error) {
+        // The list goes back as it was, so the change fails as a whole
+        // instead of moving the default behind the user's back (#30).
+        await rows
+          .updateUnqueued(() => before)
+          .catch((undo: unknown) => logger.error(`Could not undo a ${options.what} change:`, undo));
+        throw error;
+      }
       selected = next.id;
       quarantined ||= saved.quarantined;
     }

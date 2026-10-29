@@ -66,6 +66,8 @@ interface Case {
     detail?: string;
     /** Requests sent, the automatic retry included. */
     requests?: number;
+    /** How a done answer ended; null for a whole one. */
+    ending?: 'length' | 'cut-off' | null;
   };
 }
 
@@ -139,6 +141,12 @@ const CASES: Case[] = [
     },
   },
   {
+    row: 'SSE 注释行 / 心跳',
+    name: 'lines that are no SSE field (a vendor header, a blank keep-alive) are skipped (#21)',
+    file: 'vendor-field-lines.sse',
+    expected: { kind: 'done', text: '有厂商字段', requests: 1 },
+  },
+  {
     row: '200 流中途发来错误事件',
     name: 'OpenRouter reports a provider failure after some text, which stays',
     file: 'openrouter-midstream-error.sse',
@@ -194,6 +202,54 @@ const CASES: Case[] = [
     },
   },
   {
+    row: '错误体格式不统一',
+    name: 'a gateway answers 200 with an HTML page: its words, not a network failure (#21)',
+    file: 'gateway-200-html.html',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: Upgrade required Your plan has run out',
+      requests: 1,
+    },
+  },
+  {
+    row: '错误体格式不统一',
+    name: 'a bare JSON error behind a 200, without a line break at the end (#21)',
+    file: 'bare-json-error-200.json',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: quota exceeded',
+      requests: 1,
+    },
+  },
+  {
+    row: '错误体格式不统一',
+    name: 'a bare JSON error behind a 200, with a line break at the end (#21)',
+    file: 'bare-json-error-200-newline.json',
+    expected: {
+      kind: 'unknown',
+      detail: 'The service did not send a stream: quota exceeded',
+      requests: 1,
+    },
+  },
+  {
+    row: '200 流中途发来错误事件',
+    name: 'an event named error whose data is a JSON string (#21)',
+    file: 'error-event-string.sse',
+    expected: { kind: 'server', detail: 'Overloaded', text: '' },
+  },
+  {
+    row: '流结束时没有 `[DONE]`',
+    name: 'a stream closed after its last chunk, with no [DONE] and no finish reason, may be cut off',
+    file: 'no-done-no-finish.sse',
+    expected: { kind: 'done', text: '说到一半', ending: 'cut-off', requests: 1 },
+  },
+  {
+    row: '流结束时没有 `[DONE]`',
+    name: 'a finish reason without [DONE] is a whole answer',
+    file: 'finish-no-done.sse',
+    expected: { kind: 'done', text: '完整的回答', ending: null },
+  },
+  {
     row: '超长上下文',
     name: 'OpenAI refuses with context_length_exceeded',
     file: 'openai-context-length.json',
@@ -242,6 +298,7 @@ const ROWS = [
   '首字节很慢',
   '`max_tokens` / `temperature` 的兼容性',
   'base URL 写法不一',
+  '流结束时没有 `[DONE]`',
 ];
 
 /**
@@ -297,6 +354,9 @@ describe('the compatibility corpus (appendix D)', () => {
         expect(outcome.kind).toBe('done');
         if (expected.usage !== undefined && outcome.kind === 'done') {
           expect(outcome.usage).toEqual(expected.usage);
+        }
+        if (expected.ending !== undefined && outcome.kind === 'done') {
+          expect(outcome.ending ?? null).toBe(expected.ending);
         }
       } else {
         expect(outcome).toMatchObject({ kind: 'error', error: { kind: expected.kind } });

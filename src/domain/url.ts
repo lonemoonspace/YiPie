@@ -99,3 +99,19 @@ export function isLocalOrigin(origin: string): boolean {
     host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127\./.test(host)
   );
 }
+
+/**
+ * `text` with every web address in it cut to its origin: for logging a
+ * browser message that quotes a page URL, whose path and query may carry a
+ * token (AGENTS.md, credentials and logs).
+ */
+export function withOriginsOnly(text: string): string {
+  return text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*/gi, (address) => {
+    try {
+      const { origin } = new URL(address);
+      return origin === 'null' ? '<url>' : origin;
+    } catch {
+      return '<url>';
+    }
+  });
+}

@@ -64,7 +64,14 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
     return found ? nameOf(found) : '';
   };
   // With nothing in the list yet, the form for a new item is all there is.
-  const adding = editing.kind === 'new' || items.length === 0;
+  const adding = editing.kind === 'new' || (items.length === 0 && editing.kind === 'closed');
+  // The row being edited went away elsewhere (another tab, an import). Its
+  // row stays, last in the list and with nothing to do but the editor: the
+  // same row keeps the same editor mounted, so what the user typed stays
+  // there to copy (#30). Moving the editor anywhere else would remount it.
+  const orphan =
+    editing.kind === 'edit' && !items.some((item) => item.id === editing.id) ? editing : null;
+  const rows = orphan === null ? items : [...items, orphan.original];
 
   const remove = (item: T) => {
     const name = nameOf(item);
@@ -94,20 +101,21 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
   return (
     <>
       <ListNotices view={view} />
-      {items.length > 0 ? (
+      {rows.length > 0 ? (
         <ul className="items" aria-label={t(`${kind}.section`)}>
-          {items.map((item, index) => {
+          {rows.map((item, index) => {
             const name = nameOf(item);
             const open = editing.kind === 'edit' && editing.id === item.id ? editing : null;
+            const gone = orphan !== null && item.id === orphan.id;
             return (
               <ItemRow
                 key={item.id}
                 name={name}
                 details={props.details(item)}
-                isDefault={item.id === view.defaultId}
+                isDefault={!gone && item.id === view.defaultId}
                 first={index === 0}
-                last={index === items.length - 1}
-                locked={locked}
+                last={index === rows.length - 1}
+                locked={locked || gone}
                 badges={props.badges?.(item)}
                 actions={props.actions?.(item)}
                 onSetDefault={() =>
@@ -129,6 +137,11 @@ export function EditableList<T extends { id: string }>(props: EditableListProps<
                 }
                 onRemove={() => remove(item)}
               >
+                {gone ? (
+                  <p className="note" role="alert">
+                    {t('list.editingGone')}
+                  </p>
+                ) : null}
                 {open
                   ? props.editor(open.original, { focusOnOpen: true, close, cancel: close })
                   : null}

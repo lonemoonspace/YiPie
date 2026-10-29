@@ -380,6 +380,7 @@ const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) 
       {isAnswered(turn) ? (
         <div className="meta">
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
+          {turn.ending !== undefined ? <span>{t(`panel.ending.${turn.ending}`)}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
           <CopyButton
             icon
@@ -499,6 +500,9 @@ function AskForm({ enabled, ask }: { enabled: boolean; ask: Conversation['ask'] 
         onKeyDown={(event) => {
           // Enter while an input method is composing picks a candidate.
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+          // While an answer comes, Enter sends nothing: it breaks the line
+          // rather than being swallowed (#29).
+          if (!enabled) return;
           event.preventDefault();
           send();
         }}

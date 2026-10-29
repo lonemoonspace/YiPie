@@ -8,6 +8,7 @@ const BLOCKS = new Set([
   'ARTICLE',
   'ASIDE',
   'BLOCKQUOTE',
+  'CAPTION',
   'DD',
   'DIV',
   'DL',
@@ -35,9 +36,12 @@ const BLOCKS = new Set([
   'UL',
 ]);
 
+const CELLS = new Set(['TD', 'TH']);
+
 /**
- * Text with line breaks between blocks, headings marked with `#` and list
- * items with `- `, so the model still sees the document's structure.
+ * Text with line breaks between blocks, headings marked with `#`, list
+ * items with `- ` and table cells separated by ` | `, so the model still
+ * sees the document's structure and which value sits under which header.
  * Preformatted text keeps its whitespace.
  */
 export function textOf(root: Element): string {
@@ -54,6 +58,14 @@ export function textOf(root: Element): string {
         parts.push('\n');
       } else if (tag === 'PRE') {
         parts.push('\n\n', child.textContent ?? '', '\n\n');
+      } else if (CELLS.has(tag)) {
+        if (
+          child.previousElementSibling !== null &&
+          CELLS.has(child.previousElementSibling.tagName)
+        ) {
+          parts.push(' | ');
+        }
+        walk(child);
       } else if (BLOCKS.has(tag)) {
         parts.push('\n\n');
         if (/^H[1-6]$/.test(tag)) parts.push(`${'#'.repeat(Number(tag[1]))} `);

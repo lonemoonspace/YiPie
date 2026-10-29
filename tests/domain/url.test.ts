@@ -3,6 +3,7 @@ import {
   chatCompletionsURL,
   isInjectableURL,
   isLocalOrigin,
+  withOriginsOnly,
   normalizeBaseURL,
   originPattern,
 } from '@/domain/url';
@@ -100,6 +101,20 @@ describe('isInjectableURL', () => {
     'https://example.com/files/Report.PDF?download=1',
   ])('refuses %s', (url) => {
     expect(isInjectableURL(url)).toBe(false);
+  });
+});
+
+describe('withOriginsOnly', () => {
+  it('cuts each address in a message to its origin', () => {
+    expect(
+      withOriginsOnly(
+        'Cannot access contents of url "https://site.example/path?token=abc". Extension manifest must request permission',
+      ),
+    ).toBe(
+      'Cannot access contents of url "https://site.example". Extension manifest must request permission',
+    );
+    expect(withOriginsOnly('at file:///home/u/secret.html and data:x')).toBe('at <url> and data:x');
+    expect(withOriginsOnly('no address here')).toBe('no address here');
   });
 });
 

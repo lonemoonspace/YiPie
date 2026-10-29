@@ -33,6 +33,14 @@ describe('checkManifest', () => {
     expect(checkManifest(valid)).toEqual([]);
   });
 
+  it('catches a top-level key appendix C does not list', () => {
+    for (const key of ['chrome_url_overrides', 'omnibox', 'devtools_page', 'update_url']) {
+      const problems = checkManifest({ ...valid, [key]: {} });
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(key);
+    }
+  });
+
   it('catches an extra permission', () => {
     const problems = checkManifest({ ...valid, permissions: [...valid.permissions, 'tabs'] });
     expect(problems).toHaveLength(1);

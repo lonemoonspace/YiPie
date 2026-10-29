@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { QUOTE_HIGHLIGHT, locateQuote } from '@/platform/locate/scroll-to-text';
+import {
+  QUOTE_HIGHLIGHT,
+  clearQuoteHighlight,
+  locateQuote,
+} from '@/platform/locate/scroll-to-text';
 
 function pageWith(body: string): Document {
   const doc = document.implementation.createHTMLDocument('页面');
@@ -54,6 +58,16 @@ describe('locateQuote', () => {
     expect(registry.has(QUOTE_HIGHLIGHT)).toBe(false);
   });
 
+  it('takes the highlight off when asked, as the panel closes (#24)', () => {
+    const doc = pageWith('<p>一瞥是一个浏览器扩展。</p>');
+    const { registry, api } = fakeHighlights();
+    locateQuote(doc, '浏览器扩展', api);
+
+    clearQuoteHighlight(api);
+
+    expect(registry.has(QUOTE_HIGHLIGHT)).toBe(false);
+  });
+
   it('scrolls the passage into view', () => {
     const doc = pageWith('<p>前文</p><p id="target">要找的这一句</p>');
     const scroll = vi.fn();
@@ -69,6 +83,31 @@ describe('locateQuote', () => {
       '<script>var a = "隐藏的话"</script><textarea>隐藏的话</textarea><yipie-panel-0a1b2c3d>隐藏的话</yipie-panel-0a1b2c3d>',
     );
     expect(locateQuote(doc, '隐藏的话', fakeHighlights().api)).toBe(false);
+  });
+
+  it('finds a passage in an open shadow root, slotted text included, as extraction reads it (#24)', () => {
+    const doc = pageWith('<div id="host"><span>插进来的话</span></div><p>外面</p>');
+    const host = doc.getElementById('host') as HTMLElement;
+    host.attachShadow({ mode: 'open' }).innerHTML = '<p>组件里的正文</p><slot></slot>';
+    const { registry, api } = fakeHighlights();
+
+    expect(locateQuote(doc, '组件里的正文', api)).toBe(true);
+    expect(registry.get(QUOTE_HIGHLIGHT)?.toString()).toBe('组件里的正文');
+    expect(locateQuote(doc, '插进来的话', api)).toBe(true);
+  });
+
+  it('finds a passage in a same-origin frame (#24)', () => {
+    const doc = document;
+    doc.body.innerHTML = '<p>外面</p><iframe></iframe>';
+    const frame = doc.querySelector('iframe') as HTMLIFrameElement;
+    const inner = frame.contentDocument as Document;
+    inner.body.innerHTML = '<p>框架里的正文</p>';
+    const scroll = vi.fn();
+    (inner.querySelector('p') as HTMLElement).scrollIntoView = scroll;
+
+    expect(locateQuote(doc, '框架里的正文', fakeHighlights().api)).toBe(true);
+    expect(scroll).toHaveBeenCalled();
+    doc.body.innerHTML = '';
   });
 
   it('still finds the passage where the browser has no highlight API', () => {

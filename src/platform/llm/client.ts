@@ -1,7 +1,8 @@
-import { EventSourceParserStream } from 'eventsource-parser/stream';
+import { EventSourceParserStream, ParseError } from 'eventsource-parser/stream';
 import type { ModelConfig } from '@/contract/model-config';
 import {
   automaticRetryWait,
+  describeErrorBody,
   fromFetchFailure,
   fromHttpStatus,
   fromProtocolError,
@@ -19,8 +20,17 @@ import {
 } from '@/domain/llm/stream';
 import { hasOriginAccess } from '@/platform/permissions/origin-access';
 
+/**
+ * How a finished answer ended, when not as a whole: cut at the token limit
+ * (`finish_reason: length`), or the stream closed without `[DONE]` and
+ * without a finish reason, so it may have been cut off (#28).
+ */
+export type ChatEnding = 'length' | 'cut-off';
+
 export type ChatOutcome =
-  { kind: 'done'; usage: Usage | null } | { kind: 'stopped' } | { kind: 'error'; error: LlmError };
+  | { kind: 'done'; usage: Usage | null; ending?: ChatEnding }
+  | { kind: 'stopped' }
+  | { kind: 'error'; error: LlmError };
 
 /** The parts of a model configuration a request uses. */
 export type ChatConfig = Pick<
@@ -98,7 +108,10 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
     if (outcome.kind !== 'error' || started) return outcome;
 
     const { error } = outcome;
-    if (error.streamOptionsRejected === true && config.streamUsage && !downgraded) {
+    // `stream_options` the user put in the extra body is theirs: without ours
+    // the request would go out the same, and be refused the same.
+    const ours = config.streamUsage && !Object.hasOwn(config.extraBody, 'stream_options');
+    if (error.streamOptionsRejected === true && ours && !downgraded) {
       downgraded = true;
       config = { ...config, streamUsage: false };
       continue;
@@ -169,7 +182,12 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
 
     if (!response.ok) {
       const body = await readLimited(response, ERROR_BODY_LIMIT, controller.signal);
-      return clean(fromHttpStatus(response.status, body, response.headers.get('Retry-After')));
+      // Stopped while the body was read: not an error, and not retried.
+      if (signal.aborted) return { kind: 'stopped' };
+      // Classified by the body as sent; the detail shown is cut to length
+      // from the body without credentials, so none is cut in half.
+      const error = fromHttpStatus(response.status, body, response.headers.get('Retry-After'));
+      return clean({ ...error, detail: describeErrorBody(redact(body, secrets)) });
     }
     options.onAccepted();
     if (response.body === null) return clean(fromProtocolError('The response has no body.'));
@@ -181,20 +199,54 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
     // keeps a character split across chunks in one piece.
     const idle = options.idleTimeout ?? DEFAULT_IDLE_TIMEOUT;
     const decoder = new TextDecoder();
+    // The start of the body, for one that turns out not to be SSE at all.
+    let head = '';
+    const keep = (text: string) => {
+      if (head.length < ERROR_BODY_LIMIT) head += text.slice(0, ERROR_BODY_LIMIT - head.length);
+    };
     const decode = new TransformStream<Uint8Array<ArrayBuffer>, string>({
       transform(chunk, sink) {
         watch(idle);
-        sink.enqueue(decoder.decode(chunk, { stream: true }));
+        const text = decoder.decode(chunk, { stream: true });
+        keep(text);
+        sink.enqueue(text);
       },
       flush(sink) {
         const rest = decoder.decode();
+        keep(rest);
         if (rest !== '') sink.enqueue(rest);
       },
     });
+    // A line that is no SSE field (a vendor's `x-request-id:`, a blank
+    // keep-alive) is skipped, as the SSE spec says, rather than ending the
+    // stream as a network failure (#21). A body with nothing but such lines
+    // is told apart at its end.
     const reader = response.body
       .pipeThrough(decode)
-      .pipeThrough(new EventSourceParserStream({ onError: 'terminate' }))
+      .pipeThrough(new EventSourceParserStream({ onError: () => undefined }))
       .getReader();
+    let events = 0;
+    let usage: Usage | null = null;
+    let reason: string | null = null;
+    const finished = (complete: boolean): ChatOutcome => {
+      const ending: ChatEnding | null =
+        reason === 'length' ? 'length' : complete || reason !== null ? null : 'cut-off';
+      return ending === null ? { kind: 'done', usage } : { kind: 'done', usage, ending };
+    };
+    /**
+     * The stream ended without one event. Nothing but comments is an empty
+     * answer; anything else (an HTML error page, a bare JSON error behind a
+     * 200) is the service's words, shown as they are and not retried.
+     */
+    const ended = (): ChatOutcome => {
+      const stray = head
+        .split(/\r\n|\r|\n/)
+        .some((line) => line.trim() !== '' && !line.startsWith(':'));
+      if (events > 0) return finished(false);
+      if (!stray) return { kind: 'done', usage };
+      const detail = describeErrorBody(redact(head, secrets));
+      return clean(fromProtocolError(`The service did not send a stream: ${detail}`));
+    };
     // Aborting `fetch` should error the body too; racing the signal makes a
     // stop or a timeout take effect even where a body does not cooperate.
     const aborted = new Promise<never>((_, reject) => {
@@ -210,21 +262,32 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
       if (reasoning !== '') options.onReasoning?.(reasoning);
       if (answer !== '') options.onText(answer);
     };
-    let usage: Usage | null = null;
     try {
       for (;;) {
         const { done, value } = await Promise.race([reader.read(), aborted]);
-        if (done) return { kind: 'done', usage };
-        for (const event of interpretEventData(value.data, value.event)) {
+        if (done) return ended();
+        events += 1;
+        let interpreted = interpretEventData(value.data, value.event);
+        // A failure's words are cut to length: credentials go first, so none
+        // is cut in half (#28).
+        if (interpreted.some((event) => event.type === 'error' || event.type === 'invalid')) {
+          interpreted = interpretEventData(redact(value.data, secrets), value.event);
+        }
+        for (const event of interpreted) {
           if (event.type === 'content') deliver(think.push(event.text));
           else if (event.type === 'reasoning') options.onReasoning?.(event.text);
           else if (event.type === 'usage') usage = event.usage;
+          else if (event.type === 'finish') reason = event.reason;
           else if (event.type === 'error') return clean(fromStreamError(event.failure));
           else if (event.type === 'invalid') return clean(fromProtocolError(event.message));
-          else return { kind: 'done', usage };
+          else return finished(true);
         }
       }
     } catch (error) {
+      // Our own parser gave up (an endless line): the data is at fault, not the network.
+      if (!signal.aborted && error instanceof ParseError) {
+        return clean(fromProtocolError(error.message));
+      }
       return await failed(error);
     } finally {
       // What the splitter still holds arrived too, however the stream ended.

@@ -70,6 +70,8 @@ export const pages = {
   'list.cancel': 'Cancel',
   'list.working': 'Working…',
   'list.saved': 'Saved',
+  'list.editingGone':
+    'The item you are editing was removed elsewhere, so it cannot be saved. Copy what you typed if you need it.',
   'list.madeDefault': '“{name}” is now the default',
   'list.movedUp': 'Moved “{name}” up',
   'list.movedDown': 'Moved “{name}” down',
@@ -131,6 +133,7 @@ export const pages = {
   'model.error.model': 'Enter a model name',
   'model.error.json': '{field} is not a valid JSON object',
   'model.error.headers': 'Header values must be strings: {name}',
+  'model.error.headerValue': 'Header values cannot contain line breaks: {name}',
   'model.error.headerForbidden':
     'Browsers do not let extensions set this header, so it would not be sent: {name}',
   'model.error.menuModels': 'At most {max} models to switch between',
@@ -299,6 +302,8 @@ export const pages = {
   'panel.copyPage': 'Copy text',
   'panel.copyPage.title': 'Copy the text the extension read from this page',
   'panel.stoppedMark': 'Stopped',
+  'panel.ending.length': 'Cut off at the length limit',
+  'panel.ending.cut-off': 'The connection ended early; the answer may be incomplete',
   'panel.usage.input': 'in {count}',
   'panel.usage.output': 'out {count}',
   'panel.usage.total': 'total {count}',

@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from 'react';
 import { GENERAL_SETTINGS_KEY } from '@/contract/general-settings';
-import type { Locale } from '@/contract/rpc-wire';
+import { PANEL_ATTACH_FAILED, type Locale } from '@/contract/rpc-wire';
 import { locale as currentLocale } from '@/domain/i18n';
 import { applyLocale } from '@/features/i18n/locale';
 import { applyFontSize, applyTheme } from '@/features/theme/apply-theme';
@@ -97,7 +97,11 @@ export function usePanel(): PanelControls {
         void conversation.open(mode);
       },
       () => {
-        if (active) dispatch({ type: 'failed', problem: { kind: 'attach' } });
+        if (!active) return;
+        dispatch({ type: 'failed', problem: { kind: 'attach' } });
+        // The host would take another trigger for this panel and do nothing;
+        // told, it mounts a new one instead (#22).
+        window.parent.postMessage(PANEL_ATTACH_FAILED, '*');
       },
     );
     return () => {

@@ -83,6 +83,14 @@ describe('textOf', () => {
       '<p>甲<br>乙</p><pre>  indented\n    code</pre><p>丙 <strong>丁</strong></p>';
     expect(tidy(textOf(container))).toBe('甲\n乙\n\nindented\ncode\n\n丙 丁');
   });
+
+  it('separates table cells so values stay under their headers', () => {
+    const container = document.createElement('div');
+    container.innerHTML =
+      '<table><caption>名单</caption><tr><th>姓名</th><th>年龄</th></tr>' +
+      '<tr><td>张三</td><td>30</td></tr><tr><td>李四</td><td></td></tr></table>';
+    expect(tidy(textOf(container))).toBe('名单\n\n姓名 | 年龄\n\n张三 | 30\n\n李四 |');
+  });
 });
 
 describe('tidy', () => {

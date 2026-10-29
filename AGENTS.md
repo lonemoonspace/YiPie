@@ -64,7 +64,7 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 - **加字段**：给默认值，不升版本（schema 用 `z.looseObject`，未知字段原样保留）。**改名、删字段、改语义**：升版本，在 `RecordDefinition.upgrade` 里写纯函数升级，并补幂等测试。
 - patch schema 逐字段 `.optional()`，不要从存储 schema `.partial()` 派生：那样会带上默认值，保存一个字段就会静默重置其它字段。编辑表单只发送改过的字段（`domain/patch.ts` 的 `changedFields`），别的标签页同时改的字段不会被改回去。
 - **列表记录**用 `createListRepo`（`platform/storage/list-repo.ts`）：一行通不过 schema、或者 id 与前面的行重复，就放进 `unrecognized`，不参与业务、界面不显示，写回时原样放在已识别的行之后。只有整个值不是数组才算 invalid。
-- 设置页的列表（`useConfigList`）监听自己的存储键，别处（导入、别的标签页）改了就重读；编辑表单从打开时的那一版取值并据此算改动（`editable-list.tsx` 的 `original`），列表重读不会把别处的改动当成用户的修改发回去。
+- 设置页的列表（`useConfigList`）监听自己的存储键与默认项 `local:selection`，别处（导入、别的标签页）改了就重读；编辑表单从打开时的那一版取值并据此算改动（`editable-list.tsx` 的 `original`），列表重读不会把别处的改动当成用户的修改发回去。
 - **几条记录一起变**（列表与默认项）时，在一个 `queue(...)` 任务里依次调用各自的 `updateUnqueued`。在队列任务之外调用它，写入会交错、丢更新。
 - **删除整条记录**用 repo 的 `removeUnqueued`，只给扩展按设计管理寿命的记录（对话快照：被驱逐、随标签页关闭而删除）；用户自己的数据只由用户的显式操作删除。
 - **对话快照**（`platform/snapshot/store.ts`，`storage.session`）：每段对话一个键 `session:snapshot:<id>`，另有索引 `session:snapshots`：条目记下这一页的对话在哪个键、最后存下的那次保存来自哪个面板文档、序号多少，另有待删的键（`garbage`）。保存不碰它要替换的东西：先把新 id 记进待删、再写新键，然后一次索引写入把条目指向新键、把旧键和被驱逐的键记为待删，最后才删除。id 不复用。这样任何一步失败或 SW 停下，读到的都是保存前或保存后的完整状态，存储里的每个键都在索引里，下一次保存先清掉待删的键。改这里的写入顺序时，`store.test.ts` 里逐个写入点失败 / 停下的测试必须仍然通过。快照只放回答与追问，不放正文、Prompt 和任何凭据。`storage.session` 随扩展更新清空，这里的格式变了不需要升级函数。

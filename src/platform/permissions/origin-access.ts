@@ -52,7 +52,13 @@ export function hasOriginAccess(
   baseURL: string,
   permissions: PermissionsLike = browser.permissions,
 ): Promise<boolean> {
-  return hasPatternAccess(originPattern(baseURL), permissions);
+  // Rejects when the browser cannot say: a failed request is then explained
+  // as a network failure, not as one the browser blocked (#28).
+  const pattern = originPattern(baseURL);
+  return permissions.contains({ origins: [pattern] }).catch((error: unknown) => {
+    logger.warn('Could not check access to', pattern, error);
+    throw error;
+  });
 }
 
 /** Whether we hold access to an origin pattern (`originPattern`). */
