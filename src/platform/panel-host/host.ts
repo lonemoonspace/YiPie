@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import type { PanelMode } from '@/contract/rpc-wire';
 import { setLocale, t } from '@/domain/i18n/content';
 import { pageKeyOf } from '@/domain/page-key';
+import { clearQuoteHighlight } from '@/platform/locate/scroll-to-text';
 import { createLogger } from '@/platform/logger';
 import { callRpcLite } from '@/platform/rpc/lite-client';
 import {
@@ -111,6 +112,8 @@ function createPanelHost(): PanelHost {
   shadow.append(frame);
 
   let open = false;
+  /** The latest mount could not attach: the next trigger mounts again. */
+  let failed = false;
   /** What the mounted panel works on, as the latest trigger asked. */
   let mode: PanelMode = 'page';
   /** Counts mounts: only the latest one puts a frame in. */
@@ -146,6 +149,7 @@ function createPanelHost(): PanelHost {
   /** A new panel document needs a new nonce: the old one was presented already. */
   async function mountPanel(): Promise<void> {
     const mount = ++mounts;
+    failed = false;
     body.replaceChildren();
     page = null;
     try {
@@ -179,6 +183,9 @@ function createPanelHost(): PanelHost {
       }
       if (mount !== mounts) return;
       logger.warn('Could not mount the panel:', error);
+      // Fail closed means the next request tries again (AGENTS.md): a trigger
+      // on a panel that never attached mounts afresh instead of being ignored.
+      failed = true;
       const message = node('p', { class: 'message', role: 'alert' });
       message.textContent = t('panel.attachFailed');
       body.replaceChildren(message);
@@ -226,6 +233,8 @@ function createPanelHost(): PanelHost {
     // Removing the frame unloads the panel document, which ends its request.
     body.replaceChildren();
     element.remove();
+    // A quote the panel pointed at is no longer explained by anything.
+    clearQuoteHighlight();
   }
 
   close.addEventListener('click', hide);
@@ -236,7 +245,7 @@ function createPanelHost(): PanelHost {
 
   return {
     open(requested) {
-      if (open && requested === 'page' && mode === 'page') return;
+      if (open && !failed && requested === 'page' && mode === 'page') return;
       if (open) hide();
       mode = requested;
       open = true;

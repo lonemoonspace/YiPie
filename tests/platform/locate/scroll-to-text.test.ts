@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { QUOTE_HIGHLIGHT, locateQuote } from '@/platform/locate/scroll-to-text';
+import {
+  QUOTE_HIGHLIGHT,
+  clearQuoteHighlight,
+  locateQuote,
+} from '@/platform/locate/scroll-to-text';
 
 function pageWith(body: string): Document {
   const doc = document.implementation.createHTMLDocument('页面');
@@ -51,6 +55,16 @@ describe('locateQuote', () => {
     locateQuote(doc, '浏览器扩展', api);
 
     expect(locateQuote(doc, '一个网站', api)).toBe(false);
+    expect(registry.has(QUOTE_HIGHLIGHT)).toBe(false);
+  });
+
+  it('takes the highlight off when asked, as the panel closes (#24)', () => {
+    const doc = pageWith('<p>一瞥是一个浏览器扩展。</p>');
+    const { registry, api } = fakeHighlights();
+    locateQuote(doc, '浏览器扩展', api);
+
+    clearQuoteHighlight(api);
+
     expect(registry.has(QUOTE_HIGHLIGHT)).toBe(false);
   });
 

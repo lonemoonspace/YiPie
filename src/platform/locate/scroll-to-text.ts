@@ -56,6 +56,11 @@ export function locateQuote(
   return false;
 }
 
+/** Takes the highlight off the page: the panel that showed the quote has closed (#24). */
+export function clearQuoteHighlight(api: HighlightApi | null = browserHighlights()): void {
+  api?.highlights.delete(QUOTE_HIGHLIGHT);
+}
+
 /** The page's text nodes in document order, without our own host. */
 function textNodes(doc: Document): Text[] {
   const root = doc.body;
