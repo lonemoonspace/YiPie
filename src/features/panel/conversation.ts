@@ -79,7 +79,10 @@ export interface ConversationDeps {
    * save with the highest revision this panel sent, whatever order they
    * arrive in.
    */
-  save: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
+  save: (
+    messages: SnapshotMessage[],
+    revision: number,
+  ) => Promise<{ truncated: boolean; stored?: boolean }>;
   /** Makes a model the default (`models.choose`). */
   choose: (pick: ModelPick) => Promise<unknown>;
   /** Makes a prompt the default (`prompts.choose`). */
@@ -192,8 +195,11 @@ export function createConversation(deps: ConversationDeps): Conversation {
         savedText(answer) !== answer || (question !== null && savedText(question) !== question),
     );
     deps.save(messages, sent).then(
-      ({ truncated }) => {
+      ({ truncated, stored }) => {
         if (!shown()) return;
+        // Not stored (another panel is attached, or a newer save won): it
+        // says nothing about this conversation's copy, good or bad (#29).
+        if (stored === false) return;
         deps.dispatch(
           truncated || cut
             ? { type: 'snapshot', note: { kind: 'save-truncated' } }

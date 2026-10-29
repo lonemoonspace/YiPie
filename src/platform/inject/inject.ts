@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { TRIGGER_SLOT, type TriggerSlotWire, type TriggerWire } from '@/contract/rpc-wire';
 import { locale, t } from '@/domain/i18n/background';
+import { pageKeyOf } from '@/domain/page-key';
 import { isInjectableURL, withOriginsOnly } from '@/domain/url';
 import { createLogger } from '@/platform/logger';
 import { ensureLocalStorageIsolated } from '@/platform/storage';
@@ -18,26 +19,53 @@ export interface TabLike {
 export interface InjectDeps {
   /** Resolves once storage.local is closed to content scripts (the fail-closed gate). */
   storageIsolated: () => Promise<void>;
-  /** Injects the content script, after leaving word of the trigger for it. */
-  injectInto: (tabId: number, trigger: TriggerWire) => Promise<unknown>;
+  /**
+   * Injects the content script, after leaving word of the trigger (and the
+   * page it was on) for it. Resolves to false when the script found no place
+   * for the panel in the document.
+   */
+  injectInto: (tabId: number, trigger: TriggerWire, pageKey: string) => Promise<unknown>;
   markUnavailable: (tabId: number) => Promise<void>;
   /** Takes back what `markUnavailable` put on the icon: the page opened after all. */
   markAvailable: (tabId: number) => Promise<void>;
 }
 
+/**
+ * The injection on its way in each tab. One goes in after the other: the
+ * slot is written, then read by the script, and two triggers in quick
+ * succession must not each read the other's word (#29).
+ */
+const injecting = new Map<number, Promise<unknown>>();
+
+async function injectNow(tabId: number, trigger: TriggerWire, pageKey: string): Promise<boolean> {
+  // Runs in the content script's isolated world, just before it: the page
+  // cannot see or forge it.
+  await browser.scripting.executeScript({
+    target: { tabId },
+    func: (slot: string, value: TriggerSlotWire) => {
+      (globalThis as unknown as Record<symbol, TriggerSlotWire>)[Symbol.for(slot)] = value;
+    },
+    args: [TRIGGER_SLOT, { ...trigger, locale: locale(), pageKey }],
+  });
+  const [result] = await browser.scripting.executeScript({
+    target: { tabId },
+    files: [CONTENT_SCRIPT_FILE],
+  });
+  return result?.result !== false;
+}
+
 const browserDeps: InjectDeps = {
   storageIsolated: ensureLocalStorageIsolated,
-  injectInto: async (tabId, trigger) => {
-    // Runs in the content script's isolated world, just before it: the page
-    // cannot see or forge it.
-    await browser.scripting.executeScript({
-      target: { tabId },
-      func: (slot: string, value: TriggerSlotWire) => {
-        (globalThis as unknown as Record<symbol, TriggerSlotWire>)[Symbol.for(slot)] = value;
-      },
-      args: [TRIGGER_SLOT, { ...trigger, locale: locale() }],
-    });
-    return browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
+  injectInto: (tabId, trigger, pageKey) => {
+    const run = (injecting.get(tabId) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => injectNow(tabId, trigger, pageKey));
+    injecting.set(tabId, run);
+    const done = () => {
+      if (injecting.get(tabId) === run) injecting.delete(tabId);
+    };
+    run.then(done, done);
+    return run;
   },
   markUnavailable,
   markAvailable,
@@ -77,7 +105,13 @@ export async function openPanelInTab(
   }
 
   try {
-    await deps.injectInto(tabId, trigger);
+    // `isInjectableURL` said yes, so the URL is there.
+    const opened = await deps.injectInto(tabId, trigger, pageKeyOf(tab.url ?? ''));
+    // An SVG or XML document, shown as such, has no place for the panel.
+    if (opened === false) {
+      await deps.markUnavailable(tabId);
+      return;
+    }
   } catch (error) {
     // The URL looked fine but the browser said no: an error page, the PDF viewer…
     // The browser's message quotes the page URL, which may carry a token:

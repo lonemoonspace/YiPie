@@ -21,11 +21,15 @@ export default defineUnlistedScript(() => {
   const slot = Symbol.for(TRIGGER_SLOT);
   const trigger = scope[slot];
   scope[slot] = undefined;
+  // Says to the background whether there is a panel: an SVG or XML file the
+  // browser shows as such is no HTML document, and has no place for one (#29).
+  if (!(document.documentElement instanceof HTMLElement)) return false;
 
   // The shell speaks the interface language from the start; `content.hello`
   // brings it again for every later mount.
   if (trigger !== undefined) setLocale(trigger.locale);
   rememberSelection(trigger?.selectionText ?? '');
   listenForPageRequests();
-  openPanelHost(trigger?.mode ?? 'page');
+  openPanelHost(trigger?.mode ?? 'page', trigger?.pageKey ?? null);
+  return true;
 });

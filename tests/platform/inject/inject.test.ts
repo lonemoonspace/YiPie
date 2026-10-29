@@ -18,8 +18,19 @@ describe('openPanelInTab', () => {
   it('injects into an ordinary page once storage.local is isolated', async () => {
     const d = deps();
     await openPanelInTab(page, undefined, d);
-    expect(d.injectInto).toHaveBeenCalledWith(7, { mode: 'page', selectionText: '' });
+    expect(d.injectInto).toHaveBeenCalledWith(
+      7,
+      { mode: 'page', selectionText: '' },
+      'https://example.com/article',
+    );
     expect(d.markUnavailable).not.toHaveBeenCalled();
+  });
+
+  it('marks the icon when the script finds no place for the panel, as in an SVG file (#29)', async () => {
+    const d = deps({ injectInto: vi.fn(() => Promise.resolve(false)) });
+    await openPanelInTab(page, undefined, d);
+    expect(d.markUnavailable).toHaveBeenCalledWith(7);
+    expect(d.markAvailable).not.toHaveBeenCalled();
   });
 
   it('clears the mark an earlier failure left on the icon once the page opens (#31)', async () => {
@@ -36,7 +47,7 @@ describe('openPanelInTab', () => {
     const d = deps();
     const trigger = { mode: 'selection' as const, selectionText: '选中的话' };
     await openPanelInTab(page, trigger, d);
-    expect(d.injectInto).toHaveBeenCalledWith(7, trigger);
+    expect(d.injectInto).toHaveBeenCalledWith(7, trigger, 'https://example.com/article');
   });
 
   it('waits for the isolation gate before injecting', async () => {

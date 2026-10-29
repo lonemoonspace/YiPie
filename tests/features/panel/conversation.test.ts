@@ -68,7 +68,10 @@ function harness(options: {
   saved?: SnapshotView | Error | (() => Promise<SnapshotView>);
   setup?: Partial<RunSetup> | Error;
   page?: PageContext;
-  save?: (messages: SnapshotMessage[], revision: number) => Promise<{ truncated: boolean }>;
+  save?: (
+    messages: SnapshotMessage[],
+    revision: number,
+  ) => Promise<{ truncated: boolean; stored?: boolean }>;
   choose?: (pick: ModelPick) => Promise<unknown>;
   choosePrompt?: (id: string) => Promise<unknown>;
   disableStreamUsage?: (id: string) => Promise<unknown>;
@@ -868,6 +871,23 @@ describe('conversation: failures', () => {
     await settle();
 
     expect(h.state().snapshot).toBeNull();
+  });
+
+  it('takes a save the background did not store as saying nothing about the copy (#29)', async () => {
+    let reply: { truncated: boolean; stored?: boolean } | Error = new Error('quota');
+    const h = harness({
+      scripts: [answer('总结'), answer('回答')],
+      save: () => (reply instanceof Error ? Promise.reject(reply) : Promise.resolve(reply)),
+    });
+    await h.conversation.open();
+    await settle();
+    expect(h.state().snapshot).toMatchObject({ kind: 'save-failed' });
+
+    reply = { truncated: false, stored: false };
+    h.conversation.ask('问');
+    await settle();
+
+    expect(h.state().snapshot).toMatchObject({ kind: 'save-failed' });
   });
 
   it('says when the saved copy had to leave out the oldest messages', async () => {

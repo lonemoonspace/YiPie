@@ -366,6 +366,24 @@ describe('snapshot store: failures and cleanup', () => {
     expect(keys(store)).toEqual([SNAPSHOT_INDEX_KEY]);
   });
 
+  it('restores a conversation even when noting its use fails (#29)', async () => {
+    const base = createMemoryStore();
+    let full = false;
+    const store: MemoryStore = {
+      ...base,
+      async set(key, value) {
+        if (full && key === SNAPSHOT_INDEX_KEY) throw new Error('quota');
+        await base.set(key, value);
+      },
+    };
+    const { snapshots } = setup({}, store);
+    await snapshots.save(1, PAGE, [answer('总结')]);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    full = true;
+    expect(await snapshots.get(1, PAGE)).toMatchObject({ status: 'found' });
+  });
+
   it('keeps the earlier conversation when replacing it fails', async () => {
     const base = createMemoryStore();
     let refuse = false;

@@ -160,12 +160,18 @@ export function createSnapshotStore(
           logger.warn('A saved conversation is unreadable:', read.reason, read.issues);
         }
         if (read.status !== 'ok' || read.value.messages.length === 0) return { status: 'none' };
-        await index.updateUnqueued((current) => ({
-          ...current,
-          entries: current.entries.map((item) =>
-            item.id === entry.id ? { ...item, usedAt: now() } : item,
-          ),
-        }));
+        // Only for eviction's order: a read that found the conversation
+        // answers with it even if this write fails (#29).
+        await index
+          .updateUnqueued((current) => ({
+            ...current,
+            entries: current.entries.map((item) =>
+              item.id === entry.id ? { ...item, usedAt: now() } : item,
+            ),
+          }))
+          .catch((error: unknown) =>
+            logger.warn('Could not note when a conversation was used:', error),
+          );
         return { status: 'found', messages: read.value.messages, truncated: read.value.truncated };
       });
     },
