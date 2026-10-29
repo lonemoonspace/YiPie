@@ -45,6 +45,7 @@ describe('interpretEventData', () => {
     expect(interpretEventData(chunk)).toEqual([
       { type: 'content', text: '。' },
       { type: 'usage', usage: { promptTokens: 10, completionTokens: 2, totalTokens: null } },
+      { type: 'finish', reason: 'stop' },
     ]);
   });
 

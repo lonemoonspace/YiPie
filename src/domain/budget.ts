@@ -28,11 +28,17 @@ export function estimateMessages(messages: readonly Pick<ChatMessage, 'content'>
 
 /**
  * Room kept for the answer: a quarter of the window, at least 1,024 and at
- * most 8,192 tokens. Nothing is sent to enforce it (no `max_tokens`, §4.2
- * decision 1); it only keeps the input from filling the whole window.
+ * most 8,192 tokens, and never more than half the window, so a small one
+ * still leaves room for the input (#28). Nothing is sent to enforce it (no
+ * `max_tokens`, §4.2 decision 1); it only keeps the input from filling the
+ * whole window.
  */
 export function outputReserve(contextWindow: number): number {
-  return Math.min(8_192, Math.max(1_024, Math.floor(contextWindow / 4)));
+  return Math.min(
+    8_192,
+    Math.max(1_024, Math.floor(contextWindow / 4)),
+    Math.floor(contextWindow / 2),
+  );
 }
 
 /** The strategies that cut something. */

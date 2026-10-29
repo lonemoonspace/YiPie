@@ -11,6 +11,8 @@ export type StreamEvent =
   /** The model's reasoning, apart from the answer (appendix D). */
   | { type: 'reasoning'; text: string }
   | { type: 'usage'; usage: Usage }
+  /** The choice says why it ended: `stop`, `length` (the token limit)… */
+  | { type: 'finish'; reason: string }
   /** The service reported a failure. */
   | { type: 'error'; failure: StreamFailure }
   /** The data breaks the protocol. */
@@ -72,6 +74,10 @@ export function interpretEventData(data: string, event?: string): StreamEvent[] 
   // it to the last content chunk.
   const usage = readUsage(chunk.usage);
   if (usage) events.push({ type: 'usage', usage });
+
+  const first: unknown = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;
+  const reason = isRecord(first) ? first.finish_reason : undefined;
+  if (typeof reason === 'string' && reason !== '') events.push({ type: 'finish', reason });
 
   return events;
 }

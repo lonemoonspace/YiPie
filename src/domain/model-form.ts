@@ -194,6 +194,12 @@ function checkHeaders(
     errors.headers = t('model.error.headers', { name: bad[0] });
     return null;
   }
+  // A line break would make the browser refuse the request before it leaves (#28).
+  const broken = Object.entries(headers).find(([, value]) => /[\r\n\0]/.test(String(value)));
+  if (broken) {
+    errors.headers = t('model.error.headerValue', { name: broken[0] });
+    return null;
+  }
   const forbidden = Object.keys(headers).find(isForbiddenHeaderName);
   if (forbidden !== undefined) {
     errors.headers = t('model.error.headerForbidden', { name: forbidden });

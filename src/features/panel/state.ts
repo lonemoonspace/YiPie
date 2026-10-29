@@ -64,6 +64,8 @@ export interface Turn {
   status: 'pending' | 'done' | 'stopped' | 'failed';
   usage: TurnUsage | null;
   cut: CutNote | null;
+  /** A done answer that did not end as a whole: cut at the length limit, or cut off (#28). */
+  ending?: 'length' | 'cut-off';
 }
 
 /** About the saved copy of the conversation (docs/development-plan.md §4.4, decision 2). */
@@ -154,7 +156,7 @@ export type PanelEvent =
   | { type: 'retrying'; seconds: number }
   | { type: 'text'; text: string }
   | { type: 'reasoning'; text: string }
-  | { type: 'finished'; usage: TurnUsage }
+  | { type: 'finished'; usage: TurnUsage; ending?: 'length' | 'cut-off' }
   | { type: 'stopped'; usage: TurnUsage | null }
   | { type: 'failed'; problem: PanelProblem }
   | { type: 'snapshot'; note: SnapshotNote }
@@ -319,7 +321,12 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         ...state,
         phase: 'done',
         retrying: null,
-        turns: updateLast(state.turns, (turn) => ({ ...turn, status: 'done', usage: event.usage })),
+        turns: updateLast(state.turns, (turn) => ({
+          ...turn,
+          status: 'done',
+          usage: event.usage,
+          ...(event.ending === undefined ? {} : { ending: event.ending }),
+        })),
       };
     case 'stopped':
       if (!isBusy(state)) return state;

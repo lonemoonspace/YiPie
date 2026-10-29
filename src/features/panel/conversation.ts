@@ -349,8 +349,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
         if (answer === '') return fail({ kind: 'empty-answer' });
         run = null;
         const usage = turnUsage(outcome.usage, estimate);
-        deps.dispatch({ type: 'finished', usage });
-        commit({ question, answer, stopped: false, usage });
+        const { ending } = outcome;
+        deps.dispatch({ type: 'finished', usage, ...(ending === undefined ? {} : { ending }) });
+        // An answer that did not end as a whole is saved as one that stopped.
+        commit({ question, answer, stopped: ending !== undefined, usage });
         return;
       }
       case 'stopped': {

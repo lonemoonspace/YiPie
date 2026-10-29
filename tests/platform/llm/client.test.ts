@@ -146,9 +146,39 @@ describe('streamChat', () => {
     });
   });
 
-  it('treats a stream that ends without [DONE] as finished', async () => {
+  it('finishes a stream that ends without [DONE], marked as possibly cut off (#28)', async () => {
     const fetch = fakeFetch(() => streamResponse([chunk('a'), chunk('b')]));
-    expect((await run({ fetch })).outcome).toEqual({ kind: 'done', usage: null });
+    expect((await run({ fetch })).outcome).toEqual({
+      kind: 'done',
+      usage: null,
+      ending: 'cut-off',
+    });
+  });
+
+  it('takes a finish reason for a whole answer, [DONE] or not, but marks the length limit (#28)', async () => {
+    const finish = (reason: string) =>
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: reason }] })}\n\n`;
+
+    const stopped = fakeFetch(() => streamResponse([chunk('a'), finish('stop')]));
+    expect((await run({ fetch: stopped })).outcome).toEqual({ kind: 'done', usage: null });
+
+    const long = fakeFetch(() =>
+      streamResponse([chunk('a'), finish('length'), 'data: [DONE]\n\n']),
+    );
+    expect((await run({ fetch: long })).outcome).toEqual({
+      kind: 'done',
+      usage: null,
+      ending: 'length',
+    });
+  });
+
+  it('calls a failed request a network failure when the permission check itself fails (#28)', async () => {
+    const fetch = fakeFetch(() => Promise.reject(new TypeError('Failed to fetch')));
+    const { outcome } = await run({
+      fetch,
+      hasAccess: () => Promise.reject(new Error('unavailable')),
+    });
+    expect(outcome).toMatchObject({ kind: 'error', error: { kind: 'network' } });
   });
 
   it('keeps what arrived before an error inside the stream', async () => {
@@ -470,6 +500,21 @@ describe('streamChat: a service that refuses stream_options (§4.5, decision 2)'
 
     expect(result.outcome).toMatchObject({ kind: 'error', error: { kind: 'bad-request' } });
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it('does not send the same request again when the extra body sets stream_options too (#28)', async () => {
+    const fetch = answers(refused, ok);
+    const rejected = vi.fn();
+
+    const result = await run({
+      config: { ...config, streamUsage: true, extraBody: { stream_options: { x: 1 } } },
+      fetch,
+      onStreamOptionsRejected: rejected,
+    });
+
+    expect(result.outcome).toMatchObject({ kind: 'error', error: { kind: 'bad-request' } });
+    expect(fetch).toHaveBeenCalledOnce();
     expect(rejected).not.toHaveBeenCalled();
   });
 

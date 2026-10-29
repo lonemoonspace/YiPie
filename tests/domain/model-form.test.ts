@@ -97,6 +97,13 @@ describe('parseModelForm', () => {
     });
   });
 
+  it('rejects a header value with a line break, which the browser would refuse to send (#28)', () => {
+    expect(parseModelForm({ ...filled, headers: '{"X-A": "a\\nb"}' })).toMatchObject({
+      ok: false,
+      errors: { headers: '请求头的值不能包含换行：X-A' },
+    });
+  });
+
   it('rejects headers that are not JSON', () => {
     expect(parseModelForm({ ...filled, headers: '{oops' })).toMatchObject({
       ok: false,

@@ -20,8 +20,17 @@ import {
 } from '@/domain/llm/stream';
 import { hasOriginAccess } from '@/platform/permissions/origin-access';
 
+/**
+ * How a finished answer ended, when not as a whole: cut at the token limit
+ * (`finish_reason: length`), or the stream closed without `[DONE]` and
+ * without a finish reason, so it may have been cut off (#28).
+ */
+export type ChatEnding = 'length' | 'cut-off';
+
 export type ChatOutcome =
-  { kind: 'done'; usage: Usage | null } | { kind: 'stopped' } | { kind: 'error'; error: LlmError };
+  | { kind: 'done'; usage: Usage | null; ending?: ChatEnding }
+  | { kind: 'stopped' }
+  | { kind: 'error'; error: LlmError };
 
 /** The parts of a model configuration a request uses. */
 export type ChatConfig = Pick<
@@ -99,7 +108,10 @@ export async function streamChat(options: ChatOptions): Promise<ChatOutcome> {
     if (outcome.kind !== 'error' || started) return outcome;
 
     const { error } = outcome;
-    if (error.streamOptionsRejected === true && config.streamUsage && !downgraded) {
+    // `stream_options` the user put in the extra body is theirs: without ours
+    // the request would go out the same, and be refused the same.
+    const ours = config.streamUsage && !Object.hasOwn(config.extraBody, 'stream_options');
+    if (error.streamOptionsRejected === true && ours && !downgraded) {
       downgraded = true;
       config = { ...config, streamUsage: false };
       continue;
@@ -214,6 +226,12 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
       .getReader();
     let events = 0;
     let usage: Usage | null = null;
+    let reason: string | null = null;
+    const finished = (complete: boolean): ChatOutcome => {
+      const ending: ChatEnding | null =
+        reason === 'length' ? 'length' : complete || reason !== null ? null : 'cut-off';
+      return ending === null ? { kind: 'done', usage } : { kind: 'done', usage, ending };
+    };
     /**
      * The stream ended without one event. Nothing but comments is an empty
      * answer; anything else (an HTML error page, a bare JSON error behind a
@@ -223,7 +241,8 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
       const stray = head
         .split(/\r\n|\r|\n/)
         .some((line) => line.trim() !== '' && !line.startsWith(':'));
-      if (events > 0 || !stray) return { kind: 'done', usage };
+      if (events > 0) return finished(false);
+      if (!stray) return { kind: 'done', usage };
       const detail = describeErrorBody(redact(head, secrets));
       return clean(fromProtocolError(`The service did not send a stream: ${detail}`));
     };
@@ -257,9 +276,10 @@ async function attempt(options: ChatOptions & { onAccepted: () => void }): Promi
           if (event.type === 'content') deliver(think.push(event.text));
           else if (event.type === 'reasoning') options.onReasoning?.(event.text);
           else if (event.type === 'usage') usage = event.usage;
+          else if (event.type === 'finish') reason = event.reason;
           else if (event.type === 'error') return clean(fromStreamError(event.failure));
           else if (event.type === 'invalid') return clean(fromProtocolError(event.message));
-          else return { kind: 'done', usage };
+          else return finished(true);
         }
       }
     } catch (error) {

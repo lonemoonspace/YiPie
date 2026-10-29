@@ -380,6 +380,7 @@ const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) 
       {isAnswered(turn) ? (
         <div className="meta">
           {turn.status === 'stopped' ? <span>{t('panel.stoppedMark')}</span> : null}
+          {turn.ending !== undefined ? <span>{t(`panel.ending.${turn.ending}`)}</span> : null}
           {turn.usage !== null ? <UsageLine usage={turn.usage} /> : null}
           <CopyButton
             icon

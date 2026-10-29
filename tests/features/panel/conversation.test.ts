@@ -591,6 +591,20 @@ describe('conversation: one request at a time', () => {
     ]);
   });
 
+  it('marks an answer that did not end as a whole, and saves it as stopped (#28)', async () => {
+    const h = harness({
+      scripts: [{ texts: ['半截'], outcome: { kind: 'done', usage: null, ending: 'length' } }],
+    });
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state()).toMatchObject({
+      phase: 'done',
+      turns: [{ text: '半截', status: 'done', ending: 'length' }],
+    });
+    expect(h.saves.at(-1)).toMatchObject([{ content: '半截', stopped: true }]);
+  });
+
   it('keeps what arrived when stopped, and saves it as stopped with an estimate', async () => {
     const h = harness({ scripts: [{ texts: ['一半'], hang: true }] });
     await h.conversation.open();

@@ -34,7 +34,7 @@ describe('origin access', () => {
     expect(api.contains).toHaveBeenCalledWith({ origins: ['https://gw.example:8443/*'] });
   });
 
-  it('answers false when the browser fails, logging the origin but not the base URL', async () => {
+  it('answers false (asking) or rejects (checking) when the browser fails, logging the origin but not the base URL', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const api = permissions({
       request: () => Promise.reject(new Error('not in a user gesture')),
@@ -42,7 +42,7 @@ describe('origin access', () => {
     });
 
     expect(await requestOriginAccess(BASE_URL, api)).toBe(false);
-    expect(await hasOriginAccess(BASE_URL, api)).toBe(false);
+    await expect(hasOriginAccess(BASE_URL, api)).rejects.toThrow('unavailable');
 
     expect(warn).toHaveBeenCalledTimes(2);
     const logged = warn.mock.calls.flat().map(String).join(' ');
