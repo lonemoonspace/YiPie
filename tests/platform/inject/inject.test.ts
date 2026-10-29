@@ -6,6 +6,7 @@ function deps(overrides: Partial<InjectDeps> = {}) {
     storageIsolated: vi.fn(() => Promise.resolve()),
     injectInto: vi.fn(() => Promise.resolve()),
     markUnavailable: vi.fn(() => Promise.resolve()),
+    markAvailable: vi.fn(() => Promise.resolve()),
     ...overrides,
   } satisfies InjectDeps;
 }
@@ -19,6 +20,16 @@ describe('openPanelInTab', () => {
     await openPanelInTab(page, undefined, d);
     expect(d.injectInto).toHaveBeenCalledWith(7, { mode: 'page', selectionText: '' });
     expect(d.markUnavailable).not.toHaveBeenCalled();
+  });
+
+  it('clears the mark an earlier failure left on the icon once the page opens (#31)', async () => {
+    const d = deps({ injectInto: vi.fn().mockRejectedValueOnce(new Error('no')) });
+    await openPanelInTab(page, undefined, d);
+    expect(d.markUnavailable).toHaveBeenCalledWith(7);
+    expect(d.markAvailable).not.toHaveBeenCalled();
+
+    await openPanelInTab(page, undefined, d);
+    expect(d.markAvailable).toHaveBeenCalledWith(7);
   });
 
   it('passes on a selection trigger, with what the menu reported as selected', async () => {

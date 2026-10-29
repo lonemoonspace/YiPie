@@ -906,7 +906,7 @@ public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名
 
 ## 附录 C —— 权限与 manifest 清单
 
-`scripts/check-manifest.ts` 以本表为准（清单写在 `scripts/lib/manifest-policy.ts`，与本表同一提交修改）：产物 manifest 里多出或缺少任何一项，CI 都会失败。
+`scripts/check-manifest.ts` 以本表为准（清单写在 `scripts/lib/manifest-policy.ts`，与本表同一提交修改）：产物 manifest 里多出或缺少任何一项，CI 都会失败。顶层键按白名单核对：只允许本表的项与 WXT 固定写入的 `manifest_version`、`name`、`description`、`version`、`background`、`options_ui`，其余任何顶层键（如 `chrome_url_overrides`、`omnibox`、`devtools_page`）都会失败。
 
 | 项                                                                    | 用途                                                              | 去掉会怎样                         | 引入阶段 |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------- | -------- |

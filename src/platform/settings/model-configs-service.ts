@@ -38,6 +38,8 @@ export interface ModelConfigsService extends ConfigListService<
    * (docs/development-plan.md §4.5, decision 2), then answer like `current`.
    */
   disableStreamUsage(id: string): Promise<PanelModelsView>;
+  /** `disableStreamUsage` inside a task of the write queue the caller already holds. */
+  disableStreamUsageUnqueued(id: string): Promise<PanelModelsView>;
 }
 
 export interface ModelConfigsDeps {
@@ -94,6 +96,8 @@ export function createModelConfigsService(
     choose: (id, model) => queue(() => chooseUnqueued(id, model)),
     chooseUnqueued,
     disableStreamUsage: async (id) => forPanel(await configs.update(id, { streamUsage: false })),
+    disableStreamUsageUnqueued: async (id) =>
+      forPanel(await configs.updateUnqueued(id, { streamUsage: false })),
   };
 }
 

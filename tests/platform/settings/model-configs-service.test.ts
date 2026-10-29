@@ -396,6 +396,18 @@ describe('model configurations: what the panel gets', () => {
     expect((await models.update('a', { streamUsage: true })).items[0]?.streamUsage).toBe(true);
     await expect(models.disableStreamUsage('gone')).rejects.toBeInstanceOf(NotFoundError);
   });
+
+  it('does the same inside a queue task the caller holds, for a panel checked there (#31)', async () => {
+    const { models } = setup(list(keyed('a', 'sk-a'), keyed('b', 'sk-b')));
+
+    const panel = await models.disableStreamUsageUnqueued('b');
+
+    expect(panel.choices.map(({ id }) => id)).toEqual(['a', 'b']);
+    expect((await models.list()).items.map(({ streamUsage }) => streamUsage)).toEqual([
+      true,
+      false,
+    ]);
+  });
 });
 
 describe('model configurations: host access', () => {

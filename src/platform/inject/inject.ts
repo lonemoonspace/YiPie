@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { TRIGGER_SLOT, type TriggerSlotWire, type TriggerWire } from '@/contract/rpc-wire';
 import { locale, t } from '@/domain/i18n/background';
-import { isInjectableURL } from '@/domain/url';
+import { isInjectableURL, withOriginsOnly } from '@/domain/url';
 import { createLogger } from '@/platform/logger';
 import { ensureLocalStorageIsolated } from '@/platform/storage';
 
@@ -21,6 +21,8 @@ export interface InjectDeps {
   /** Injects the content script, after leaving word of the trigger for it. */
   injectInto: (tabId: number, trigger: TriggerWire) => Promise<unknown>;
   markUnavailable: (tabId: number) => Promise<void>;
+  /** Takes back what `markUnavailable` put on the icon: the page opened after all. */
+  markAvailable: (tabId: number) => Promise<void>;
 }
 
 const browserDeps: InjectDeps = {
@@ -38,6 +40,7 @@ const browserDeps: InjectDeps = {
     return browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
   },
   markUnavailable,
+  markAvailable,
 };
 
 /** A trigger that summarizes the page. */
@@ -77,20 +80,34 @@ export async function openPanelInTab(
     await deps.injectInto(tabId, trigger);
   } catch (error) {
     // The URL looked fine but the browser said no: an error page, the PDF viewer…
-    logger.warn('Could not inject into tab', tabId, error);
+    // The browser's message quotes the page URL, which may carry a token:
+    // only its origin goes into the log (AGENTS.md).
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('Could not inject into tab', tabId, withOriginsOnly(message));
     await deps.markUnavailable(tabId);
+    return;
   }
+  // An earlier attempt on this page may have marked the icon.
+  await deps.markAvailable(tabId).catch(() => undefined);
 }
 
 /**
  * Tells the user, on the toolbar icon of this tab, that the page cannot be
  * summarized. There is no popup to explain it in. Chrome clears tab-specific
- * badge and title when the tab navigates or reloads, so nothing to undo.
+ * badge and title when the tab navigates or reloads; a later attempt on the
+ * same page that works clears them too (`markAvailable`).
  */
 async function markUnavailable(tabId: number): Promise<void> {
   await Promise.all([
     browser.action.setBadgeText({ tabId, text: '!' }),
     browser.action.setBadgeBackgroundColor({ tabId, color: '#8a8f98' }),
     browser.action.setTitle({ tabId, title: t('host.unavailable') }),
+  ]);
+}
+
+async function markAvailable(tabId: number): Promise<void> {
+  await Promise.all([
+    browser.action.setBadgeText({ tabId, text: '' }),
+    browser.action.setTitle({ tabId, title: browser.i18n.getMessage('actionTitle') }),
   ]);
 }

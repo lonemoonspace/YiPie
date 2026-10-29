@@ -117,7 +117,9 @@ export default defineBackground(() => {
       'models.current': () => models.current(),
       'models.choose': ({ id, model }, context) =>
         whileAttached(context, () => models.chooseUnqueued(id, model)),
-      'models.disableStreamUsage': ({ id }) => models.disableStreamUsage(id),
+      // Like every write that assumes the panel is attached, checked again in the queue.
+      'models.disableStreamUsage': ({ id }, context) =>
+        whileAttached(context, () => models.disableStreamUsageUnqueued(id)),
       'prompts.list': () => prompts.list(),
       'prompts.add': (draft) => prompts.add(draft),
       'prompts.update': ({ id, patch }) => prompts.update(id, patch),
@@ -180,10 +182,14 @@ export default defineBackground(() => {
     },
   );
 
+  // The shell and the icon's title speak the interface language: on a cold
+  // start, wait for the settings that say which (#31).
   const open = (tab: TabLike, trigger?: TriggerWire) => {
-    openPanelInTab(tab, trigger).catch((error: unknown) => {
-      logger.error('Could not open the panel:', error);
-    });
+    settingsRead
+      .then(() => openPanelInTab(tab, trigger))
+      .catch((error: unknown) => {
+        logger.error('Could not open the panel:', error);
+      });
   };
   onToolbarClick(open);
   onShortcut(open);
