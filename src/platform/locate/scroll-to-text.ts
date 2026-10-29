@@ -44,13 +44,19 @@ export function locateQuote(
     quote,
   );
   for (const { start, end } of matches) {
-    const range = doc.createRange();
-    range.setStart(nodes[start.chunk]!, start.offset);
-    range.setEnd(nodes[end.chunk]!, end.offset);
+    const first = nodes[start.chunk]!;
+    const last = nodes[end.chunk]!;
+    // A range lives in one tree: a passage that runs out of a shadow root or
+    // a frame is marked up to where that tree ends.
+    const together = first.getRootNode() === last.getRootNode();
+    const range = (first.ownerDocument ?? doc).createRange();
+    range.setStart(first, start.offset);
+    if (together) range.setEnd(last, end.offset);
+    else range.setEnd(first, first.length);
     if (!isShown(range)) continue;
-    const element = nodes[start.chunk]!.parentElement;
-    element?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-    api?.highlights.set(QUOTE_HIGHLIGHT, api.create(range));
+    first.parentElement?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    // The style is in the page's document; a frame's own document has none.
+    if (first.ownerDocument === doc) api?.highlights.set(QUOTE_HIGHLIGHT, api.create(range));
     return true;
   }
   return false;
@@ -61,25 +67,59 @@ export function clearQuoteHighlight(api: HighlightApi | null = browserHighlights
   api?.highlights.delete(QUOTE_HIGHLIGHT);
 }
 
-/** The page's text nodes in document order, without our own host. */
+/** How many open shadow roots or same-origin frames deep the search goes, as extraction does. */
+const MAX_DEPTH = 3;
+
+/**
+ * The page's text nodes in the order they render, without our own host.
+ * Like extraction (platform/extract/flatten.ts), the search goes into open
+ * shadow roots, the light-DOM nodes their slots show, and same-origin
+ * frames: a quote the model took from there is found there too (#24).
+ */
 function textNodes(doc: Document): Text[] {
-  const root = doc.body;
-  if (root === null) return [];
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
-      const element = node as Element;
-      return SKIPPED.has(element.tagName) ||
-        element.tagName.toLowerCase().startsWith(HOST_TAG_PREFIX)
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_SKIP;
-    },
-  });
   const nodes: Text[] = [];
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    nodes.push(node as Text);
-  }
+  const children = (parent: Node, depth: number) => {
+    for (const child of parent.childNodes) take(child, depth);
+  };
+  const take = (node: Node, depth: number): void => {
+    // Nodes of a frame come from another realm: `instanceof` would not know them.
+    if (node.nodeType === TEXT_NODE) {
+      nodes.push(node as Text);
+      return;
+    }
+    if (node.nodeType !== ELEMENT_NODE) return;
+    const element = node as Element;
+    if (SKIPPED.has(element.tagName.toUpperCase())) return;
+    if (element.localName.startsWith(HOST_TAG_PREFIX)) return;
+    if (element.localName === 'slot') {
+      const assigned = (element as HTMLSlotElement).assignedNodes?.({ flatten: true }) ?? [];
+      if (assigned.length > 0) {
+        for (const slotted of assigned) take(slotted, depth);
+        return;
+      }
+    }
+    if (element.localName === 'iframe' || element.localName === 'frame') {
+      const inner = sameOriginDocument(element as HTMLIFrameElement);
+      if (inner?.body != null && depth < MAX_DEPTH) children(inner.body, depth + 1);
+      return;
+    }
+    const shadow = element.shadowRoot;
+    if (shadow !== null && depth < MAX_DEPTH) children(shadow, depth + 1);
+    else children(element, depth);
+  };
+  if (doc.body !== null) children(doc.body, 0);
   return nodes;
+}
+
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+
+function sameOriginDocument(frame: HTMLIFrameElement): Document | null {
+  try {
+    return frame.contentDocument;
+  } catch {
+    return null;
+  }
 }
 
 /**

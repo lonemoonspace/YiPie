@@ -109,20 +109,32 @@ interface Haystack {
  */
 function normalizeChunks(chunks: readonly string[]): Haystack {
   const fold = createFolder();
-  const parts: string[] = [];
+  let text = '';
   /** Where each chunk starts in the normalized text. */
   const starts: number[] = [];
   let length = 0;
   for (const chunk of chunks) {
     starts.push(length);
+    // Characters that stay as they are go in as one slice of the chunk, so a
+    // long text node costs a few strings rather than one per character (#24).
+    let run = 0;
     for (let offset = 0; offset < chunk.length;) {
+      if (keepsAscii(chunk.charCodeAt(offset))) {
+        offset += 1;
+        continue;
+      }
       const char = charAt(chunk, offset);
       const mapped = fold(char);
-      if (mapped !== '') {
-        parts.push(mapped);
-        length += mapped.length;
+      if (mapped !== char) {
+        text += chunk.slice(run, offset) + mapped;
+        length += offset - run + mapped.length;
+        run = offset + char.length;
       }
       offset += char.length;
+    }
+    if (chunk.length > run) {
+      text += chunk.slice(run);
+      length += chunk.length - run;
     }
   }
   /**
@@ -134,7 +146,7 @@ function normalizeChunks(chunks: readonly string[]): Haystack {
    */
   let cursor = { chunk: -1, offset: 0, at: 0 };
   return {
-    text: parts.join(''),
+    text,
     point(index) {
       if (index < 0 || index >= length) return null;
       // The last chunk that starts at or before `index`: empty chunks start
@@ -177,6 +189,16 @@ function normalize(source: string): string {
 }
 
 /** The code point of `text` at `offset`: one UTF-16 unit, or a surrogate pair. */
+/** An ASCII character the folding leaves as it is: not a space, not upper case. */
+function keepsAscii(code: number): boolean {
+  return (
+    code < 0x80 &&
+    code !== 0x20 &&
+    !(code >= 0x09 && code <= 0x0d) &&
+    !(code >= 0x41 && code <= 0x5a)
+  );
+}
+
 function charAt(text: string, offset: number): string {
   const code = text.charCodeAt(offset);
   if (code >= 0xd800 && code <= 0xdbff && offset + 1 < text.length) {
