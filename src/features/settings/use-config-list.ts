@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ListView } from '@/contract/rpc';
+import { SELECTION_KEY } from '@/contract/selection';
 import type { StorageKey } from '@/contract/storage';
 import { t } from '@/domain/i18n';
 import { onStoredChange } from '@/platform/storage/watch';
@@ -32,7 +33,10 @@ export interface ConfigList<T> {
  * `load` must keep its identity across renders.
  *
  * The list is read again whenever `key` changes in storage: an import from
- * another section, or a change in another tab. Only the latest read is shown.
+ * another section, or a change in another tab. So is it when the defaults
+ * (`local:selection`) change, from another tab or the panel's menus: which
+ * row is the default is part of the view, and the delete confirmation
+ * announces where the default goes from it. Only the latest read is shown.
  */
 export function useConfigList<T>(load: () => Promise<ListView<T>>, key: StorageKey): ConfigList<T> {
   const [view, setView] = useState<ListView<T> | null>(null);
@@ -55,7 +59,7 @@ export function useConfigList<T>(load: () => Promise<ListView<T>>, key: StorageK
       );
     };
     read();
-    const stop = onStoredChange([key], read);
+    const stop = onStoredChange([key, SELECTION_KEY], read);
     return () => {
       active = false;
       stop();

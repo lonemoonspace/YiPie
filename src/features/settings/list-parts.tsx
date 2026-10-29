@@ -91,6 +91,8 @@ export function ItemRow(props: ItemRowProps) {
             type="button"
             className="secondary"
             aria-label={t('list.edit.label', { name })}
+            // A read-only list cannot save: no editor to fill in for nothing (#30).
+            disabled={locked}
             onClick={props.onEdit}
           >
             {t('list.edit')}
