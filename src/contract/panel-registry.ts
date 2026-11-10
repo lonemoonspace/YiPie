@@ -15,7 +15,10 @@ import type { StorageKey } from './storage';
 export const PANEL_REGISTRY_KEY: StorageKey = 'session:panel-registry';
 export const PANEL_REGISTRY_VERSION = 1;
 
-/** Entries kept at most; the oldest go first. */
+/**
+ * Entries kept at most, counting the ones no panel attached to yet: the
+ * oldest of those go first. Attached entries are never dropped for it.
+ */
 export const PANEL_REGISTRY_LIMIT = 50;
 
 export const PanelEntry = z.object({

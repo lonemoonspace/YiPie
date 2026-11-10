@@ -621,7 +621,13 @@ button:focus-visible {
   background: none;
 }
 
+/* A table wider than the panel scrolls sideways on its own, instead of
+   squeezing its columns until a heading breaks after every character. */
 .answer table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
 }
 
@@ -629,6 +635,10 @@ button:focus-visible {
 .answer td {
   padding: 4px 8px;
   border: 1px solid var(--color-border);
+}
+
+.answer th {
+  white-space: nowrap;
 }
 
 .answer a {

@@ -117,12 +117,12 @@ scripts/         check-manifest.ts、check-bundle-budget.ts；判定逻辑在 sc
 | ------------------ | --------------- | --------------------------------------------------------------------------------------- |
 | TypeScript         | 6.0.x           | typescript-eslint 要求 < 6.1；TS 7 暂时用不了类型感知 lint（计划风险 1）                |
 | ESLint             | 9.x             | eslint-plugin-jsx-a11y 还不支持 ESLint 10（计划风险 2）。npm 提示 9.x 不再维护，是已知取舍 |
-| @playwright/test   | 1.56.1（固定）  | 对应 Chromium 1194，与云端开发环境预装的浏览器一致；升级时要同时确认本地与 CI 的浏览器  |
+| @playwright/test   | 1.56.1（固定）  | 对应 Chromium 1194，CI 安装的就是这一版；升级时要同时确认本地与 CI 的浏览器           |
 | Node               | ≥ 22.18         | `scripts/*.ts` 依靠 Node 内置的类型剥离直接运行                                         |
 
 ## 开发环境备注
 
-- 云端开发环境预装了 Chromium 1194，Playwright 能直接找到。不要运行 `playwright install`；CI 会自己安装。
+- 不要运行 `playwright install`；CI 会自己安装。云端开发环境预装的 Chromium 版本会随环境更新，不一定是 Playwright 1.56.1 要找的 1194（2026-11 时是 1243）。对不上时 `npm run test:e2e` 会报找不到浏览器，用 `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` 指到预装的那一份；较新的 Chromium 上个别用例的时序可能与 CI 不同，以 CI 的结果为准。
 - 在无 root 的沙箱里跑 E2E 的经验（自计划附录 G 迁入）：
   1. 容器的 `no new privileges` 让 Chromium 自带沙箱不可用，需要 `--no-sandbox`。Playwright 默认 `chromiumSandbox: false`，已经会带上。
   2. 缺 X11 / NSS 等约 16 个动态库时：把 deb 依赖解到可写前缀（例如 `/tmp/sysroot`），运行时用 `LD_LIBRARY_PATH` 指过去。

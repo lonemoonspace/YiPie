@@ -115,11 +115,20 @@ export function createPanelRegistry(
   };
 }
 
-/** Drops the oldest entries beyond the limit (closed tabs leave theirs behind). */
+/**
+ * Beyond the limit, drops the oldest nonces that no panel ever presented.
+ * An attached entry is a panel that may still be open, and dropping it would
+ * refuse every call that panel makes from then on; it goes when its tab
+ * closes (`remove`) or mounts a new panel. The entry just issued is the
+ * newest, so it always stays.
+ */
 function keepNewest(registry: PanelRegistry): PanelRegistry {
   const entries = Object.entries(registry);
   if (entries.length <= PANEL_REGISTRY_LIMIT) return registry;
-  return Object.fromEntries(
-    entries.sort(([, a], [, b]) => b.issuedAt - a.issuedAt).slice(0, PANEL_REGISTRY_LIMIT),
-  );
+  const attached = entries.filter(([, entry]) => entry.attachedDocument !== null);
+  const pending = entries
+    .filter(([, entry]) => entry.attachedDocument === null)
+    .sort(([, a], [, b]) => b.issuedAt - a.issuedAt)
+    .slice(0, Math.max(1, PANEL_REGISTRY_LIMIT - attached.length));
+  return Object.fromEntries([...attached, ...pending]);
 }

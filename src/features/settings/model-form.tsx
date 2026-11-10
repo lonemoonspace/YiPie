@@ -14,6 +14,7 @@ import {
   type ModelFormFields,
   type ParsedModelForm,
 } from '@/domain/model-form';
+import { isPlaintextRemote } from '@/domain/url';
 import { requestOriginAccess } from '@/platform/permissions/origin-access';
 import { ConnectionTest } from './connection-test';
 import { TextField } from './fields';
@@ -82,6 +83,7 @@ export function ModelForm(props: ModelFormProps) {
         label={t('model.baseURL')}
         hint={t('model.baseURL.hint')}
         error={errors.baseURL}
+        warnings={isPlaintextRemote(fields.baseURL) ? [t('model.baseURL.plaintext')] : []}
         value={fields.baseURL}
         onChange={(value) => set('baseURL', value)}
         inputMode="url"

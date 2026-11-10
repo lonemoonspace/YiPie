@@ -64,8 +64,12 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
     );
     // The browser's language: `locale` sets it for pages, and on Linux the
     // service worker's `i18n.getUILanguage()` reads it from LANGUAGE.
+    // E2E_CHROMIUM_PATH points at a full Chromium build other than the one
+    // this Playwright version downloads (AGENTS.md, 开发环境备注).
+    const executablePath = process.env.E2E_CHROMIUM_PATH;
+    const browser = executablePath ? { executablePath } : { channel: 'chromium' };
     const context = await chromium.launchPersistentContext(profile, {
-      channel: 'chromium',
+      ...browser,
       locale: browserLanguage,
       env: { ...process.env, LANGUAGE: browserLanguage.replace('-', '_') },
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],

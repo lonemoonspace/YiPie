@@ -104,6 +104,8 @@ export const pages = {
   'model.name.hint': 'Optional; the model name is shown when it is empty',
   'model.baseURL': 'Base URL',
   'model.baseURL.hint': 'For example https://api.openai.com/v1 or http://localhost:11434/v1',
+  'model.baseURL.plaintext':
+    'This address uses unencrypted http://, so the API key and the page text are sent in the clear and any network on the way can read them. Use it only on a network you trust, and switch to https:// if the server offers it.',
   'model.apiKey': 'API Key',
   'model.apiKey.hint':
     'Kept only in this browser; leave it empty for a local service that needs none',

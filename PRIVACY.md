@@ -14,7 +14,7 @@
 | 你在面板里输入的追问 | 你发送时 | 同上，发给你配置的模型服务 |
 | 模型配置：Base URL、API Key、请求头、模型名等 | 你在设置页保存时 | 只存在本机浏览器的扩展存储（`storage.local`），只有扩展自己的页面能读；请求模型服务时随请求发给那个服务 |
 | Prompt 与通用设置（主题、字号、语言等） | 你在设置页保存时 | 只存在本机浏览器的扩展存储 |
-| 对话记录（回答与追问） | 每次回答完成后 | 只存在本机浏览器的会话存储（`storage.session`），关闭标签页或关闭浏览器后删除；不含网页正文、Prompt 和任何凭据 |
+| 对话记录（回答与追问） | 每次回答完成后 | 只存在本机浏览器的会话存储（`storage.session`），关闭标签页或关闭浏览器后删除；和对话一起保存的还有它所属网页的完整网址（含查询参数），用来在你回到同一页时恢复对话；不含网页正文、Prompt 和任何凭据 |
 
 ### 扩展不做的事
 
@@ -51,7 +51,7 @@ YiPie sends the web page you are reading to an OpenAI-compatible model service *
 | Follow-up questions you type in the panel | When you send them | Same as above |
 | Model configurations: base URL, API key, headers, model name | When you save them in the settings | Only in the browser's extension storage on your device (`storage.local`), readable only by the extension's own pages; sent to that service with each request to it |
 | Prompts and general settings (theme, font size, language) | When you save them | Only in the browser's extension storage on your device |
-| Conversations (answers and follow-ups) | After each answer | Only in the browser's session storage (`storage.session`), deleted when the tab or the browser closes; never the page text, the prompt or any credential |
+| Conversations (answers and follow-ups) | After each answer | Only in the browser's session storage (`storage.session`), deleted when the tab or the browser closes; kept with each conversation is the full address of its page (query string included), so that the conversation comes back when you return to that page; never the page text, the prompt or any credential |
 
 ### What the extension does not do
 

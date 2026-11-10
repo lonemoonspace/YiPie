@@ -102,7 +102,7 @@ describe('panel registry', () => {
     expect(await registry.attach(2, b, 'doc-2')).toBe(true);
   });
 
-  it('forgets the oldest tabs beyond the limit', async () => {
+  it('forgets the oldest unattached tabs beyond the limit', async () => {
     const { registry, store } = setup();
     for (let tab = 0; tab <= PANEL_REGISTRY_LIMIT; tab++) await registry.issue(tab, PAGE);
 
@@ -110,6 +110,35 @@ describe('panel registry', () => {
     expect(Object.keys(stored.data)).toHaveLength(PANEL_REGISTRY_LIMIT);
     expect(stored.data).not.toHaveProperty('0');
     expect(stored.data).toHaveProperty(String(PANEL_REGISTRY_LIMIT));
+  });
+
+  it('keeps a panel that is attached however many tabs open one after it', async () => {
+    const { registry } = setup();
+    const first = await registry.issue(1000, PAGE);
+    await registry.attach(1000, first, 'doc-first');
+
+    for (let tab = 0; tab < PANEL_REGISTRY_LIMIT + 5; tab++) {
+      const nonce = await registry.issue(tab, PAGE);
+      expect(await registry.attach(tab, nonce, `doc-${tab}`)).toBe(true);
+    }
+
+    expect(await registry.isAttached(1000, 'doc-first')).toBe(true);
+    expect(await registry.isAttached(0, 'doc-0')).toBe(true);
+  });
+
+  it('lets a new panel attach when every kept entry is an attached one', async () => {
+    const { registry, store } = setup();
+    for (let tab = 0; tab < PANEL_REGISTRY_LIMIT; tab++) {
+      await registry.attach(tab, await registry.issue(tab, PAGE), `doc-${tab}`);
+    }
+    // Two nonces nobody presents: only the newer one is kept beside the attached.
+    await registry.issue(2000, PAGE);
+    const nonce = await registry.issue(2001, PAGE);
+
+    const stored = store.dump()[PANEL_REGISTRY_KEY] as { data: Record<string, unknown> };
+    expect(Object.keys(stored.data)).toHaveLength(PANEL_REGISTRY_LIMIT + 1);
+    expect(stored.data).not.toHaveProperty('2000');
+    expect(await registry.attach(2001, nonce, 'doc-new')).toBe(true);
   });
 });
 

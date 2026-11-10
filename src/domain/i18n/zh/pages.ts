@@ -97,6 +97,8 @@ export const pages = {
   'model.name.hint': '可留空，留空时显示模型名',
   'model.baseURL': 'Base URL',
   'model.baseURL.hint': '例如 https://api.openai.com/v1 或 http://localhost:11434/v1',
+  'model.baseURL.plaintext':
+    '这个地址用的是不加密的 http://，API Key 和网页正文会以明文发送，途经的网络都能看到。只在你信任的网络里这样用；能用 https:// 就换成 https://。',
   'model.apiKey': 'API Key',
   'model.apiKey.hint': '只保存在本机浏览器里；本地服务不需要时可留空',
   'model.model': '模型名',

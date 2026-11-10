@@ -101,6 +101,20 @@ export function isLocalOrigin(origin: string): boolean {
 }
 
 /**
+ * Whether requests to the base URL `input` (as typed) would cross a network
+ * unencrypted: plain `http:` to anything but this machine. The API key and
+ * the page text travel with them, so the settings page warns; it does not
+ * refuse, since a server on a trusted LAN is a fair setup. False for
+ * anything `normalizeBaseURL` rejects, which gets an error instead.
+ */
+export function isPlaintextRemote(input: string): boolean {
+  const base = normalizeBaseURL(input);
+  if (!base.ok) return false;
+  const url = new URL(base.value);
+  return url.protocol === 'http:' && !isLocalOrigin(url.origin);
+}
+
+/**
  * `text` with every web address in it cut to its origin: for logging a
  * browser message that quotes a page URL, whose path and query may carry a
  * token (AGENTS.md, credentials and logs).
