@@ -142,6 +142,24 @@ describe('panel registry', () => {
   });
 });
 
+describe('panel registry on a clock that does not move', () => {
+  it('keeps the nonce just issued when an older one ties with it', async () => {
+    const registry = createPanelRegistry(
+      createMemoryStore(),
+      createQueue(),
+      () => crypto.randomUUID(),
+      () => 1000,
+    );
+    for (let tab = 0; tab < PANEL_REGISTRY_LIMIT; tab++) {
+      await registry.attach(tab, await registry.issue(tab, PAGE), `doc-${tab}`);
+    }
+    await registry.issue(2000, PAGE);
+    const nonce = await registry.issue(2001, PAGE);
+
+    expect(await registry.attach(2001, nonce, 'doc-new')).toBe(true);
+  });
+});
+
 describe('panel registry pages', () => {
   it('tells the attached panel which page it was mounted on, and no other document', async () => {
     const { registry } = setup();

@@ -63,10 +63,13 @@ export function createPanelRegistry(
     async issue(tabId, pageKey, mode = 'page') {
       const nonce = newNonce();
       await repo.update((registry) =>
-        keepNewest({
-          ...registry,
-          [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null, pageKey, mode },
-        }),
+        keepNewest(
+          {
+            ...registry,
+            [String(tabId)]: { nonce, issuedAt: now(), attachedDocument: null, pageKey, mode },
+          },
+          String(tabId),
+        ),
       );
       return nonce;
     },
@@ -119,16 +122,18 @@ export function createPanelRegistry(
  * Beyond the limit, drops the oldest nonces that no panel ever presented.
  * An attached entry is a panel that may still be open, and dropping it would
  * refuse every call that panel makes from then on; it goes when its tab
- * closes (`remove`) or mounts a new panel. The entry just issued is the
- * newest, so it always stays.
+ * closes (`remove`) or mounts a new panel. So the limit bounds the pending
+ * entries, not the attached ones. The entry of `issuedFor`, the tab whose
+ * nonce was just issued, always stays, whatever the clock says: two nonces
+ * issued in the same millisecond tie on `issuedAt`.
  */
-function keepNewest(registry: PanelRegistry): PanelRegistry {
+function keepNewest(registry: PanelRegistry, issuedFor: string): PanelRegistry {
   const entries = Object.entries(registry);
   if (entries.length <= PANEL_REGISTRY_LIMIT) return registry;
-  const attached = entries.filter(([, entry]) => entry.attachedDocument !== null);
+  const kept = entries.filter(([id, entry]) => id === issuedFor || entry.attachedDocument !== null);
   const pending = entries
-    .filter(([, entry]) => entry.attachedDocument === null)
+    .filter(([id, entry]) => id !== issuedFor && entry.attachedDocument === null)
     .sort(([, a], [, b]) => b.issuedAt - a.issuedAt)
-    .slice(0, Math.max(1, PANEL_REGISTRY_LIMIT - attached.length));
-  return Object.fromEntries([...attached, ...pending]);
+    .slice(0, Math.max(0, PANEL_REGISTRY_LIMIT - kept.length));
+  return Object.fromEntries([...kept, ...pending]);
 }

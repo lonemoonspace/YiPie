@@ -55,6 +55,9 @@ const PAIRS: [string, string, number][] = [
   ['danger', 'bg', 4.5],
   ['danger', 'surface', 4.5],
   ['notice-text', 'notice-bg', 4.5],
+  // Warnings under a settings field are notice-coloured text with no background of their own.
+  ['notice-text', 'bg', 4.5],
+  ['notice-text', 'surface', 4.5],
   // The conclusion card, and a quote marker under the pointer.
   ['text', 'tint', 4.5],
   ['accent', 'tint', 4.5],

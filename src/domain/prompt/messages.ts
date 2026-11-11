@@ -30,6 +30,11 @@ const PAGE_TAG = /<(?=\s*\/?\s*page(?:[\s/>]|$))/gi;
  * The built-in prompt puts the page between those two tags and tells the
  * model that what is between them is data; a page that writes `</page>`
  * itself would end that block early and have the rest read as instructions.
+ * This covers the built-in pair only: a prompt of the user's own that marks
+ * the page some other way (`[PAGE]`, say) gets its values as they are. The
+ * match is deliberately wide, so `see <page 3>` changes too, because a tag
+ * left open (`</page` at the very end) must not get through; the cost is one
+ * character in text only the model reads.
  * Only the opening `<` changes, to the full-width `＜`: the text stays the
  * same length, so the budget is unaffected, and reads the same to a person.
  */
