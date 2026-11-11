@@ -22,18 +22,45 @@ export function pageContent(page: Pick<PageContext, 'text' | 'truncated'>): stri
   return page.truncated ? `${page.text}\n\n${TRUNCATION_NOTE}` : page.text;
 }
 
+/** `<page>` or `</page>` as a model would read it: any case, spaces and attributes allowed. */
+const PAGE_TAG = /<(?=\s*\/?\s*page(?:[\s/>]|$))/gi;
+
+/**
+ * Text from the page with every `<page>` and `</page>` in it made harmless.
+ * The built-in prompt puts the page between those two tags and tells the
+ * model that what is between them is data; a page that writes `</page>`
+ * itself would end that block early and have the rest read as instructions.
+ * This covers the built-in pair only: a prompt of the user's own that marks
+ * the page some other way (`[PAGE]`, say) gets its values as they are. The
+ * match is deliberately wide, so `see <page 3>` changes too, because a tag
+ * left open (`</page` at the very end) must not get through; the cost is one
+ * character in text only the model reads.
+ * Only the opening `<` changes, to the full-width `＜`: the text stays the
+ * same length, so the budget is unaffected, and reads the same to a person.
+ */
+export function neutralizePageTags(text: string): string {
+  return text.replace(PAGE_TAG, '＜');
+}
+
 /**
  * The variables for one page, with `content` as it will be sent (cut to the
  * budget, notes included): the page text, or the selection when the panel
  * summarizes that (docs/development-plan.md §4.6). `selection` is what was
  * selected when the panel opened; `language` is the language to answer in.
+ * Everything that comes from the page goes through `neutralizePageTags`.
  */
 export function promptValues(
   page: Pick<PageContext, 'title' | 'url' | 'selection'>,
   content: string,
   language: string,
 ): PromptValues {
-  return { title: page.title, url: page.url, content, selection: page.selection, language };
+  return {
+    title: neutralizePageTags(page.title),
+    url: neutralizePageTags(page.url),
+    content: neutralizePageTags(content),
+    selection: neutralizePageTags(page.selection),
+    language,
+  };
 }
 
 /** The messages for a prompt: a system message unless that template renders blank, then the user message. */

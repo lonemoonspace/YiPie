@@ -110,7 +110,10 @@ test('closing the panel mid-answer ends the request', async ({
   await page.mouse.click(viewport.width - 16 - 19, 16 + 17);
 
   await expect.poll(() => lastRequest(server)?.aborted).toBe(true);
-  expect(page.frames().some((candidate) => candidate.url().includes('/panel.html'))).toBe(false);
+  // The frame goes a moment after the request is aborted, so this waits too.
+  await expect
+    .poll(() => page.frames().some((candidate) => candidate.url().includes('/panel.html')))
+    .toBe(false);
 });
 
 test('retrying sends a new request and replaces the answer', async ({

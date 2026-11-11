@@ -3,6 +3,7 @@ import {
   chatCompletionsURL,
   isInjectableURL,
   isLocalOrigin,
+  isPlaintextRemote,
   withOriginsOnly,
   normalizeBaseURL,
   originPattern,
@@ -138,5 +139,26 @@ describe('isLocalOrigin', () => {
 
   it('takes nothing it cannot parse for this machine', () => {
     expect(isLocalOrigin('not an origin')).toBe(false);
+  });
+});
+
+describe('isPlaintextRemote', () => {
+  it.each(['http://api.example.com/v1', ' http://192.168.1.10:11434/v1 ', 'HTTP://Example.com'])(
+    'warns about %s',
+    (input) => {
+      expect(isPlaintextRemote(input)).toBe(true);
+    },
+  );
+
+  it.each([
+    'https://api.example.com/v1',
+    'http://localhost:11434/v1',
+    'http://127.0.0.1:8080/v1',
+    'http://[::1]:11434/v1',
+    '',
+    'http://',
+    'ftp://example.com',
+  ])('does not warn about %s', (input) => {
+    expect(isPlaintextRemote(input)).toBe(false);
   });
 });
