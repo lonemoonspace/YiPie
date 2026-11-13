@@ -15,7 +15,7 @@
 
 ## 当前状态
 
-当前版本 0.1.5，已上架 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)，安装包也在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)（两处是同一个安装包）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+一瞥已上架 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)，每个版本的安装包也在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)（两处是同一个安装包，最新版见[这里](https://github.com/lonemoonspace/YiPie/releases/latest)）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
 
 ## 安装
 
