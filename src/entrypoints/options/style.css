@@ -634,6 +634,142 @@ button.chip {
   margin: 0;
 }
 
+/* The first-run page (features/settings/welcome): three ways to a first model. */
+.welcome .masthead {
+  padding-bottom: 16px;
+}
+
+.paths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+button.path {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-control-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-align: start;
+}
+
+button.path:hover {
+  border-color: var(--color-accent);
+}
+
+button.path[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-tint);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.path-title {
+  font-weight: 600;
+}
+
+.path-detail {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.setup {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.setup .field {
+  margin-bottom: 0;
+}
+
+.setup .intro {
+  margin: 0;
+}
+
+fieldset.services {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+fieldset.services legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+label.service {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+label.service[data-checked='true'] {
+  border-color: var(--color-accent);
+}
+
+label.service .hint {
+  grid-column: 2;
+}
+
+.service-name {
+  overflow-wrap: anywhere;
+}
+
+.key-link {
+  margin: 0;
+}
+
+.key-link a,
+.start-hint a {
+  color: var(--color-accent);
+}
+
+.setup-result {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.setup-result:empty {
+  display: none;
+}
+
+.setup-result p {
+  margin: 0 0 6px;
+}
+
+.setup-model {
+  display: grid;
+  gap: 12px;
+}
+
+.done h2 {
+  color: var(--color-accent);
+}
+
+.done p {
+  margin: 0;
+}
+
+.ways {
+  margin: 0 0 12px;
+  padding-inline-start: 20px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

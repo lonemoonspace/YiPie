@@ -16,6 +16,7 @@ import {
   type ContentPlan,
   type CutStrategy,
 } from '@/domain/budget';
+import { checkCitations, quotesOf } from '@/domain/citation';
 import type { ChatMessage } from '@/domain/llm/request';
 import { turnUsage } from '@/domain/llm/usage';
 import {
@@ -121,6 +122,11 @@ export interface Conversation {
   /** Makes `id` the default prompt, then starts over with a new summary that uses it. */
   switchPrompt: (id: string) => void;
   /**
+   * The model configurations changed. A run that stopped because there was
+   * no model runs again; anything else goes on as it is (§4.8).
+   */
+  modelsChanged: () => void;
+  /**
    * The panel is going away: the request in flight ends, and nothing still
    * on its way is shown or acted on (a save's result, a model pick, a
    * restore). A save already sent is still stored: it is the conversation.
@@ -166,6 +172,8 @@ export function createConversation(deps: ConversationDeps): Conversation {
   let requested: AbortController | null = null;
   /** Makes the pick that could not be stored again; what retry does while its failure shows. */
   let failedPick: (() => void) | null = null;
+  /** The latest run found no model: one set up now lets it run (`modelsChanged`). */
+  let noModel = false;
 
   /** Fills both menus from what the settings say now. */
   const menus = (setup: RunSetup) => {
@@ -216,6 +224,35 @@ export function createConversation(deps: ConversationDeps): Conversation {
     );
   }
 
+  /**
+   * Checks the quotes of turn `index` against the page text and shows what
+   * came of it (docs/development-plan.md §4.6). Nothing for an answer that
+   * quotes nothing.
+   */
+  function verify(index: number, answer: string, text: string) {
+    const check = checkCitations(answer, text);
+    if (check !== null) deps.dispatch({ type: 'citations', index, answer, check });
+  }
+
+  /**
+   * A restored conversation came without the page: when its answers quote
+   * the page, the page is read once more to check them. A failure to read it
+   * leaves them unchecked; the reducer drops a check whose turn has changed
+   * by the time it arrives.
+   */
+  async function verifyRestored(exchanges: readonly Exchange[]) {
+    if (!exchanges.some(({ answer }) => quotesOf(answer).length > 0)) return;
+    const life = generation;
+    let page: PageContext;
+    try {
+      page = await deps.extract();
+    } catch {
+      return;
+    }
+    if (life !== generation) return;
+    exchanges.forEach(({ answer }, index) => verify(index, answer, page.text));
+  }
+
   function commit(exchange: Exchange) {
     history = [...history, exchange];
     pending = null;
@@ -226,6 +263,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
     action += 1;
     waiting = false;
     failedPick = null;
+    noModel = false;
     drop();
     const controller = new AbortController();
     run = controller;
@@ -248,7 +286,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
     if (!current()) return;
     menus(setup);
     const { config, prompt } = setup;
-    if (config === null) return fail({ kind: 'no-model' });
+    if (config === null) {
+      noModel = true;
+      return fail({ kind: 'no-model' });
+    }
     if (prompt === null) return fail({ kind: 'no-prompt' });
 
     let page: PageContext;
@@ -350,6 +391,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
       input: estimateMessages(messages),
       output: estimateTokens(reasoning + answer),
     };
+    // The quotes are checked against the text the model was given: the
+    // selection, or the page.
+    const source = onSelection ? `${page.selection}\n${page.text}` : page.text;
+    const index = history.length;
     switch (outcome.kind) {
       case 'done': {
         if (answer === '') return fail({ kind: 'empty-answer' });
@@ -357,6 +402,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
         const usage = turnUsage(outcome.usage, estimate);
         const { ending } = outcome;
         deps.dispatch({ type: 'finished', usage, ...(ending === undefined ? {} : { ending }) });
+        verify(index, answer, source);
         // An answer that did not end as a whole is saved as one that stopped.
         commit({ question, answer, stopped: ending !== undefined, usage });
         return;
@@ -366,7 +412,10 @@ export function createConversation(deps: ConversationDeps): Conversation {
         // A stopped stream reports no usage: the estimate is all there is.
         const usage = answer === '' ? null : turnUsage(null, estimate);
         deps.dispatch({ type: 'stopped', usage });
-        if (usage !== null) commit({ question, answer, stopped: true, usage });
+        if (usage !== null) {
+          verify(index, answer, source);
+          commit({ question, answer, stopped: true, usage });
+        }
         return;
       }
       case 'error':
@@ -525,6 +574,7 @@ export function createConversation(deps: ConversationDeps): Conversation {
         history = exchanges;
         pending = null;
         deps.dispatch({ type: 'restored', exchanges, truncated: saved.truncated });
+        void verifyRestored(exchanges);
         try {
           const setup = await deps.setup();
           if (current()) menus(setup);
@@ -596,7 +646,12 @@ export function createConversation(deps: ConversationDeps): Conversation {
 
     switchPrompt,
 
+    modelsChanged() {
+      if (noModel && run === null) retry();
+    },
+
     dispose() {
+      noModel = false;
       action += 1;
       generation += 1;
       failedPick = null;

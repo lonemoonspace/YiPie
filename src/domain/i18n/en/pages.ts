@@ -329,7 +329,77 @@ export const pages = {
   'panel.snapshot.saveTruncated': 'The conversation is long; part of it was left out when saving.',
   'panel.snapshot.saveFailed':
     'The conversation was not saved: {detail}. It cannot be restored after you reload the page or close the panel.',
-  'panel.noModel': 'No model is set up yet. Add an OpenAI-compatible service on the settings page.',
+  'panel.noModel':
+    'No model is set up yet. Pick a way to start; once it is set up, this page is summarized on its own:',
+  'panel.start.key': 'I have an API key',
+  'panel.start.free': 'Try it for free',
+  'panel.start.local': 'Use a local model',
+
+  'welcome.title': 'Welcome',
+  'welcome.intro':
+    'YiPie summarizes the page you are reading with a model service of your choice, and answers follow-up questions about it. Connect a model first; it takes a minute.',
+  'welcome.start': 'Connect a model',
+  'welcome.paths': 'Ways to start',
+  'welcome.path.key': 'I have an API key',
+  'welcome.path.key.detail': 'Pick the service, paste the key, and its models are listed',
+  'welcome.path.free': 'Try it for free',
+  'welcome.path.free.detail': 'These services have a free allowance; all you need is a key',
+  'welcome.path.local': 'Use a local model',
+  'welcome.path.local.detail': 'Finds Ollama or LM Studio running on this computer',
+  'welcome.key.pick': 'Service',
+  'welcome.key.custom': 'Other (enter the address)',
+  'welcome.key.get': 'Get or look up an API key at {name}',
+  'welcome.key.hint': 'Kept in this browser only, and sent only to the service you picked',
+  'welcome.key.connect': 'Connect and list models',
+  'welcome.key.connecting': 'Connecting…',
+  'welcome.key.listed': 'Connected: the service lists {count} models, and one is picked for you.',
+  'welcome.key.emptyList': 'Connected, but the service lists no models. Type the model name.',
+  'welcome.key.unsupported':
+    'The service has no model list, so a common model name is filled in; you can change it.',
+  'welcome.key.model': 'Model',
+  'welcome.key.modelHint':
+    'Later, on the settings page, you can add more models to the panel’s menu.',
+  'welcome.key.save': 'Test and save',
+  'welcome.key.saveAnyway': 'Save anyway',
+  'welcome.free.pick': 'Pick a service with a free allowance',
+  'welcome.free.disclaimer':
+    'This list was put together in November 2026. Each service sets its own free allowance and may change it at any time; its own pages have the final word. A summary sends the page to the service you picked.',
+  'welcome.free.note.zhipu':
+    'The GLM Flash models are free to call; create a key once you sign up.',
+  'welcome.free.note.siliconflow':
+    'Some small open models are free to call (marked free in its model list).',
+  'welcome.free.note.openrouter':
+    'Models whose names end in :free cost nothing, with a daily request limit.',
+  'welcome.free.note.groq': 'A free allowance, limited by requests per minute and per day.',
+  'welcome.free.note.gemini':
+    'The Gemini Flash models have a free allowance. Not available in every region.',
+  'welcome.local.intro':
+    'When you press Detect, the browser asks you to let YiPie reach Ollama (port 11434) and LM Studio (port 1234) on this computer. Nothing is asked before that.',
+  'welcome.local.detect': 'Detect local models',
+  'welcome.local.detecting': 'Detecting…',
+  'welcome.local.found': '{name}: {count} models found.',
+  'welcome.local.empty': '{name} is running, but has no model downloaded yet.',
+  'welcome.local.absent': '{name}: not found at its usual address.',
+  'welcome.local.refused': '{name} refused the extension’s request.',
+  'welcome.local.none':
+    'No local model was found. Install Ollama or LM Studio and download a model (in LM Studio, start the local server on its Developer page), then detect again.',
+  'welcome.local.pick': 'Model',
+  'welcome.local.save': 'Save',
+  'welcome.done': 'All set: {name}',
+  'welcome.done.detail':
+    'It is now the default model. Try it on any page; add more models or change the prompt on the settings page later.',
+  'welcome.use': 'How to use it',
+  'welcome.use.icon':
+    'Click the YiPie icon in the toolbar: the panel opens in the page and starts summarizing.',
+  'welcome.use.shortcut':
+    'Or press Alt+Shift+Y (you can change it at chrome://extensions/shortcuts).',
+  'welcome.use.menu':
+    'Or right-click the page and choose “Summarize this page with YiPie”; with text selected, you can summarize just the selection.',
+  'welcome.use.privacy':
+    'YiPie reads the page only when you ask it to, and sends it only to the service you set up. It has no server and collects nothing.',
+  'welcome.settings': 'Open all settings',
+  'model.empty': 'No model yet.',
+  'model.empty.start': 'Open the getting-started guide',
   'panel.noPrompt': 'There is no prompt yet. Add one on the settings page.',
   'panel.configFailed': 'Could not read the settings: {detail}',
   'panel.model': 'Model',
@@ -339,6 +409,11 @@ export const pages = {
   'panel.switchFailed': 'Could not switch models: {detail}',
   'panel.extractFailed': 'Could not read the page: {detail}',
   'panel.cite.label': 'Find quote {number} in the page',
+  'panel.cite.labelFound': 'Find quote {number} in the page (found in the page text)',
+  'panel.cite.labelMissing': 'Find quote {number} in the page (not found in the page text)',
+  'panel.cite.summary': 'Quotes found in the page text: {matched} of {total}',
+  'panel.cite.summaryTitle':
+    'YiPie checked each quote in the answer against the page text it read. A quote not found may be made up by the model, or the page may have changed since.',
   'panel.cite.hint': 'Click to find it in the page',
   'panel.cite.notFound': 'This quote was not found in the page: {quote}',
   'panel.cite.failed': 'Could not search the page: {detail}',

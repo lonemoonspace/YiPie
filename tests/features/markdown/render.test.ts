@@ -37,13 +37,13 @@ const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   th: new Set(['align']),
   td: new Set(['align']),
   // A quote of the page (domain/citation): only these, never an event handler.
-  button: new Set(['type', 'class', 'data-quote', 'title', 'aria-label']),
+  button: new Set(['type', 'class', 'data-quote', 'data-found', 'title', 'aria-label']),
 };
 
 /** Parses the output the way the panel would and checks it against the allowlists. */
-function render(markdown: string) {
+function render(markdown: string, found: Record<string, boolean> | null = null) {
   const container = document.createElement('div');
-  container.innerHTML = renderMarkdown(markdown);
+  container.innerHTML = renderMarkdown(markdown, found);
   const elements = [...container.querySelectorAll('*')];
   for (const element of elements) {
     const tag = element.tagName.toLowerCase();
@@ -160,6 +160,25 @@ describe('renderMarkdown', () => {
     expect(buttons[0]?.getAttribute('aria-label')).toBe('在网页中定位引用 1');
     // Numbering starts again with every answer.
     expect(render('[[再一次]]').container.querySelector('button')?.textContent).toBe('1');
+  });
+
+  it('marks each checked quote as found in the page text or not, in its label too', () => {
+    const { container } = render('甲 [[ 有的 ]] 乙 [[没有的]] 丙 [[没查过的]]', {
+      有的: true,
+      没有的: false,
+    });
+    const buttons = [...container.querySelectorAll('button')];
+    expect(buttons.map((button) => button.dataset.found)).toEqual(['yes', 'no', undefined]);
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      '在网页中定位引用 1（原文里有）',
+      '在网页中定位引用 2（原文中没找到）',
+      '在网页中定位引用 3',
+    ]);
+  });
+
+  it('does not take a quote named like an object property as checked', () => {
+    const { container } = render('[[constructor]] [[toString]]', {});
+    expect(container.querySelector('[data-found]')).toBeNull();
   });
 
   it('keeps a quote placeholder that is not in inline text as the characters it was', () => {

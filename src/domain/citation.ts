@@ -48,7 +48,50 @@ const ELLIPSIS = /…+|\.{3,}|。{3,}/;
  * order and close together.
  */
 export function findQuote(chunks: readonly string[], quote: string, limit = 20): QuoteMatch[] {
-  const haystack = normalizeChunks(chunks);
+  return matchQuote(normalizeChunks(chunks), quote, limit);
+}
+
+/** Every quote of the page in `answer`, trimmed, in order, each once. */
+export function quotesOf(answer: string): string[] {
+  const quotes = new Set<string>();
+  for (const [, passage = ''] of answer.matchAll(CITATIONS)) {
+    const trimmed = passage.trim();
+    if (trimmed !== '') quotes.add(trimmed);
+  }
+  return [...quotes];
+}
+
+/** What checking an answer's quotes against the page text found. */
+export interface CitationCheck {
+  /** Each quote (trimmed, as `quotesOf` gives it) and whether the text has it. */
+  found: Record<string, boolean>;
+  /** How many quotes the answer makes, and how many of them the text has. */
+  total: number;
+  matched: number;
+}
+
+/**
+ * Checks each quote in `answer` against `text`, the page text the panel read
+ * (docs/development-plan.md §4.6): a quote the text lacks is one the model
+ * may have made up, or one the page has changed since. Matching forgives
+ * what `findQuote` forgives. Null when the answer quotes nothing. The text
+ * is normalized once for all the quotes.
+ */
+export function checkCitations(answer: string, text: string): CitationCheck | null {
+  const quotes = quotesOf(answer);
+  if (quotes.length === 0) return null;
+  const haystack = normalizeChunks([text]);
+  const found: Record<string, boolean> = {};
+  let matched = 0;
+  for (const quote of quotes) {
+    const has = matchQuote(haystack, quote, 1).length > 0;
+    found[quote] = has;
+    if (has) matched += 1;
+  }
+  return { found, total: quotes.length, matched };
+}
+
+function matchQuote(haystack: Haystack, quote: string, limit: number): QuoteMatch[] {
   const parts = quote
     .split(ELLIPSIS)
     .map((part) => normalize(part))

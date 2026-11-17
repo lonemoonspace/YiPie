@@ -13,10 +13,12 @@ import type { TurnUsage } from '@/contract/snapshot';
 import { plainCitations } from '@/domain/citation';
 import { t } from '@/domain/i18n';
 import { adviceFor, isLocalOriginRefusal, type LlmError } from '@/domain/llm/errors';
+import { START_PATHS } from '@/domain/welcome-hash';
 import { renderMarkdown } from '@/features/markdown/render';
 import { CheckIcon, CopyIcon, RefreshIcon, StopIcon } from '@/features/ui/icons';
 import { MoreMenu } from '@/features/ui/more-menu';
 import { openSettingsPage } from '@/platform/runtime/settings-page';
+import { openWelcomePage } from '@/platform/runtime/welcome';
 import { copyText } from './clipboard';
 import { isGrouped, optionValue, pickOf } from './model-menu';
 import type { ModelPick } from './model-switcher';
@@ -347,7 +349,8 @@ interface TurnProps {
 
 /** One question and its answer. A finished turn never changes, so it never renders again. */
 const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) {
-  const html = useMemo(() => renderMarkdown(turn.text), [turn.text]);
+  const found = turn.citations?.found ?? null;
+  const html = useMemo(() => renderMarkdown(turn.text, found), [turn.text, found]);
 
   return (
     <section className="turn">
@@ -376,6 +379,18 @@ const TurnView = memo(function TurnView({ turn, streaming, locale }: TurnProps) 
           aria-busy={streaming}
           dangerouslySetInnerHTML={{ __html: html }}
         />
+      ) : null}
+      {turn.citations !== undefined ? (
+        <p
+          className="cite-summary"
+          data-all-found={turn.citations.matched === turn.citations.total}
+          title={t('panel.cite.summaryTitle')}
+        >
+          {t('panel.cite.summary', {
+            total: turn.citations.total,
+            matched: turn.citations.matched,
+          })}
+        </p>
       ) : null}
       {isAnswered(turn) ? (
         <div className="meta">
@@ -638,14 +653,16 @@ function Problem({ problem, origin, retry }: ProblemProps) {
   const lines: string[] = [];
   let settings = false;
   let again: 'retry' | 'cut' | null = null;
+  let start = false;
 
   switch (problem.kind) {
     case 'attach':
       lines.push(t('panel.attachFailed'));
       break;
     case 'no-model':
+      // The three ways in of the first-run page (§4.8).
       lines.push(t('panel.noModel'));
-      settings = true;
+      start = true;
       break;
     case 'no-prompt':
       lines.push(t('panel.noPrompt'));
@@ -719,6 +736,15 @@ function Problem({ problem, origin, retry }: ProblemProps) {
       {lines.map((line) => (
         <p key={line}>{line}</p>
       ))}
+      {start ? (
+        <div className="actions">
+          {START_PATHS.map((path) => (
+            <button key={path} type="button" onClick={() => void openWelcomePage(path)}>
+              {t(`panel.start.${path}`)}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {again !== null || settings ? (
         <div className="actions">
           {again === 'retry' ? (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CITATION, findQuote, plainCitations } from '@/domain/citation';
+import { CITATION, checkCitations, findQuote, plainCitations, quotesOf } from '@/domain/citation';
 
 /** The text a match covers, read back from the chunks. */
 function covered(chunks: string[], quote: string): string[] {
@@ -89,5 +89,51 @@ describe('citations in model output', () => {
       '要点 「原文」，另见 「第二处」',
     );
     expect(plainCitations('Point [[ a quote ]].', 'en')).toBe('Point “a quote”.');
+  });
+});
+
+describe('quotesOf', () => {
+  it('lists each quote once, trimmed, in order', () => {
+    expect(quotesOf('甲 [[ 第一句 ]] 乙 [[第二句]] 丙 [[第一句]]')).toEqual(['第一句', '第二句']);
+  });
+
+  it('skips blank quotes and passages that span lines', () => {
+    expect(quotesOf('[[   ]] [[跨\n行]] 没有引用')).toEqual([]);
+  });
+});
+
+describe('checkCitations', () => {
+  const page = '一瞥在页面里打开一个浮动面板。The answer streams in as it is written.';
+
+  it('marks each quote as found in the text or not, and counts them', () => {
+    expect(
+      checkCitations(
+        '要点 [[打开一个 浮动面板]]，编造 [[页面上没有这句]]，又 [[打开一个浮动面板]]',
+        page,
+      ),
+    ).toEqual({
+      found: { '打开一个 浮动面板': true, 页面上没有这句: false, 打开一个浮动面板: true },
+      total: 3,
+      matched: 2,
+    });
+  });
+
+  it('forgives what copying changes, as findQuote does', () => {
+    expect(checkCitations('[[the ANSWER streams … as it is written]]', page)).toMatchObject({
+      total: 1,
+      matched: 1,
+    });
+  });
+
+  it('is null for an answer without quotes', () => {
+    expect(checkCitations('没有引用的回答', page)).toBeNull();
+  });
+
+  it('finds nothing in an empty text', () => {
+    expect(checkCitations('[[浮动面板]]', '')).toEqual({
+      found: { 浮动面板: false },
+      total: 1,
+      matched: 0,
+    });
   });
 });
