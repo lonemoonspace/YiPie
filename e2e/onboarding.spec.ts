@@ -32,6 +32,8 @@ test('with a key: list the models, pick one for the user, test and save it as th
   serviceWorker,
   server,
 }) => {
+  // A model from before: the new one still becomes the default.
+  await storeModels(serviceWorker, server, [{ id: 'old', name: '旧的', model: 'scenario:chat' }]);
   const page = await context.newPage();
   await page.goto(welcomeUrl(extensionId, 'key'));
   await expect(page.getByRole('button', { name: /我有 API Key/ })).toHaveAttribute(
@@ -52,14 +54,14 @@ test('with a key: list the models, pick one for the user, test and save it as th
   await expect(page.getByRole('heading', { name: '设置好了：scenario:normal' })).toBeVisible();
 
   const models = (await stored(serviceWorker, 'model-configs')) as StoredList;
-  expect(models.data).toHaveLength(1);
-  expect(models.data[0]).toMatchObject({
+  expect(models.data).toHaveLength(2);
+  expect(models.data[1]).toMatchObject({
     baseURL: `${server.origin}/v1`,
     apiKey: E2E_KEY,
     model: 'scenario:normal',
   });
   expect(await stored(serviceWorker, 'selection')).toMatchObject({
-    data: { defaultModelId: models.data[0]?.id },
+    data: { defaultModelId: models.data[1]?.id },
   });
 });
 
@@ -139,9 +141,13 @@ test('a panel with no model offers the three ways in, and summarizes once a mode
     await expect(frame.getByRole('button', { name })).toBeVisible();
   }
 
-  const opened = context.waitForEvent('page');
-  await frame.getByRole('button', { name: '用本机模型' }).click();
-  const welcome = await opened;
+  // By keyboard: a mouse click on the cross-site panel frame can be lost (AGENTS.md).
+  await frame.getByRole('button', { name: '用本机模型' }).press('Enter');
+  // A new tab on the way in that was pressed.
+  const opened = () =>
+    context.pages().find((tab) => tab.url() === welcomeUrl(extensionId, 'local'));
+  await expect.poll(opened).toBeDefined();
+  const welcome = opened() as Page;
   await expect(welcome).toHaveURL(welcomeUrl(extensionId, 'local'));
   await expect(welcome.getByRole('button', { name: /用本机模型/ })).toHaveAttribute(
     'aria-pressed',

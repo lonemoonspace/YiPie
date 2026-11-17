@@ -739,7 +739,11 @@ function Problem({ problem, origin, retry }: ProblemProps) {
       {start ? (
         <div className="actions">
           {START_PATHS.map((path) => (
-            <button key={path} type="button" onClick={() => void openWelcomePage(path)}>
+            <button
+              key={path}
+              type="button" // No new tab: the settings page has the same way in.
+              onClick={() => void openWelcomePage(path).catch(() => openSettingsPage())}
+            >
               {t(`panel.start.${path}`)}
             </button>
           ))}

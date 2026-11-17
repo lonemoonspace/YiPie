@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { parseWelcomeHash, type StartPath } from '@/domain/welcome-hash';
 import { useLocale } from '@/features/i18n/locale';
+import { applyTheme } from '@/features/theme/apply-theme';
 import { SettingsPage } from '../settings-page';
 import { callRpc } from '@/platform/rpc/client';
 import { WelcomePage } from './welcome-page';
 
-const readLocale = async () => (await callRpc('settings.get', {})).locale;
+/** Reads the settings once for both: the language, and the theme applied on the way. */
+const readLocale = async () => {
+  const view = await callRpc('settings.get', {});
+  applyTheme(view.settings.theme);
+  return view.locale;
+};
 
 /** The first-run page in the interface language, once that is known. */
 function Welcome({ path }: { path: StartPath | null }) {
