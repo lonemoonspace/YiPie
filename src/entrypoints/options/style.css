@@ -735,6 +735,7 @@ label.service .hint {
 }
 
 .key-link a,
+.welcome > p a,
 .start-hint a {
   color: var(--color-accent);
 }
