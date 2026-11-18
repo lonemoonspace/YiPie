@@ -2,6 +2,7 @@ import type { ModelChoice } from '@/contract/rpc';
 import type { PanelMode } from '@/contract/rpc-wire';
 import type { TurnUsage } from '@/contract/snapshot';
 import type { CutStrategy } from '@/domain/budget';
+import type { CitationCheck } from '@/domain/citation';
 import type { LlmError } from '@/domain/llm/errors';
 
 /** A prompt in the panel's menu: its name, never its templates. */
@@ -66,6 +67,11 @@ export interface Turn {
   cut: CutNote | null;
   /** A done answer that did not end as a whole: cut at the length limit, or cut off (#28). */
   ending?: 'length' | 'cut-off';
+  /**
+   * The answer's quotes checked against the page text, once it is answered
+   * and the text has been read; absent before that, or when it quotes nothing.
+   */
+  citations?: CitationCheck;
 }
 
 /** About the saved copy of the conversation (docs/development-plan.md §4.4, decision 2). */
@@ -161,7 +167,13 @@ export type PanelEvent =
   | { type: 'failed'; problem: PanelProblem }
   | { type: 'snapshot'; note: SnapshotNote }
   /** The conversation was saved in full: an earlier saving problem is over. */
-  | { type: 'saved' };
+  | { type: 'saved' }
+  /**
+   * The quotes of turn `index` checked against the page text. Applies only
+   * while that turn still shows `answer`: by the time a check is done, the
+   * user may have started over.
+   */
+  | { type: 'citations'; index: number; answer: string; check: CitationCheck };
 
 export const INITIAL_PANEL_STATE: PanelState = {
   phase: 'attaching',
@@ -356,6 +368,13 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       return state.snapshot?.kind === 'save-failed' || state.snapshot?.kind === 'save-truncated'
         ? { ...state, snapshot: null }
         : state;
+    case 'citations': {
+      const turn = state.turns[event.index];
+      if (turn === undefined || !isAnswered(turn) || turn.text !== event.answer) return state;
+      const turns = [...state.turns];
+      turns[event.index] = { ...turn, citations: event.check };
+      return { ...state, turns };
+    }
   }
 }
 

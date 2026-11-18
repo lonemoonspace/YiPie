@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useState } from 'react';
 import { GENERAL_SETTINGS_KEY } from '@/contract/general-settings';
+import { MODEL_CONFIGS_KEY } from '@/contract/model-config';
 import { PANEL_ATTACH_FAILED, type Locale } from '@/contract/rpc-wire';
 import { locale as currentLocale } from '@/domain/i18n';
 import { applyLocale } from '@/features/i18n/locale';
@@ -11,7 +12,7 @@ import { answerLanguageName } from './answer-language';
 import { createConversation, type Conversation } from './conversation';
 import { INITIAL_PANEL_STATE, reducePanel, type PanelState } from './state';
 
-export interface PanelControls extends Omit<Conversation, 'open' | 'dispose'> {
+export interface PanelControls extends Omit<Conversation, 'open' | 'dispose' | 'modelsChanged'> {
   state: PanelState;
   /** The interface language, for what renders once and keeps its words (finished turns). */
   locale: Locale;
@@ -93,7 +94,14 @@ export function usePanel(): PanelControls {
       ({ mode }) => {
         if (!active) return;
         appearance();
-        unwatch = onStoredChange([GENERAL_SETTINGS_KEY], appearance);
+        const unwatchSettings = onStoredChange([GENERAL_SETTINGS_KEY], appearance);
+        // A model set up elsewhere (the first-run page) while the panel says
+        // there is none: the panel goes ahead on its own.
+        const unwatchModels = onStoredChange([MODEL_CONFIGS_KEY], conversation.modelsChanged);
+        unwatch = () => {
+          unwatchSettings();
+          unwatchModels();
+        };
         void conversation.open(mode);
       },
       () => {

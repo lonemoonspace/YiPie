@@ -11,6 +11,7 @@ import { createPanelRegistry } from '@/platform/inject/registry';
 import { createLogger, setLogLevel } from '@/platform/logger';
 import { releaseOriginAccess } from '@/platform/permissions/origin-access';
 import { RpcRefusal } from '@/platform/rpc/errors';
+import { openWelcomeOnInstall } from '@/platform/runtime/welcome';
 import { registerRpcServer, type HandlerContext } from '@/platform/rpc/server';
 import { createBackupsService } from '@/platform/settings/backups-service';
 import { createConfigImport } from '@/platform/settings/config-import';
@@ -194,6 +195,8 @@ export default defineBackground(() => {
   onToolbarClick(open);
   onShortcut(open);
   onContextMenu(open, undefined, () => settingsRead);
+  // A new install opens the first-run page, to set up a first model (§4.8).
+  openWelcomeOnInstall();
 
   // A closed tab's conversations and panel entry go with it (§4.4). This
   // wakes the worker on every tab close: the plan asks for deletion right

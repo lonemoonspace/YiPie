@@ -145,7 +145,10 @@ test('without a model configuration the panel says how to fix it', async ({
 
   await expect(frame.locator('main')).toHaveAttribute('data-phase', 'error');
   await expect(frame.getByRole('alert')).toContainText('还没有配置模型');
-  await expect(frame.getByRole('button', { name: '打开设置' })).toBeVisible();
+  // The three ways in of the first-run page (§4.8).
+  for (const name of ['我有 API Key', '先免费试用', '用本机模型']) {
+    await expect(frame.getByRole('button', { name })).toBeVisible();
+  }
 });
 
 test('an authentication error is explained, and the key is never shown', async ({

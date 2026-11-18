@@ -21,7 +21,10 @@ import { t } from '@/domain/i18n';
  *   inline text is parsed: in code, in raw HTML (escaped) and in link targets
  *   it stays the characters it was, and inside a link's text it is plain
  *   text, since a button cannot sit inside a link. The passage is escaped
- *   into its attributes.
+ *   into its attributes. Once the answer's quotes have been checked against
+ *   the page text (`checkCitations`), each marker says whether the text has
+ *   it, in `data-found` and in its label; both are fixed words, never text
+ *   from the answer.
  *
  * The extension pages' CSP (`img-src 'self' data:`, `frame-src 'none'`,
  * `form-action 'none'`) is the second line of defence if this ever slips.
@@ -68,7 +71,7 @@ const LEADING_CITATION = new RegExp(`^${CITATION.source}`);
  * A parser for one render: `quotes` numbers that answer's quotes, in order,
  * so no state is shared between renders.
  */
-const createMarkdown = () => {
+const createMarkdown = (found: Readonly<Record<string, boolean>> | null) => {
   let quotes = 0;
   return new Marked({
     async: false,
@@ -90,9 +93,18 @@ const createMarkdown = () => {
         },
         renderer: (token) => {
           quotes += 1;
-          const passage = escapeHtml((token as CitationToken).passage);
-          const label = escapeHtml(t('panel.cite.label', { number: quotes }));
-          return `<button type="button" class="cite" data-quote="${passage}" aria-label="${label}">${quotes}</button>`;
+          const quote = (token as CitationToken).passage;
+          const passage = escapeHtml(quote);
+          const checked = found !== null && Object.hasOwn(found, quote) ? found[quote] : undefined;
+          const label = escapeHtml(
+            checked === undefined
+              ? t('panel.cite.label', { number: quotes })
+              : t(checked ? 'panel.cite.labelFound' : 'panel.cite.labelMissing', {
+                  number: quotes,
+                }),
+          );
+          const state = checked === undefined ? '' : ` data-found="${checked ? 'yes' : 'no'}"`;
+          return `<button type="button" class="cite" data-quote="${passage}"${state} aria-label="${label}">${quotes}</button>`;
         },
       },
     ],
@@ -121,6 +133,13 @@ function plainQuote(token: Tokens.Generic): Tokens.Generic {
   return token.type === 'citation' ? { type: 'text', raw: token.raw, text: token.raw } : token;
 }
 
-export function renderMarkdown(source: string): string {
-  return createMarkdown().parse(source, { async: false });
+/**
+ * `found`: each quote (trimmed) and whether the page text has it, once
+ * checked; quotes it does not name, or all of them without it, are unmarked.
+ */
+export function renderMarkdown(
+  source: string,
+  found: Readonly<Record<string, boolean>> | null = null,
+): string {
+  return createMarkdown(found).parse(source, { async: false });
 }

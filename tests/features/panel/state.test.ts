@@ -349,3 +349,33 @@ describe('reducePanel: the saved copy', () => {
     expect(play([{ type: 'saved' }], evicted).snapshot).toEqual({ kind: 'evicted' });
   });
 });
+
+describe('reducePanel: checked quotes', () => {
+  const check = { found: { 原文: true }, total: 1, matched: 1 };
+  const answered = play([
+    summary,
+    requesting,
+    { type: 'text', text: '回答 [[原文]]' },
+    { type: 'finished', usage: { source: 'estimate', input: 1, output: 1 } },
+  ]);
+
+  it('puts the check on the turn that still shows the answer checked', () => {
+    const checked = play(
+      [{ type: 'citations', index: 0, answer: '回答 [[原文]]', check }],
+      answered,
+    );
+    expect(checked.turns[0]?.citations).toEqual(check);
+  });
+
+  it('drops a check for a turn that has changed or is not answered', () => {
+    const stale: PanelEvent[] = [
+      { type: 'citations', index: 0, answer: '别的回答', check },
+      { type: 'citations', index: 3, answer: '回答 [[原文]]', check },
+    ];
+    for (const event of stale) expect(play([event], answered)).toBe(answered);
+    const pending = play([summary, requesting, { type: 'text', text: '回答 [[原文]]' }]);
+    expect(play([{ type: 'citations', index: 0, answer: '回答 [[原文]]', check }], pending)).toBe(
+      pending,
+    );
+  });
+});

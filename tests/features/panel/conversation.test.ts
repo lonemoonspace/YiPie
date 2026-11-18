@@ -87,7 +87,7 @@ function harness(options: {
   const choosePrompt = vi.fn(options.choosePrompt ?? (() => Promise.resolve({})));
   const disableStreamUsage = vi.fn(options.disableStreamUsage ?? (() => Promise.resolve({})));
 
-  const conversation = createConversation({
+  const deps: Parameters<typeof createConversation>[0] = {
     setup: () =>
       options.setup instanceof Error
         ? Promise.reject(options.setup)
@@ -152,10 +152,12 @@ function harness(options: {
       flush();
       return () => {};
     },
-  });
+  };
+  const conversation = createConversation(deps);
 
   return {
     conversation,
+    deps,
     requests,
     saves,
     revisions,
@@ -511,6 +513,182 @@ describe('conversation: without summarizing on opening', () => {
 
     expect(h.state().phase).toBe('done');
     expect(h.state().turns.map((turn) => turn.text)).toEqual(['总结']);
+  });
+});
+
+describe('conversation: a model set up while the panel waits for one (§4.8)', () => {
+  it('runs again once the models change after it found none', async () => {
+    let configured: PanelModelConfig | null = null;
+    const h = harness({ scripts: [answer('总结')] });
+    const conversation = createConversation({
+      ...h.deps,
+      setup: () => h.deps.setup().then((setup) => ({ ...setup, config: configured })),
+    });
+
+    await conversation.open();
+    await settle();
+    expect(h.state().problem).toEqual({ kind: 'no-model' });
+
+    configured = config;
+    conversation.modelsChanged();
+    await settle();
+
+    expect(h.state()).toMatchObject({ phase: 'done', problem: null });
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it('does nothing when the models change for any other reason', async () => {
+    const h = harness({ scripts: [answer('总结')] });
+
+    await h.conversation.open();
+    await settle();
+    h.conversation.modelsChanged();
+    await settle();
+
+    expect(h.requests).toHaveLength(1);
+    expect(h.state().turns).toHaveLength(1);
+  });
+});
+
+describe('conversation: checking quotes against the page (§4.6)', () => {
+  const article: PageContext = { ...page, text: '一瞥在页面里打开一个浮动面板，回答流式显示。' };
+
+  it('checks the quotes of a finished answer against the page text it read', async () => {
+    const h = harness({
+      page: article,
+      scripts: [answer('要点 [[打开一个 浮动面板]]，编造 [[页面上没有]]'), answer('没有引用')],
+    });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state().turns[0]?.citations).toEqual({
+      found: { '打开一个 浮动面板': true, 页面上没有: false },
+      total: 2,
+      matched: 1,
+    });
+
+    h.conversation.ask('还有呢？');
+    await settle();
+    expect(h.state().turns[1]?.citations).toBeUndefined();
+    expect(h.state().turns[0]?.citations).toMatchObject({ matched: 1 });
+  });
+
+  it('checks a stopped answer for what arrived', async () => {
+    const h = harness({ page: article, scripts: [{ texts: ['[[回答流式显示]] 后'], hang: true }] });
+
+    await h.conversation.open();
+    await settle();
+    h.conversation.stop();
+    await settle();
+
+    expect(h.state().turns[0]).toMatchObject({
+      status: 'stopped',
+      citations: { total: 1, matched: 1 },
+    });
+  });
+
+  it('checks a selection summary against the selection', async () => {
+    const h = harness({
+      page: { ...article, selection: '只在选区里的话' },
+      scripts: [answer('[[只在选区里的话]]')],
+    });
+
+    await h.conversation.open('selection');
+    await settle();
+
+    expect(h.state().turns[0]?.citations).toMatchObject({ total: 1, matched: 1 });
+  });
+
+  it('reads the page once to check a restored conversation that quotes it', async () => {
+    const saved: SnapshotMessage[] = [
+      { role: 'assistant', content: '旧总结 [[浮动面板]]', stopped: false, usage: null },
+      { role: 'user', content: '旧问题' },
+      { role: 'assistant', content: '旧回答 [[早就删掉的话]]', stopped: false, usage: null },
+    ];
+    const h = harness({
+      page: article,
+      saved: { status: 'found', messages: saved, truncated: false },
+    });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.requests).toHaveLength(0);
+    expect(h.extract).toHaveBeenCalledOnce();
+    expect(h.state().phase).toBe('restored');
+    expect(h.state().turns.map((turn) => turn.citations)).toEqual([
+      { found: { 浮动面板: true }, total: 1, matched: 1 },
+      { found: { 早就删掉的话: false }, total: 1, matched: 0 },
+    ]);
+  });
+
+  it('leaves a restored conversation unchecked when the page cannot be read', async () => {
+    const saved: SnapshotMessage[] = [
+      { role: 'assistant', content: '旧总结 [[浮动面板]]', stopped: false, usage: null },
+    ];
+    const h = harness({ saved: { status: 'found', messages: saved, truncated: false } });
+    h.extract.mockRejectedValueOnce(new Error('页面没有回应'));
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.state().phase).toBe('restored');
+    expect(h.state().problem).toBeNull();
+    expect(h.state().turns[0]?.citations).toBeUndefined();
+  });
+
+  it('drops the check of a restored turn the user has replaced meanwhile', async () => {
+    const saved: SnapshotMessage[] = [
+      { role: 'assistant', content: '旧总结 [[浮动面板]]', stopped: false, usage: null },
+    ];
+    let read: (page: PageContext) => void = () => {};
+    const h = harness({
+      page: article,
+      saved: { status: 'found', messages: saved, truncated: false },
+      scripts: [answer('新总结')],
+    });
+    h.extract.mockImplementationOnce(() => new Promise((resolve) => (read = resolve)));
+
+    await h.conversation.open();
+    await settle();
+    h.conversation.summarize();
+    await settle();
+    read(article);
+    await settle();
+
+    expect(h.state().turns).toHaveLength(1);
+    expect(h.state().turns[0]).toMatchObject({ text: '新总结' });
+    expect(h.state().turns[0]?.citations).toBeUndefined();
+  });
+
+  it('does not read the page for a restored conversation without quotes', async () => {
+    const saved: SnapshotMessage[] = [
+      { role: 'assistant', content: '旧总结', stopped: false, usage: null },
+    ];
+    const h = harness({ saved: { status: 'found', messages: saved, truncated: false } });
+
+    await h.conversation.open();
+    await settle();
+
+    expect(h.extract).not.toHaveBeenCalled();
+  });
+
+  it('reports no check once disposed', async () => {
+    const saved: SnapshotMessage[] = [
+      { role: 'assistant', content: '旧总结 [[浮动面板]]', stopped: false, usage: null },
+    ];
+    let read: (page: PageContext) => void = () => {};
+    const h = harness({ saved: { status: 'found', messages: saved, truncated: false } });
+    h.extract.mockImplementationOnce(() => new Promise((resolve) => (read = resolve)));
+
+    await h.conversation.open();
+    await settle();
+    h.conversation.dispose();
+    read(article);
+    await settle();
+
+    expect(h.events.some((event) => event.type === 'citations')).toBe(false);
   });
 });
 
