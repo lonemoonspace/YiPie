@@ -30,9 +30,9 @@ export const MANIFEST_POLICY: ManifestPolicy = {
   optionalHostPermissions: ['https://*/*', 'http://*/*'],
   exact: {
     // The browser's own words (name, description, icon title, shortcut) come
-    // from _locales, Chinese unless the browser speaks a language there is a
-    // table for.
-    default_locale: 'zh_CN',
+    // from _locales, English unless the browser speaks a language there is a
+    // table for: a German or Japanese browser gets English, not Chinese.
+    default_locale: 'en',
     // Older browsers refuse to install rather than fail silently (appendix C).
     minimum_chrome_version: '110',
     web_accessible_resources: [

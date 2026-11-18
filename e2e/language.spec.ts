@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { Page, Worker } from '@playwright/test';
 import { expect, storeSettings, stored, tabIdOf, test, useModel } from './fixtures';
 
@@ -125,5 +126,44 @@ test.describe('in an English browser', () => {
         return unavailableTitle(serviceWorker, again);
       })
       .toBe('此页面无法总结');
+  });
+});
+
+interface I18nGlobal {
+  chrome: { i18n: { getUILanguage(): string; getMessage(name: string): string } };
+}
+
+/** What the extension's English `_locales` table says. */
+const english = JSON.parse(readFileSync('public/_locales/en/messages.json', 'utf8')) as Record<
+  string,
+  { message: string }
+>;
+
+test.describe('in a German browser', () => {
+  test.use({ browserLanguage: 'de-DE' });
+
+  test('the browser shows the English name and description, not the Chinese ones', async ({
+    context,
+    serviceWorker,
+    extensionId,
+  }) => {
+    // There is no German table: the browser falls back to default_locale.
+    const words = await serviceWorker.evaluate(() => {
+      const { i18n } = (globalThis as unknown as I18nGlobal).chrome;
+      return {
+        ui: i18n.getUILanguage(),
+        name: i18n.getMessage('extName'),
+        description: i18n.getMessage('extDescription'),
+      };
+    });
+    expect(words).toEqual({
+      ui: 'de',
+      name: english.extName?.message,
+      description: english.extDescription?.message,
+    });
+    // The extension's own pages are English too.
+    const settings = await context.newPage();
+    await settings.goto(optionsUrl(extensionId));
+    await expect(settings.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
   });
 });
