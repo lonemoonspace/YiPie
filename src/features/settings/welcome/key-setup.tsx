@@ -105,9 +105,9 @@ export function KeySetup({ services, free = false, note, onDone }: KeySetupProps
       if (controller.signal.aborted) return;
       switch (outcome.kind) {
         case 'listed': {
-          const models = modelOptions(outcome.models);
-          setListing({ kind: 'listed', models });
-          setModel(pickModel(models, service) ?? '');
+          // Shown in alphabetical order; picked in the service's own.
+          setListing({ kind: 'listed', models: modelOptions(outcome.models) });
+          setModel(pickModel(outcome.models, service) ?? '');
           return;
         }
         case 'unsupported':

@@ -1,5 +1,3 @@
-import { modelOptions } from '@/domain/model-form';
-
 /**
  * What the first-run page offers (docs/development-plan.md §4.8): services to
  * paste a key for, services that had a free allowance when this list was
@@ -138,14 +136,14 @@ const NOT_CHAT =
 /**
  * The model to choose first from a service's list: the first of `preferred`
  * the list has (as listed, or after a prefix such as `models/`), else the
- * first chat model on it; null when it lists none. A free-only service picks
- * among its `:free` models.
+ * first chat model in the order the service listed them; null when it lists
+ * none. A free-only service picks among its `:free` models.
  */
 export function pickModel(
   listed: readonly string[],
   service: Pick<StartService, 'models' | 'freeOnly'> | null,
 ): string | null {
-  const options = modelOptions(listed);
+  const options = [...new Set(listed)];
   const candidates =
     service?.freeOnly === true ? options.filter((id) => id.endsWith(':free')) : options;
   for (const wanted of service?.models ?? []) {
@@ -155,7 +153,10 @@ export function pickModel(
   return candidates.find((id) => !NOT_CHAT.test(id)) ?? null;
 }
 
-/** The chat models on a local server's list, in order, for the panel's menu. */
+/**
+ * The chat models on a local server's list, each once, in the server's own
+ * order (Ollama lists the most recently used first), for the panel's menu.
+ */
 export function chatModels(listed: readonly string[]): string[] {
-  return modelOptions(listed).filter((id) => !NOT_CHAT.test(id));
+  return [...new Set(listed)].filter((id) => !NOT_CHAT.test(id));
 }

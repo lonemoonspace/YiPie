@@ -118,6 +118,20 @@ describe('checkCitations', () => {
     });
   });
 
+  it('counts a quote made twice twice, as the panel numbers it', () => {
+    expect(checkCitations('[[浮动面板]] 又 [[ 浮动面板 ]] 和 [[没有的]]', page)).toMatchObject({
+      total: 3,
+      matched: 2,
+    });
+  });
+
+  it('takes any text as a quote, __proto__ included', () => {
+    const check = checkCitations('[[__proto__]] [[constructor]]', '__proto__');
+    expect(check?.found['__proto__']).toBe(true);
+    expect(Object.hasOwn(check?.found ?? {}, 'constructor')).toBe(true);
+    expect(check?.found['constructor']).toBe(false);
+  });
+
   it('forgives what copying changes, as findQuote does', () => {
     expect(checkCitations('[[the ANSWER streams … as it is written]]', page)).toMatchObject({
       total: 1,

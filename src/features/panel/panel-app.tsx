@@ -741,7 +741,8 @@ function Problem({ problem, origin, retry }: ProblemProps) {
           {START_PATHS.map((path) => (
             <button
               key={path}
-              type="button" // No new tab: the settings page has the same way in.
+              type="button" // The first-run page opens in a new tab; should that fail, the settings
+              // page, which links to it while there is no model.
               onClick={() => void openWelcomePage(path).catch(() => openSettingsPage())}
             >
               {t(`panel.start.${path}`)}

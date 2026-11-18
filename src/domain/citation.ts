@@ -63,9 +63,15 @@ export function quotesOf(answer: string): string[] {
 
 /** What checking an answer's quotes against the page text found. */
 export interface CitationCheck {
-  /** Each quote (trimmed, as `quotesOf` gives it) and whether the text has it. */
+  /**
+   * Each quote (trimmed, as `quotesOf` gives it) and whether the text has
+   * it. Without a prototype: a quote may be any text, `__proto__` included.
+   */
   found: Record<string, boolean>;
-  /** How many quotes the answer makes, and how many of them the text has. */
+  /**
+   * How many quotes the answer makes, and how many of them the text has,
+   * counted as the panel numbers them: a quote made twice counts twice.
+   */
   total: number;
   matched: number;
 }
@@ -81,14 +87,17 @@ export function checkCitations(answer: string, text: string): CitationCheck | nu
   const quotes = quotesOf(answer);
   if (quotes.length === 0) return null;
   const haystack = normalizeChunks([text]);
-  const found: Record<string, boolean> = {};
+  const found = Object.create(null) as Record<string, boolean>;
+  for (const quote of quotes) found[quote] = matchQuote(haystack, quote, 1).length > 0;
+  let total = 0;
   let matched = 0;
-  for (const quote of quotes) {
-    const has = matchQuote(haystack, quote, 1).length > 0;
-    found[quote] = has;
-    if (has) matched += 1;
+  for (const [, passage = ''] of answer.matchAll(CITATIONS)) {
+    const quote = passage.trim();
+    if (quote === '') continue;
+    total += 1;
+    if (found[quote] === true) matched += 1;
   }
-  return { found, total: quotes.length, matched };
+  return { found, total, matched };
 }
 
 function matchQuote(haystack: Haystack, quote: string, limit: number): QuoteMatch[] {

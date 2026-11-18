@@ -46,7 +46,7 @@ describe('pickModel', () => {
     ).toBe('models/gemini-2.5-flash');
   });
 
-  it('otherwise takes the first chat model, skipping embeddings, speech and images', () => {
+  it("otherwise takes the first chat model in the service's order, skipping embeddings, speech and images", () => {
     expect(
       pickModel(
         ['text-embedding-3-small', 'whisper-1', 'dall-e-3', 'tts-1', 'some-chat-model'],
@@ -57,7 +57,7 @@ describe('pickModel', () => {
 
   it('picks among the free models of a free-only service', () => {
     const openrouter = { models: ['missing:free'], freeOnly: true };
-    expect(pickModel(['a/paid', 'z/model:free', 'b/model:free'], openrouter)).toBe('b/model:free');
+    expect(pickModel(['a/paid', 'z/model:free', 'b/model:free'], openrouter)).toBe('z/model:free');
     expect(pickModel(['a/paid'], openrouter)).toBeNull();
   });
 
@@ -68,10 +68,10 @@ describe('pickModel', () => {
 });
 
 describe('chatModels', () => {
-  it('lists the chat models in order, each once', () => {
+  it("lists the chat models each once, in the server's order", () => {
     expect(chatModels(['qwen2.5:7b', 'nomic-embed-text', 'llama3.2', 'qwen2.5:7b'])).toEqual([
-      'llama3.2',
       'qwen2.5:7b',
+      'llama3.2',
     ]);
   });
 });

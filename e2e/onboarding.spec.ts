@@ -46,19 +46,19 @@ test('with a key: list the models, pick one for the user, test and save it as th
   await page.getByLabel('API Key').fill(E2E_KEY);
   await page.getByRole('button', { name: '连接并列出模型' }).click();
   await expect(page.getByText('连接成功：服务列出了 3 个模型，已为你选好一个。')).toBeVisible();
-  // The first chat model on the list, in order.
-  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('scenario:chat');
+  // The first chat model in the order the service lists them.
+  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('scenario:normal');
 
-  await page.getByLabel('模型', { exact: true }).selectOption('scenario:normal');
+  await page.getByLabel('模型', { exact: true }).selectOption('scenario:cite');
   await page.getByRole('button', { name: '测试并保存' }).click();
-  await expect(page.getByRole('heading', { name: '设置好了：scenario:normal' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '设置好了：scenario:cite' })).toBeVisible();
 
   const models = (await stored(serviceWorker, 'model-configs')) as StoredList;
   expect(models.data).toHaveLength(2);
   expect(models.data[1]).toMatchObject({
     baseURL: `${server.origin}/v1`,
     apiKey: E2E_KEY,
-    model: 'scenario:normal',
+    model: 'scenario:cite',
   });
   expect(await stored(serviceWorker, 'selection')).toMatchObject({
     data: { defaultModelId: models.data[1]?.id },
