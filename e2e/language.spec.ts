@@ -151,7 +151,8 @@ test.describe('in a German browser', () => {
     const words = await serviceWorker.evaluate(() => {
       const { i18n } = (globalThis as unknown as I18nGlobal).chrome;
       return {
-        ui: i18n.getUILanguage(),
+        // Some Chromium builds report "de", others "de-DE".
+        ui: i18n.getUILanguage().split('-')[0],
         name: i18n.getMessage('extName'),
         description: i18n.getMessage('extDescription'),
       };
