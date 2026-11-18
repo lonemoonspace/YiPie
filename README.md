@@ -15,11 +15,11 @@ YiPie (一瞥, "a glance") is a free, open source Chrome / Edge extension. It su
 
 ## Status
 
-YiPie is available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao), and each version's package is also on [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases) (both ship the same package; see the [latest release](https://github.com/lonemoonspace/YiPie/releases/latest)). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and [docs/development-plan.md](docs/development-plan.md) (in Chinese) for the roadmap, technical decisions and acceptance criteria.
+YiPie is available on the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao) and [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg), and each version's package is also on [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases) (all three ship the same package; see the [latest release](https://github.com/lonemoonspace/YiPie/releases/latest)). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and [docs/development-plan.md](docs/development-plan.md) (in Chinese) for the roadmap, technical decisions and acceptance criteria.
 
 ## Install
 
-**Recommended**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao). Edge can use the same link (open it in Edge and allow extensions from other stores).
+**Recommended**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao) in Chrome, or from [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg) in Edge.
 
 **Manual install**:
 

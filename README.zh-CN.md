@@ -15,11 +15,11 @@
 
 ## 当前状态
 
-一瞥已上架 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)，每个版本的安装包也在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)（两处是同一个安装包，最新版见[这里](https://github.com/lonemoonspace/YiPie/releases/latest)）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
+一瞥已上架 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)与 [Edge 加载项商店](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg)，每个版本的安装包也在 [GitHub Releases](https://github.com/lonemoonspace/YiPie/releases)（三处是同一个安装包，最新版见[这里](https://github.com/lonemoonspace/YiPie/releases/latest)）。各版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，路线图、技术决定与验收标准见 [docs/development-plan.md](docs/development-plan.md)。
 
 ## 安装
 
-**推荐**：从 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)安装，Edge 也可以用这个链接（在 Edge 里打开后允许来自其他应用商店的扩展）。
+**推荐**：Chrome 从 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)安装，Edge 从 [Edge 加载项商店](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg)安装。网络打不开 Chrome 应用商店时，Chrome 用户可以按下面的手动安装。
 
 **手动安装**：
 
