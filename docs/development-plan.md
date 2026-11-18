@@ -1,6 +1,6 @@
 # 一瞥 YiPie · 开发计划
 
-> **版本**：v4.17（2026-11-18），历次改动见附录 F
+> **版本**：v4.18（2026-11-18），历次改动见附录 F
 > **状态**：阶段 0、1、2、3 已完成（阶段 3 的手工冒烟待你跑）。阶段 4（兼容与健壮性）与阶段 5（阅读体验与设置完整化）的自动化验收全部通过（§4.5、§4.6），待你用 3–4 个真实服务各总结一次，并跑附录 H 中阶段 1、3、4、5 的手工冒烟（含阶段 1 留下的 Edge 与当前 Chrome 稳定版复核）。之后是阶段 6
 > **权威性**：本文档是路线图的唯一权威来源。`README.md` 的路线图表格、`CHANGELOG.md` 的条目都是摘要，与本文冲突时以本文为准。
 > **维护规则**：调整阶段划分、交付物、验收标准、§1.3 的技术决定或 §11 的已决事项，必须在本文内改，并在附录 F 记一行；不要只改 README。
@@ -1030,6 +1030,7 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-11-17 | v4.15，上架 Edge 加载项商店（用户选定「做成有人用的开源项目」之后的第一步）：<br>· §1、§1.2、§4.7、§11：分发加上 Edge 加载项商店，仍是同一个 zip，由你提交；非目标里去掉「Edge 加载项商店」。原来的理由「Edge 用户可以从 Chrome 应用商店安装」对大陆用户不成立（网络打不开 Chrome 应用商店），Edge 也开始对其他商店的扩展提示「未经微软验证」<br>· 扩展名称加上一句说明（中文「一瞥 YiPie：AI 网页总结」，英文「YiPie: AI Web Page Summarizer」），简短说明改写，让两个商店的搜索更容易找到它；附录 C 不变<br>· 顶部的版本号补上：上一次（v4.14）只写进了附录 F |
 | 2026-11-18 | v4.16，v0.2 的首次使用引导与引用核验（用户在「构思一瞥的下一步方向」选了「做成有人用的开源项目」）：新增 **§4.8**。欢迎页是设置页的 `#welcome` 视图，安装时打开；三条路（已有 Key / 免费试用 / 本地模型），免费名单只在扩展里；面板没有模型时给出同样的三条路并在设置好后自动重跑；回答写完后用读到的正文核对每条引用，恢复的对话按需再读正文。不新增权限，附录 C 不变；§9 预算不变（本次构建：`background.js` 144.65 kB，设置页入口 62.06 kB，整包 755.89 kB） |
 | 2026-11-18 | v4.17，默认语言改为英文：manifest 的 `default_locale` 从 `zh_CN` 改为 `en`。原来德语、日语、法语等浏览器回落到默认语言，扩展名称与简短说明显示中文，而扩展里面的界面已经是英文；Edge 加载项商店面向所有市场，这些用户看英文更合适。简体中文与英文浏览器不变；繁体中文浏览器改为显示英文（`_locales` 没有 zh_TW）。附录 C 那一行与 `check:manifest` 同步，`e2e/language.spec.ts` 用德语浏览器核对 |
+| 2026-11-18 | v4.18，Edge 加载项商店上架（https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg ，首个版本 0.2.0）：附录 I 的安装段改为 Chrome、Edge 各给自己商店的链接，不再让 Edge 用户去 Chrome 应用商店安装；README（中英）同步 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
@@ -1096,7 +1097,7 @@ Playwright 点不了工具栏图标和右键菜单，以下各项在对应阶段
 
 ### Install
 
-**Recommended**：从 [Chrome 应用商店](<商店链接>)安装，Edge 也可用同一链接
+**Recommended**：Chrome 从 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)安装，Edge 从 [Edge 加载项商店](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg)安装
 **Manual**：下载 `yipie-<version>-chrome.zip`，解压后在 `chrome://extensions`（`edge://extensions`）开启开发者模式、加载已解压的扩展程序
 
 使用说明 · 变更日志 · 隐私政策（指向仓库文件的绝对链接）
