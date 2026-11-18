@@ -698,6 +698,35 @@ button:focus-visible {
   color: var(--color-on-accent);
 }
 
+/* A quote the page text does not have (domain/citation checkCitations). */
+.answer .cite[data-found='no'] {
+  border-style: dashed;
+  border-color: var(--color-notice-text);
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.answer .cite[data-found='no']::before {
+  content: '?';
+}
+
+.answer .cite[data-found='no']:hover {
+  border-color: var(--color-notice-text);
+  background: var(--color-notice-text);
+  color: var(--color-notice-bg);
+}
+
+/* How many of the answer's quotes the page text has, under the answer. */
+.cite-summary {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.cite-summary[data-all-found='false'] {
+  color: var(--color-notice-text);
+}
+
 /* The passage of the quote marker under the pointer or in focus. */
 .quote-preview {
   position: fixed;

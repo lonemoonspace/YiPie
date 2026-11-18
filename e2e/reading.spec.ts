@@ -242,3 +242,37 @@ test('a quote in the answer finds its passage in the page, without changing the 
   );
   await expect.poll(highlighted).toEqual([]);
 });
+
+test('quotes are checked against the page text, and checked again after a restore', async ({
+  context,
+  server,
+  serviceWorker,
+  openPanel,
+  panelFrame,
+}) => {
+  await useModel(serviceWorker, server, 'scenario:cite');
+  const { page, frame } = await open(
+    context,
+    `${server.origin}/article.html`,
+    openPanel,
+    panelFrame,
+  );
+  await expect(frame.locator('main')).toHaveAttribute('data-phase', 'done');
+
+  const check = async (panel: Frame) => {
+    await expect(panel.locator('.cite-summary')).toHaveText('2 条引用，1 条在原文中找到');
+    await expect(panel.locator('button.cite')).toHaveCount(2);
+    await expect(panel.locator('button.cite').nth(0)).toHaveAttribute('data-found', 'yes');
+    await expect(panel.locator('button.cite').nth(1)).toHaveAttribute('data-found', 'no');
+    await expect(
+      panel.getByRole('button', { name: '在网页中定位引用 2（原文中没找到）' }),
+    ).toBeVisible();
+  };
+  await check(frame);
+
+  await page.reload();
+  await openPanel(page);
+  const restored = await panelFrame(page);
+  await expect(restored.locator('main')).toHaveAttribute('data-phase', 'restored');
+  await check(restored);
+});

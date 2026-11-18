@@ -89,6 +89,22 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
+  test(`the first-run page meets WCAG AA (${theme})`, async ({
+    context,
+    serviceWorker,
+    extensionId,
+  }) => {
+    await storeSettings(serviceWorker, { theme });
+    const page = await context.newPage();
+    await page.goto(`${optionsUrl(extensionId)}#welcome/free`);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await expect(page.getByRole('radio')).not.toHaveCount(0);
+    expect(await checkPage(page)).toEqual([]);
+    await page.getByRole('button', { name: /用本机模型/ }).click();
+    await expect(page.getByRole('button', { name: '检测本机模型' })).toBeVisible();
+    expect(await checkPage(page)).toEqual([]);
+  });
+
   test(`the panel meets WCAG AA (${theme})`, async ({
     context,
     server,

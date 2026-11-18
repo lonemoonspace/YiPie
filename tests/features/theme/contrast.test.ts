@@ -61,6 +61,8 @@ const PAIRS: [string, string, number][] = [
   // The conclusion card, and a quote marker under the pointer.
   ['text', 'tint', 4.5],
   ['accent', 'tint', 4.5],
+  // The first-run page's chosen way in: its detail line on the tint.
+  ['muted', 'tint', 4.5],
   // A quote's preview is the page's colours the other way round.
   ['bg', 'text', 4.5],
   // The edges of inputs and selects, and the focus ring.
