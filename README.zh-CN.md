@@ -4,7 +4,8 @@
 
 # 一瞥 YiPie
 
-**用你自己的模型，一眼读完这一页。<br>总结网页、继续追问，每条引用都能回到原文。**
+**会给出处的网页总结。**<br>
+每一句结论都能一键跳回原文核对。用你自己的模型，零服务器。
 
 [![Chrome 应用商店](https://img.shields.io/chrome-web-store/v/ikkkfhlajolneibfafbjfnmlnhonkmao?label=Chrome%20Web%20Store&color=2f6bea)](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)
 [![Edge 加载项](https://img.shields.io/badge/dynamic/json?label=Edge%20Add-ons&color=2f6bea&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Feepponankaandlnacajlpdcpplclphmg)](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg)
@@ -20,13 +21,29 @@
 
 <br>
 
-<img src="docs/assets/screenshots/zh/1-summary.png" width="860" alt="一瞥的面板在网页旁边总结文章">
+<img src="docs/assets/demo-zh.gif" width="860" alt="一瞥总结一篇文章；点引用 1，网页滚动到原句并高亮；原文里没有的引用 3 被标上问号">
+
+<sub>点一下引用，网页就跳到那句原文。原文里找不到的引用会标上「?」，不会悄悄混过去。</sub>
 
 </div>
 
 <br>
 
-一瞥是一个免费、开源的 Chrome / Edge 浏览器扩展。在任意一篇文章上打开它，浮动面板就给出要点，带编号的引用一点就跳到原文那句话。它直接连接**你自己选的**模型服务：不用注册账号，没有中间服务器，没有遥测。
+多数 AI 助手告诉你「文章认为 X」，你没法知道这是不是它编的。一瞥告诉你「文章认为 X ①」，点 ①，网页就滚动到那句话并高亮。回答写完后，一瞥还会用正文核对每一条引用，**把原文里找不到的标出来**，编造的引用混不过去。
+
+一瞥是一个免费、开源的 Chrome / Edge 扩展，直接连接**你自己选的**模型服务，云端或本机都可以。
+
+## 一瞥有什么不同
+
+| | 多数 AI 助手 | 一瞥 |
+| --- | :---: | :---: |
+| 每条结论都能跳回原文那句话 | 很少 | ✓ |
+| 原文里找不到的引用会被标出 | 很少 | ✓ |
+| 随意选模型，包括本机模型 | 有限 | ✓ |
+| 网页内容经过插件厂商的服务器 | 通常会 | **从不** |
+| 需要账号或订阅 | 通常要 | **不需要** |
+| 在你打开的每个网页上运行 | 常常 | **只在你触发时** |
+| 开源 | 很少 | **MIT** |
 
 ## 亮点
 
@@ -34,36 +51,27 @@
 <tr>
 <td width="50%" valign="top">
 
+### 📌 引用可回溯、自动核验
+
+点一下带编号的引用，网页就滚动到原文并高亮。回答写完后自动用正文核对每条引用，回答下方写明有几条在原文中找到。
+
+</td>
+<td width="50%" valign="top">
+
 ### 🔑 用你自己的模型
 
 任何 OpenAI Chat Completions 兼容接口都能用，云端服务或本机模型都行。可以配置多个模型，在面板里随时切换。
 
 </td>
-<td width="50%" valign="top">
+</tr>
+<tr>
+<td valign="top">
 
 ### 🔒 数据不经过第三方
 
 网页内容只在你的浏览器和你的模型服务之间流动。没有中间服务器，没有统计分析，不用注册。详见[隐私政策](PRIVACY.md)。
 
 </td>
-</tr>
-<tr>
-<td valign="top">
-
-### 📌 引用可回溯、自动核验
-
-点一下引用标记，网页就滚动到原文并高亮。回答写完后，自动用正文核对每条引用，原文里找不到的会标出来。
-
-</td>
-<td valign="top">
-
-### 🎯 按需读取
-
-安装时不申请任何站点权限。只在你点工具栏图标、用右键菜单或按 `Alt+Shift+Y` 时读取当前页。
-
-</td>
-</tr>
-<tr>
 <td valign="top">
 
 ### 💬 继续追问
@@ -71,6 +79,8 @@
 总结之后就这一页继续问。关掉面板或刷新页面，再打开时对话还在，关闭标签页后才清除。
 
 </td>
+</tr>
+<tr>
 <td valign="top">
 
 ### 🧩 Prompt 随你调
@@ -78,27 +88,41 @@
 内置「网页总结」「速读」「深度笔记」三个预设，也可以写自己的 Prompt，编辑时能预览发给模型的内容。
 
 </td>
+<td valign="top">
+
+### 🌗 用着顺手
+
+中英文界面、浅色与深色主题、全键盘操作、配置导入导出。支持 Chrome / Edge 110 及以上。
+
+</td>
 </tr>
 </table>
 
-另外还有：中英文界面、浅色与深色主题、全键盘操作、配置导入导出。支持 Chrome / Edge 110 及以上。
+## 一瞥不做什么
+
+一瞥刻意做得小：只有一个面板，你叫它才出来，关掉就走。
+
+- **不挂悬浮按钮**，也没有常驻的侧边栏。
+- **不要全站权限**：安装时不申请任何站点权限，只在你点图标、用右键菜单或按快捷键之后才读当前页。
+- **不用登录**，不收订阅，也没有我们自己的服务器。
+- **不收集数据**：没有遥测，没有广告，不加载远程代码。
 
 ## 截图
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/screenshots/zh/2-citation.png" alt="点引用标记，网页高亮原文那句话"></td>
-<td width="50%"><img src="docs/assets/screenshots/zh/4-notes.png" alt="深度笔记预设与追问"></td>
+<td width="50%"><img src="docs/assets/screenshots/zh/1-summary.png" alt="网页总结：结论卡片与带引用的要点"></td>
+<td width="50%"><img src="docs/assets/screenshots/zh/4-notes.png" alt="深度笔记预设"></td>
 </tr>
 <tr>
-<td align="center"><sub><b>引用核验</b>：跳到原文，并标出哪些引用在原文中找到</sub></td>
-<td align="center"><sub><b>深度笔记</b>：结构化的预设，可以继续追问</sub></td>
+<td align="center"><sub><b>网页总结</b>：先给结论，再列带出处的要点</sub></td>
+<td align="center"><sub><b>深度笔记</b>：背景、核心观点、论据与疑点</sub></td>
 </tr>
 <tr>
-<td colspan="2"><img src="docs/assets/screenshots/zh/5-dark.png" alt="深色主题下的面板"></td>
+<td colspan="2"><img src="docs/assets/screenshots/zh/5-dark.png" alt="深色主题下的面板与追问"></td>
 </tr>
 <tr>
-<td colspan="2" align="center"><sub><b>深色主题</b></sub></td>
+<td colspan="2" align="center"><sub><b>深色主题</b>，带一次追问</sub></td>
 </tr>
 </table>
 
@@ -117,6 +141,14 @@
 1. **接上模型**：安装后会自动打开欢迎页，选「我有 API Key」「先免费试用」或「用本机模型」，一分钟左右就能用。
 2. **总结**：在任意网页上点「一瞥」图标、按 `Alt+Shift+Y`，或右键选「用一瞥总结此页」。
 3. **深入**：点引用看原文，或在面板底部的输入框里继续追问。
+
+### 快捷键
+
+| 按键 | 作用 |
+| --- | --- |
+| `Alt+Shift+Y` | 打开面板并总结当前页（可在 `chrome://extensions/shortcuts` 修改） |
+| `Enter` | 发送追问 |
+| `Shift+Enter` | 在输入框里换行 |
 
 <details>
 <summary><b>完整使用说明</b></summary>
@@ -152,7 +184,6 @@ flowchart LR
 - **没有一瞥的服务器**：开发者不运营任何后端，收不到你的任何数据。
 - **Key 只在本机**：API Key 存在扩展的本地存储里，只有扩展自己的页面能读。
 - **对话不长留**：对话放在会话存储里，关闭标签页或浏览器后删除；网页正文从不保存。
-- **不加载远程代码**，没有追踪，没有广告。
 
 详见[隐私政策](PRIVACY.md)。
 
