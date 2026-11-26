@@ -11,7 +11,7 @@ const valid = {
   manifest_version: 3,
   name: '__MSG_extName__',
   version: '0.0.0',
-  default_locale: 'zh_CN',
+  default_locale: 'en',
   minimum_chrome_version: '110',
   permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   optional_host_permissions: ['https://*/*', 'http://*/*'],
@@ -140,7 +140,7 @@ describe('checkLocales', () => {
   });
 
   it('catches a missing default locale', () => {
-    expect(checkLocales(valid, { en })[0]).toContain('zh_CN');
+    expect(checkLocales(valid, { zh_CN: zh })[0]).toContain('默认语言 en');
   });
 
   it('catches a name a locale lacks, or leaves empty', () => {

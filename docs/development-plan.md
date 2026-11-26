@@ -1,6 +1,6 @@
 # 一瞥 YiPie · 开发计划
 
-> **版本**：v4.16（2026-11-18），历次改动见附录 F
+> **版本**：v4.18（2026-11-18），历次改动见附录 F
 > **状态**：阶段 0、1、2、3 已完成（阶段 3 的手工冒烟待你跑）。阶段 4（兼容与健壮性）与阶段 5（阅读体验与设置完整化）的自动化验收全部通过（§4.5、§4.6），待你用 3–4 个真实服务各总结一次，并跑附录 H 中阶段 1、3、4、5 的手工冒烟（含阶段 1 留下的 Edge 与当前 Chrome 稳定版复核）。之后是阶段 6
 > **权威性**：本文档是路线图的唯一权威来源。`README.md` 的路线图表格、`CHANGELOG.md` 的条目都是摘要，与本文冲突时以本文为准。
 > **维护规则**：调整阶段划分、交付物、验收标准、§1.3 的技术决定或 §11 的已决事项，必须在本文内改，并在附录 F 记一行；不要只改 README。
@@ -645,7 +645,7 @@ scripts/           check-manifest.ts · check-bundle-budget.ts · lib/（判定�
 
 - **英文界面**：通用设置新增 `interfaceLanguage`（`auto` / `zh-Hans` / `en`，默认 `auto`；加字段不升版本）。`auto` 只在后台解析一次（`i18n.getUILanguage()`，任何 `zh` 为中文，其余为英文，`domain/i18n/locale.ts`），设置页、面板、内容脚本拿到的都是解析后的 `locale`。三张消息表各有英文版，键由 `satisfies` 对齐、参数由单测逐条核对；每个上下文的 `t` 有自己的当前语言（`translator` 返回 `t` / `setLocale` / `locale`）。SW 在第一次读完设置之前不运行 RPC handler（与隔离闸门一起等），设置变了（不论谁写的，`storage.onChanged`）就换语言并改右键菜单标题；内容脚本从注入槽（`TriggerSlotWire.locale`）和 `content.hello` 得知语言。设置页在语言确定后才渲染，换语言时整页重渲；面板跟着设置变化即时切换。
 - **内置 Prompt 的英文版**：列表还没写入前随界面语言（`builtinPrompt(locale)`），写入后就是用户的数据，换语言不改它；新建 Prompt 从当前界面语言的模板开始。英文界面复制回答时引用写成 “…”。
-- **浏览器自己的文字**：manifest 的名称、描述、图标标题与快捷键说明走 `_locales`（`default_locale: zh_CN`），跟随浏览器语言；`check:manifest` 核对每个 `__MSG_*__` 在每种语言里都有（附录 C 新增一行）。
+- **浏览器自己的文字**：manifest 的名称、描述、图标标题与快捷键说明走 `_locales`（`default_locale: en`，v4.17 前是 `zh_CN`），跟随浏览器语言，没有对应语言（如德语、日语）时显示英文；`check:manifest` 核对每个 `__MSG_*__` 在每种语言里都有（附录 C 新增一行）。
 - **无障碍**：
   - `jsx-a11y` 全绿（一直在 `npm run lint` 里，`--max-warnings 0`）。
   - 对比度：`tests/features/theme/contrast.test.ts` 逐对核对 `tokens.css`（文字 4.5:1，控件边框 3:1；浅色、深色、跟随系统的深色）。查出两处：浅色强调色在卡片底色上 4.40:1（改 `#2f6fdb` → `#2b6ad6`），输入框边框约 1.3:1（新增 `--color-control-border`，浅色 `#878e99`、深色 `#6b7280`）。
@@ -941,7 +941,7 @@ public/          _locales/{zh_CN,en}/messages.json（浏览器自己显示的名
 | `commands`（manifest 键，不是权限）                                   | 快捷键触发，同时会授予 activeTab；默认 `Alt+Shift+Y`，可在 `chrome://extensions/shortcuts` 改 | 少一种触发方式                     | 1        |
 | `content_security_policy.extension_pages`                             | 纵深防御（§8）                                                    | 渲染管线出漏洞时没有第二道防线     | 1        |
 | `icons`（manifest 键，不是权限）：16 / 32 / 48 / 128 px，WXT 从 `public/icon/<尺寸>.png` 生成 | 工具栏、扩展管理页与商店里的图标；Chrome 应用商店要求包里有 128 px 的那张。`check:manifest` 核对每张都在构建里、像素与声明的尺寸一致 | 工具栏显示灰色字母；商店拒收     | 6        |
-| `default_locale: zh_CN`（manifest 键，不是权限）与 `_locales/{zh_CN,en}` | 名称、描述、图标标题与快捷键说明跟随浏览器语言；设置里的界面语言管不到浏览器自己显示的这几处。`check:manifest` 核对每个 `__MSG_*__` 在各语言里都有 | 浏览器里只能显示一种语言的名称     | 6        |
+| `default_locale: en`（manifest 键，不是权限；v4.17 前是 `zh_CN`）与 `_locales/{zh_CN,en}` | 名称、描述、图标标题与快捷键说明跟随浏览器语言，没有对应语言时用英文；设置里的界面语言管不到浏览器自己显示的这几处。`check:manifest` 核对每个 `__MSG_*__` 在各语言里都有 | 浏览器里只能显示一种语言的名称     | 6        |
 | `minimum_chrome_version: 110`（manifest 键，不是权限）               | 面板 iframe 的 `credentialless`（110）、按 `sender.documentId` 认面板（106）、`storage.local` 的 `setAccessLevel` 与 Navigation API（102）都要求较新的浏览器；声明之后，更旧的 Chrome / Edge 直接拒绝安装 | 旧浏览器上能装，但面板打不开或报错，用户不知道原因 | 6（v0.1.4） |
 
 **明确不要的**：
@@ -1029,6 +1029,8 @@ E2E 构建（`--mode e2e`）额外带 `host_permissions: http://127.0.0.1/*, htt
 | 2026-10-27 | v4.14，统一已发布的 Release 说明（用户要求）：<br>· **附录 I（新增）**：Release 说明的固定骨架 —— 标题 `## YiPie v<版本> · 一瞥 v<版本>`、发布日期、中英各一句摘要，然后英文 `### What's new` / `### Verification / 验证` / `### Install`，`---` 之后是中文 `### 本版本更新内容` / `### Verification / 验证` / `### 安装`；英文在前，两半逐条对应。写明硬性要求（相对链接改成仓库绝对链接、安装包名照附件写、不照抄最新版本的文案）与维护方式（`gh release edit --notes-file`）<br>· **§4.7 发版第 8 步**：补一句「按附录 I 的格式写」<br>· **v0.1.0–v0.1.5 的说明**已就地改写：原来 0.1.0 / 0.1.1 有摘要与验证、0.1.2–0.1.5 只有一列条目，各版本小节名与顺序不一；统一时修正了会失效的 `[PRIVACY.md](PRIVACY.md)` 相对链接、写错的附件名（实为 `yipie-<版本>-chrome.zip`）、缺失的商店安装方式，并按包内 manifest 如实标注最低浏览器版本（v0.1.0–v0.1.3 未声明）与 v0.1.0 尚无扩展图标 |
 | 2026-11-17 | v4.15，上架 Edge 加载项商店（用户选定「做成有人用的开源项目」之后的第一步）：<br>· §1、§1.2、§4.7、§11：分发加上 Edge 加载项商店，仍是同一个 zip，由你提交；非目标里去掉「Edge 加载项商店」。原来的理由「Edge 用户可以从 Chrome 应用商店安装」对大陆用户不成立（网络打不开 Chrome 应用商店），Edge 也开始对其他商店的扩展提示「未经微软验证」<br>· 扩展名称加上一句说明（中文「一瞥 YiPie：AI 网页总结」，英文「YiPie: AI Web Page Summarizer」），简短说明改写，让两个商店的搜索更容易找到它；附录 C 不变<br>· 顶部的版本号补上：上一次（v4.14）只写进了附录 F |
 | 2026-11-18 | v4.16，v0.2 的首次使用引导与引用核验（用户在「构思一瞥的下一步方向」选了「做成有人用的开源项目」）：新增 **§4.8**。欢迎页是设置页的 `#welcome` 视图，安装时打开；三条路（已有 Key / 免费试用 / 本地模型），免费名单只在扩展里；面板没有模型时给出同样的三条路并在设置好后自动重跑；回答写完后用读到的正文核对每条引用，恢复的对话按需再读正文。不新增权限，附录 C 不变；§9 预算不变（本次构建：`background.js` 144.65 kB，设置页入口 62.06 kB，整包 755.89 kB） |
+| 2026-11-18 | v4.17，默认语言改为英文：manifest 的 `default_locale` 从 `zh_CN` 改为 `en`。原来德语、日语、法语等浏览器回落到默认语言，扩展名称与简短说明显示中文，而扩展里面的界面已经是英文；Edge 加载项商店面向所有市场，这些用户看英文更合适。简体中文与英文浏览器不变；繁体中文浏览器改为显示英文（`_locales` 没有 zh_TW）。附录 C 那一行与 `check:manifest` 同步，`e2e/language.spec.ts` 用德语浏览器核对 |
+| 2026-11-18 | v4.18，Edge 加载项商店上架（https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg ，首个版本 0.2.0）：附录 I 的安装段改为 Chrome、Edge 各给自己商店的链接，不再让 Edge 用户去 Chrome 应用商店安装；README（中英）同步 |
 
 ## 附录 G —— 开发环境备注（已迁入 `AGENTS.md`）
 
@@ -1095,7 +1097,7 @@ Playwright 点不了工具栏图标和右键菜单，以下各项在对应阶段
 
 ### Install
 
-**Recommended**：从 [Chrome 应用商店](<商店链接>)安装，Edge 也可用同一链接
+**Recommended**：Chrome 从 [Chrome 应用商店](https://chromewebstore.google.com/detail/ikkkfhlajolneibfafbjfnmlnhonkmao)安装，Edge 从 [Edge 加载项商店](https://microsoftedge.microsoft.com/addons/detail/eepponankaandlnacajlpdcpplclphmg)安装
 **Manual**：下载 `yipie-<version>-chrome.zip`，解压后在 `chrome://extensions`（`edge://extensions`）开启开发者模式、加载已解压的扩展程序
 
 使用说明 · 变更日志 · 隐私政策（指向仓库文件的绝对链接）

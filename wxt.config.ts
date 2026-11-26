@@ -12,7 +12,7 @@ export default defineConfig({
   manifest: ({ mode }) => ({
     // Words the browser shows itself, in its own language (public/_locales):
     // it cannot follow the interface language in the settings.
-    default_locale: 'zh_CN',
+    default_locale: 'en',
     name: '__MSG_extName__',
     // The oldest browser with everything the extension relies on (appendix C):
     // the panel's iframe is `credentialless` (110), the panel is recognized by
